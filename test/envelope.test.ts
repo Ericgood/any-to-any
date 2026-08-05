@@ -28,6 +28,15 @@ describe('renderEnvelope', () => {
   it('instructs the reply marker protocol', () => {
     expect(env).toContain(REPLY_MARKER);
   });
+
+  it('forces a status verdict in the only turn (no acknowledgement-only replies)', () => {
+    expect(env).toMatch(/ONLY TURN/i);
+    expect(env).toContain('DONE');
+    expect(env).toContain('BLOCKED');
+    expect(env).toContain('DECLINED');
+    expect(env).toMatch(/Acknowledgement-only.*NOT valid/i);
+    expect(env).toMatch(/exempt from\s*.*anti-chatter/i);
+  });
 });
 
 describe('extractReply', () => {

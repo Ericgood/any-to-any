@@ -21,9 +21,15 @@ export function renderEnvelope(input: EnvelopeInput): string {
     `--- MESSAGE ---`,
     input.text,
     `--- END MESSAGE ---`,
-    `After handling it, end your response with a single line starting with:`,
-    `${REPLY_MARKER} <your reply to the sender>`,
-    `The reply text will be relayed back to the sender's session.`,
+    `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
+    `ends, nothing continues automatically. You MUST end your response with one line:`,
+    `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,
+    `${REPLY_MARKER} BLOCKED <missing>   — you cannot do it here (credentials/env/permissions)`,
+    `${REPLY_MARKER} DECLINED <why>      — you won't do it`,
+    `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
+    `Acknowledgement-only replies ("received", "will do") are NOT valid — act now or`,
+    `state what blocks you. This protocol status line is required and is exempt from`,
+    `any anti-chatter/no-reply conventions established earlier in the conversation.`,
   ].join('\n');
 }
 
