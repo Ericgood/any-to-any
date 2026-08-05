@@ -49,6 +49,14 @@
   dialog .row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   dialog label { font-size: 12px; color: var(--muted); }
   dialog select, dialog textarea { width: 100%; }
+  .combo { position: relative; }
+  .combo input { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  .combo .results { position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px); max-height: 240px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); display: none; }
+  .combo .results.open { display: block; }
+  .combo .opt { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 7px; font-size: 13px; }
+  .combo .opt:hover, .combo .opt.hi { background: #eef2ff; }
+  .combo .opt .sub { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+  .combo .empty-hint { padding: 10px 12px; color: var(--muted); font-size: 12px; }
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
   #status-line { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); }
 </style>
@@ -74,8 +82,8 @@
 
 <dialog id="new-dialog">
   <h2>新建对话 — 让一个 session @ 另一个</h2>
-  <div class="row"><label>发起方（消息以它的名义发出）</label><select id="new-from"></select></div>
-  <div class="row"><label>接收方</label><select id="new-to"></select></div>
+  <div class="row"><label>发起方（消息以它的名义发出）— 输入关键词搜索：标题 / agent / 目录 / 设备</label><div class="combo" id="new-from"></div></div>
+  <div class="row"><label>接收方</label><div class="combo" id="new-to"></div></div>
   <div class="row"><label>第一条消息</label><textarea id="new-text" rows="3" placeholder="例如：worker.js 的重定向我改成 301 了，你那边帮我跑下路由测试"></textarea></div>
   <div class="actions">
     <button id="new-cancel">取消</button>
@@ -201,25 +209,58 @@ function renderThread(keepScroll) {
   box.scrollTop = scrollPos !== null ? scrollPos : box.scrollHeight;
 }
 
-function fillSessionSelect(sel) {
-  sel.innerHTML = state.sessions.map((s, i) =>
-    `<option value="${i}">${s.device ? '@' + esc(s.device) + '/' : '@'}${s.agent}:${esc(s.title)} — ${esc(s.cwd.split('/').pop() || s.cwd)}</option>`,
-  ).join('');
+// searchable session picker: filter by title/agent/device/dir/id, sorted by recency
+function makeCombobox(container, placeholder) {
+  container.innerHTML = `<input type="text" placeholder="${placeholder}" autocomplete="off"><div class="results"></div>`;
+  const input = container.querySelector('input');
+  const results = container.querySelector('.results');
+  const picked = { session: null };
+
+  const sessionLabel = (s) => `${s.device ? '@' + s.device + '/' : '@'}${s.agent}:${s.title}`;
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    const pool = [...state.sessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+    const hits = (q
+      ? pool.filter((s) =>
+          [s.title, s.agent, s.device || '', s.cwd, s.sessionId].some((f) => f.toLowerCase().includes(q)))
+      : pool
+    ).slice(0, 30);
+    results.innerHTML = hits.length
+      ? hits.map((s, i) => {
+          const dir = esc(s.cwd.split('/').pop() || s.cwd);
+          return `<div class="opt" data-i="${i}">${dot(s.agent)}<span>${esc(sessionLabel(s))}</span><span class="sub">${dir} · ${rel(s.lastActiveAt)}</span></div>`;
+        }).join('')
+      : `<div class="empty-hint">无匹配 — 换个关键词（支持标题/agent/目录/设备/id）</div>`;
+    results.querySelectorAll('.opt').forEach((n) =>
+      n.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        picked.session = hits[+n.dataset.i];
+        input.value = sessionLabel(picked.session);
+        results.classList.remove('open');
+      }));
+  };
+  input.addEventListener('input', () => { picked.session = null; render(); results.classList.add('open'); });
+  input.addEventListener('focus', () => { render(); results.classList.add('open'); });
+  input.addEventListener('blur', () => setTimeout(() => results.classList.remove('open'), 150));
+  return picked;
 }
 
+let newFrom = null;
+let newTo = null;
 $('#new-btn').addEventListener('click', async () => {
   if (!state.sessions.length) await refreshAll();
-  fillSessionSelect($('#new-from'));
-  fillSessionSelect($('#new-to'));
+  newFrom = makeCombobox($('#new-from'), '例如：后端 / claude / anytoany …');
+  newTo = makeCombobox($('#new-to'), '例如：iOS / codex / mini …');
+  $('#new-text').value = $('#new-text').value;
   $('#new-dialog').showModal();
 });
 $('#new-cancel').addEventListener('click', () => $('#new-dialog').close());
 $('#new-send').addEventListener('click', async () => {
-  const from = state.sessions[+$('#new-from').value];
-  const to = state.sessions[+$('#new-to').value];
+  const from = newFrom?.session;
+  const to = newTo?.session;
   const text = $('#new-text').value.trim();
-  if (!from || !to || !text) return;
-  if (from.agent === to.agent && from.sessionId === to.sessionId) { alert('发起方和接收方不能是同一个 session'); return; }
+  if (!from || !to || !text) { alert('请从搜索结果中选择发起方和接收方，并填写消息'); return; }
+  if (from.agent === to.agent && from.sessionId === to.sessionId && (from.device || '') === (to.device || '')) { alert('发起方和接收方不能是同一个 session'); return; }
   $('#new-send').disabled = true;
   try {
     const { message } = await api('/api/messages', {

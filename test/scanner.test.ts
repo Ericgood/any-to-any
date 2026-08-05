@@ -58,6 +58,13 @@ describe('codex adapter listSessions', () => {
     expect(orphan?.title).toBe('codex-proj-orphan');
     expect(sessions).toHaveLength(2); // ghost 9999… from index must not appear
   });
+
+  it('lastActiveAt trusts the newer of index updated_at and file mtime (stale-index bug)', async () => {
+    const sessions = await adapter.listSessions();
+    const indexed = sessions.find((x) => x.sessionId === '33333333-3333-4333-8333-333333333333');
+    // fixture index says 2026-08-05T12:00Z but the file mtime (checkout time) is newer — mtime must win
+    expect(indexed?.lastActiveAt).toBeGreaterThanOrEqual(Date.parse('2026-08-05T12:00:00.000Z'));
+  });
 });
 
 describe('listAllSessions aggregation', () => {
