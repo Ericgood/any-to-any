@@ -268,7 +268,8 @@ program
   .option('--show', 'print this device token and pairing command for other devices')
   .option('--set <token>', 'join a cluster by writing its token')
   .option('--name <device>', 'set this device display name')
-  .action(async (opts: { show?: boolean; set?: string; name?: string }) => {
+  .option('--invite', 'print a copy-paste one-liner that installs + joins from another device')
+  .action(async (opts: { show?: boolean; set?: string; name?: string; invite?: boolean }) => {
     const { loadOrCreateToken, setToken, tokenFingerprint } = await import('./cluster/token.js');
     const { getDeviceName, setDeviceName } = await import('./cluster/device.js');
     if (opts.name) {
@@ -281,12 +282,19 @@ program
       return;
     }
     const token = loadOrCreateToken();
+    if (opts.invite) {
+      console.log(`Paste this into the other device's terminal — or hand it to any agent there:\n`);
+      console.log(`  curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash -s -- --join ${token}\n`);
+      console.log(`It installs anytoany, joins this cluster, and configures the agents.`);
+      console.log(`Then start the daemon there:  anyd start`);
+      return;
+    }
     console.log(`device: ${getDeviceName()}`);
     console.log(`token fingerprint: ${tokenFingerprint(token)}`);
     if (opts.show) {
       console.log(`\non the other device, run:\n  anyd pair --set ${token}`);
     } else {
-      console.log(`run with --show to print the token for pairing another device`);
+      console.log(`use --invite for a copy-paste installer one-liner, --show for the raw token`);
     }
   });
 program

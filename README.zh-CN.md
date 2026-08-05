@@ -12,6 +12,42 @@
 
 ---
 
+## 安装
+
+一条命令——装好 CLI、配好本机全部 agent（skill + 收件 hook）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
+```
+
+然后启动：
+
+```bash
+anyd start      # 投递 daemon + Web 控制台 http://127.0.0.1:7433
+```
+
+> 🤖 **Agent 原生安装**：把本仓库链接贴给任意 coding agent 说「装上」——安装器和 skill 会搞定一切。
+
+## 连接第二台设备
+
+在第一台机器上：
+
+```bash
+anyd pair --invite
+```
+
+它会打印**一条完整的复制粘贴命令**（安装器 + 集群 token）。把它贴到另一台机器的终端——或者直接贴给那台机器上的任何 agent——两边就对齐了：mDNS 自动互见、目录自动合并、随时互投。
+
+## 发第一条消息
+
+在任意 agent 会话里：
+
+```
+@codex:前端 重定向逻辑我改了，帮我重跑下路由测试
+```
+
+跨设备同样写法：`@mini/codex:前端 …`。回信自动回到你的会话。也可以打开[控制台](http://127.0.0.1:7433)手动连线两个会话。
+
 ## 为什么做这个
 
 同一个项目，常常同时被**多台设备上的多个 AI agent** 开发：MacBook 上的 Claude Code 在改后端，Mac mini 上的 Codex 在修前端，Kimi 在别处跑另一块。
@@ -33,45 +69,32 @@ Codex 能 `@` 自己的子代理，但只限单进程内部。跨厂商、跨设
 - **局域网直连，零第三方服务**——daemon 之间 mDNS/Bonjour 自动发现，共享 token 配对，局域网 HTTP 直投。token 不同即 401。数据不出你的网络。
 - **Web 控制台**——IM 式界面（`http://127.0.0.1:7433`）：对话列表、左右气泡、投递状态、失败重试，还能手动「新建对话」把两个会话连起来，实时围观你的 agent 们聊天。
 
-## 快速开始
-
-```bash
-npm install && npm run build && npm link   # 在仓库目录（npm 包即将发布）
-
-anyd setup      # 装 skill 到 ~/.claude、~/.codex、~/.agents + 注册 Claude 收件 hook
-anyd doctor     # 环境自检
-anyd start      # 投递 daemon + Web 控制台 http://127.0.0.1:7433
-```
-
-然后在任意 agent 会话里：
-
-```
-@codex:前端 重定向逻辑我改了，帮我重跑下路由测试
-```
-
-或打开[控制台](http://127.0.0.1:7433)点「＋ 新建对话」手动连线两个会话。
-
-### 常用命令
+## 常用命令
 
 ```bash
 anyd list                  # 全部可寻址会话（Claude + Codex，本机 + 局域网）
 anyd conversations         # 已建立的会话配对
 anyd send "@codex:前端" "消息" --from "@claude:后端"
 anyd inbox --take          # 查收并回执
+anyd peers                 # 局域网设备与配对状态
+anyd doctor                # 环境自检
 anyd status / stop         # daemon 状态 / 停止
 ```
 
-### 跨设备（局域网）
-
-在第二台设备上：
+<details>
+<summary>手动安装（不用一键脚本）/ 源码方式</summary>
 
 ```bash
-anyd pair --set <第一台机器 anyd pair --show 打出的 token>
-anyd pair --name mini      # 起个好记的设备名
-anyd start
+git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
+npm install && npm run build && npm link
+anyd setup                 # skill + hook
+# 手动配对（不用 anyd pair --invite 的话）：
+anyd pair --show           # 第一台：打印 token
+anyd pair --set <token>    # 第二台：加入
+anyd pair --name mini      # 可选：设备名
 ```
 
-设备间 mDNS 自动互见（`anyd peers`），目录自动聚合，`@mini/codex:前端` 直接可用，回信自动跨网回程注入发起会话。
+</details>
 
 ## 寻址语法
 
