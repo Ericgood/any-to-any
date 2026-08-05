@@ -24,15 +24,15 @@
 
 公开仓库、MIT 或 Apache-2.0（待定）。当前 repo 为 private，首个可用版本前转 public。
 
-## ADR-004 技术栈：TypeScript / Node（建议，待用户确认）
+## ADR-004 技术栈：TypeScript / Node（已生效 2026-08-05）
 
 理由：目标用户（AI coding CLI 使用者）机器必有 node（claude/codex/kimi/gemini 全是 npm/node 系）；`npx` 即装即用与 skills.sh 生态同构；MCP 官方 SDK 是 TS（后续增强用得上）；开发迭代快。Go 单二进制的优势对这个人群不构成差异。
 
-## ADR-005 投递档位：MVP 用 headless resume，实时注入后置（建议，待用户确认）
+## ADR-005 投递档位：MVP 用 headless resume，实时注入后置（已生效 2026-08-05）
 
 MVP 投递 = 对目标 session 执行一次 headless 续写（`claude -p --resume` / `codex exec resume` / `kimi -p -S`）：可达性 100%、三家通用、离线也能补投。代价：对方正开着的 TUI 界面不即时显示这条消息（session 记录已续写，重新进入可见）。Channels / app-server steer / kimi web 的「正在聊着的窗口里即时弹出」体验作为 Phase 3 升级，通道调研已备齐。
 
-## ADR-006 与 Google A2A 协议的关系：对齐语义、不绑定实现、后置兼容层（建议，待用户确认）
+## ADR-006 与 Google A2A 协议的关系：对齐语义、不绑定实现、后置兼容层（已生效 2026-08-05）
 
 **定位**：A2A 管「agent 服务之间」（endpoint + Agent Card + Task 生命周期），Any to Any 管「正在运行的 CLI 会话之间」——A2A 未覆盖、所有主流 coding CLI 零原生支持的形态。互补不竞争。
 
@@ -42,3 +42,7 @@ MVP 投递 = 对目标 session 执行一次 headless 续写（`claude -p --resum
 3. 路线图挂载：Phase 3+ anyd 暴露 A2A endpoint，为每个本地 session 生成 Agent Card——叙事升级为「第一座把本地 coding session 接入 A2A 网络的桥」。
 
 **注意**：勿与 Zed 的 ACP（Agent Client Protocol，editor↔agent）混淆；IBM ACP 已并入 A2A。
+
+## ADR-007 品牌与域名定案（2026-08-05，用户拍板）
+
+品牌 **anytoany**，tagline **"Session-to-session messaging for AI coding agents"**。域名 **anytoany.dev** 已注册（any2any.dev 建议做 301 跳转）；anytoany.app/.com 已被他人注册，不追。npm 包名 `anytoany`（已验证可用，未发布）、GitHub `Ericgood/any-to-any`、CLI 命令 `anyd`。命名依据：口播零解释成本；三位一体对齐；any2any 拼写在 AI 圈已是「任意模态」术语且 npm 被占；Codex（collaboration/multi-agent）与 Claude（Agent Teams）的命名先例均用关系词而非机制词，故 session-to-session 作 tagline 不作品牌。

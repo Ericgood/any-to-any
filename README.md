@@ -46,11 +46,13 @@ npx skills add Ericgood/any-to-any
 
 ## 当前状态
 
-🔬 调研完成，进入 MVP 设计。见：
+🚧 Phase 1 实施中：同机 Claude Code ↔ Codex 互 @。官网：[anytoany.dev](https://anytoany.dev)（建设中）
 
-- [docs/research/](docs/research/) — 各 agent CLI 的接入点调研 + 协议与现有项目盘点
+- [docs/specs/phase1-mvp.md](docs/specs/phase1-mvp.md) — **Phase 1 技术规格（当前施工图）**
+- [docs/decisions.md](docs/decisions.md) — 已拍板的关键决策（ADR-001~007）
 - [docs/analysis.md](docs/analysis.md) — 架构方案分析与推荐
-- [docs/decisions.md](docs/decisions.md) — 已拍板的关键决策（ADR）
+- [docs/research/](docs/research/) — 各 agent CLI 的接入点调研 + 协议与现有项目盘点
+- [CHANGELOG.md](CHANGELOG.md) — 重大变更记录
 
 ## 非目标（当前阶段）
 

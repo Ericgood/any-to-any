@@ -1,23 +1,29 @@
-# Any to Any — 跨设备跨 Agent 的 session 互通
+# anytoany — 任务追踪
 
-## 需求（用户原话提炼）
-- 多设备（MacBook / Mac mini）+ 多 agent（Claude Code / Codex / Kimi Code / Z Code / Q Code）同时开发同一项目
-- 痛点：agent 之间无法沟通，用户要手动复制粘贴中转
-- 目标：在 A 设备的 A agent 里 `@` 到 B 设备的 B agent 的某个 session，消息能送达，且能来回通信、协作
-- 参考：Codex 的跨 session @ 功能（但仅限 Codex 内部）
-- 定位：刚需，认真做。项目名 Any to Any
+> 项目规范见 CLAUDE.md；当前施工图见 docs/specs/phase1-mvp.md
 
-## 本轮计划
-- [x] 环境探测（本机 CLI：claude 2.1.198 / codex 0.144.0 / kimi / gemini；gh 已登录 Ericgood）
-- [x] 调研 1：Codex CLI 的跨 session 协作 / @ 机制、自动化接入点
-- [x] 调研 2：Claude Code 的外部消息注入 / hooks / MCP / SDK 接入点
-- [x] 调研 3：Kimi Code / Z Code / Q Code 的可扩展性（MCP、hooks、headless）
-- [x] 调研 4：现有协议（MCP / A2A / ACP）与开源项目盘点，找现成轮子
-- [x] 分析：候选架构对比 + 推荐方案（docs/analysis.md）
-- [x] 建 GitHub 仓库 any-to-any，推送调研+分析
-- [ ] 与用户对齐落地方案（待用户回复 analysis.md §8 的 4 个决策点）
+## 已完成
+- [x] 2026-08-05 四路调研 + 本机实测（docs/research/ 5 份）
+- [x] 2026-08-05 架构分析（docs/analysis.md）与仓库创建
+- [x] 2026-08-05 决策 ADR-001~007（分发/局域网/开源/TS/resume/A2A/品牌域名）
+- [x] 2026-08-05 项目规范（CLAUDE.md + CHANGELOG.md 制度）
+- [x] 2026-08-05 Phase 1 技术规格（docs/specs/phase1-mvp.md）
 
-## Review（2026-08-05 调研轮）
-- 5 份调研（4 网络 + 1 本机实测）落盘 docs/research/，汇总分析落盘 docs/analysis.md
-- 核心结论：三合一生态位空白；出站靠 MCP 公分母、入站三家均有官方推送通道；推荐 daemon+adapter+邮箱语义架构，MVP 先同机打通 Claude Code ↔ Codex
-- 下一步卡在用户 4 个决策：先锋两家 / Tailscale 与否 / TS 或 Go / 实时性档位
+## Phase 1（等用户审阅 spec 后开工）
+- [ ] M0 脚手架 + 首日通道实验（R1: claude resume 并发行为；R2: codex resume 锁行为）
+- [ ] M1 directory：scanner ×2 + resolve（TDD）
+- [ ] M2 mailbox：SQLite + 状态机（TDD）
+- [ ] M3 dispatcher + adapter ×2 + 信封
+- [ ] M4 双向回路 + skill + 冒烟（§1 验收 1-8）
+- [ ] M5 收尾：文档、anyd doctor、npm 发版（可选）
+
+## 待办池（Phase 2+）
+- [ ] P2 跨设备：mDNS 发现 + HTTP 直连 + 配对 token
+- [ ] P2 launchd 常驻 + npx skills add 分发
+- [ ] P3 实时注入升级（Claude Channels / Codex app-server / kimi web）
+- [ ] P3 Kimi / Gemini adapter；投递专用权限 profile（硬隔离）
+- [ ] P3+ A2A 兼容层（anyd 暴露 endpoint + Agent Card）
+- [ ] 官网 anytoany.dev 上线；any2any.dev 301 跳转
+
+## Review（2026-08-05 规范与计划轮）
+规范落地：先文档后动作 / docs 分区 / CHANGELOG 带时间戳 / 每轮必推 GitHub——已写入 CLAUDE.md 成为项目章程。Phase 1 spec 含验收脚本、模块边界、数据模型、信封防注入、TDD 计划、五个里程碑与四项风险的首日实验方案。下一步：用户审阅 spec → M0 开工。
