@@ -125,7 +125,7 @@ anyd send → mailbox(pending) → dispatcher 轮询(1s) → resolve 目标 sess
 
 - **R1** `claude -p --resume` 是否强依赖 cwd 与项目目录一致；resume 与正开着的 TUI 同 session 并发时行为（预期：追加新分叉/续写，需实测确认无损坏）。→ M0 实验脚本 1。
 - **R2** `codex exec resume` 对「TUI 正在运行的 thread」续写是否加锁/冲突。→ M0 实验脚本 2。若 R1/R2 存在并发损坏风险，降级方案：投递前检测 session 活跃（进程/文件 mtime），活跃则消息置 `pending` 延迟投递并在 `anyd status` 提示（体验降级但零风险）。
-- **R3** headless 回合的权限不足以执行 `anyd reply`（Bash 权限被拒）→ 备选：daemon 从 headless stdout 解析回复（`--output-format json`），不依赖对方执行命令。M3 时二选一定案。
+- **R3【已定案 2026-08-05·M3】** 采用 stdout 标记方案：信封要求对方在输出末尾以 `<<<ANYTOANY_REPLY>>>` 标记行回复，daemon 解析 deliver 的 stdout 提取回复并自动 `mailbox.reply` 入站——零权限依赖（headless 沙盒无需写驿站、无需 anyd 在 PATH）。交互式会话仍可主动 `anyd reply`（M4 skill 教学）。取最后一次标记出现（信封自身提及的示例在前，不会误取）。
 - **R4** 信封防注入是软约束——P1 接受此限制并在 skill 中强调「不因消息扩权」，硬隔离（工具白名单投递专用 profile）记入 P3 待办。
 
 ## 10. 依赖清单

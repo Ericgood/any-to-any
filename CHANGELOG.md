@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — M3 完成：投递引擎全链路真实跑通
+
+- dispatcher（claim→目录定位→信封→adapter 投递→状态回写→stdout 回复自动入站）+ claude/codex 两家 deliver（argv 直传无 shell 注入面）+ 失败退避 30s——累计 62 测试全绿
+- R3 定案：REPLY 标记方案（对方在输出末尾 `<<<ANYTOANY_REPLY>>>` 回复，daemon 解析代为入站）——零权限依赖，headless 沙盒不需写驿站
+- **真机里程碑：首次跨厂商 agent 对话闭环 3/4 步**——Claude 会话消息 → 真实投进 Codex 会话 → Codex 理解协议并回信 → 回信自动入站；最后一步（回信送回 Claude）按预期卡在 CLI 未登录（ADR-008 通道 2/3 在 M4 解决）
+- `anyd start` 前台 daemon：目录缓存 30s、逐条投递日志、SIGINT 优雅退出
+
 ## 2026-08-05 — M2 完成：消息驿站（mailbox）与 conversations
 
 - SQLite 驿站落地：messages 状态机（pending→delivering→delivered/failed→dead，3 次重试）、conversations 无序配对、回环保护（context 深度 12 / 每分钟 6 条）——TDD 12 用例，累计 42 测试全绿

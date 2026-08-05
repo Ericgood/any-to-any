@@ -64,6 +64,7 @@ export interface Mailbox {
 }
 
 const MAX_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 30_000;
 const LOOP_MAX_DEPTH = 12;
 const LOOP_RATE_WINDOW_MS = 60_000;
 const LOOP_RATE_MAX = 6;
@@ -254,10 +255,11 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
         const row = db
           .prepare(
             `SELECT * FROM messages
-             WHERE status = 'pending' OR (status = 'failed' AND attempts < ?)
+             WHERE status = 'pending'
+                OR (status = 'failed' AND attempts < ? AND updated_at <= ?)
              ORDER BY created_at ASC LIMIT 1`,
           )
-          .get(MAX_ATTEMPTS) as MessageRow | undefined;
+          .get(MAX_ATTEMPTS, now() - RETRY_BACKOFF_MS) as MessageRow | undefined;
         if (!row) return null;
         db.prepare(`UPDATE messages SET status = 'delivering', updated_at = ? WHERE id = ?`).run(now(), row.id);
         return getMessage(row.id);

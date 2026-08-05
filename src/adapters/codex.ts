@@ -1,7 +1,8 @@
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import type { AgentAdapter, SessionInfo } from './types.js';
+import { realExec } from './exec.js';
+import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
 const ROLLOUT_RE =
   /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
@@ -12,6 +13,8 @@ const TITLE_MAX = 80;
 interface CodexAdapterOptions {
   sessionsDir?: string;
   indexFile?: string;
+  exec?: ExecFn;
+  deliverTimeoutMs?: number;
 }
 
 interface IndexEntry {
@@ -67,12 +70,28 @@ async function loadIndex(indexFile: string): Promise<Map<string, IndexEntry>> {
   return map;
 }
 
-export function createCodexAdapter(options: CodexAdapterOptions = {}): AgentAdapter {
+export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryAdapter {
   const sessionsDir = options.sessionsDir ?? join(homedir(), '.codex', 'sessions');
   const indexFile = options.indexFile ?? join(homedir(), '.codex', 'session_index.jsonl');
+  const exec = options.exec ?? realExec;
+  const timeoutMs = options.deliverTimeoutMs ?? 300_000;
 
   return {
     agent: 'codex',
+
+    // Verified 2026-08-05: exec resume carries full history, is cwd-independent,
+    // and tolerates concurrent resumes of the same thread (spec §9 R2).
+    async deliver(session: SessionInfo, envelope: string): Promise<DeliveryResult> {
+      const { stdout, stderr, code } = await exec(
+        'codex',
+        ['exec', 'resume', session.sessionId, '--skip-git-repo-check', envelope],
+        session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
+      );
+      if (code !== 0) {
+        return { ok: false, error: `codex exec resume exited ${code}: ${stderr.slice(0, 500)}` };
+      }
+      return { ok: true, output: stdout };
+    },
     async listSessions(): Promise<SessionInfo[]> {
       let entries: string[];
       try {

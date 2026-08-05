@@ -16,3 +16,22 @@ export interface AgentAdapter {
   readonly agent: string;
   listSessions(): Promise<SessionInfo[]>;
 }
+
+export interface DeliveryResult {
+  ok: boolean;
+  /** Target agent's stdout for the injected turn (reply extraction source). */
+  output?: string;
+  error?: string;
+}
+
+export interface DeliveryAdapter extends AgentAdapter {
+  /** Inject an envelope into the target session (resume-based in Phase 1). */
+  deliver(session: SessionInfo, envelope: string): Promise<DeliveryResult>;
+}
+
+/** Injectable subprocess runner so adapter contract tests never spawn real CLIs. */
+export type ExecFn = (
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; timeoutMs: number },
+) => Promise<{ stdout: string; stderr: string; code: number }>;

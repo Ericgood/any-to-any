@@ -1,7 +1,8 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import type { AgentAdapter, SessionInfo } from './types.js';
+import { realExec } from './exec.js';
+import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
 const UUID_JSONL_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/;
@@ -12,6 +13,8 @@ const TITLE_MAX = 80;
 
 interface ClaudeAdapterOptions {
   projectsDir?: string;
+  exec?: ExecFn;
+  deliverTimeoutMs?: number;
 }
 
 interface ParsedLine {
@@ -93,11 +96,33 @@ async function readSession(path: string, mtimeMs: number, size: number): Promise
   };
 }
 
-export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): AgentAdapter {
+export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): DeliveryAdapter {
   const projectsDir = options.projectsDir ?? join(homedir(), '.claude', 'projects');
+  const exec = options.exec ?? realExec;
+  const timeoutMs = options.deliverTimeoutMs ?? 300_000;
 
   return {
     agent: 'claude',
+
+    // Verified 2026-08-05: -p --resume keeps the session id stable but REQUIRES
+    // running from the session's project cwd (spec §9 R1). Needs CLI login —
+    // fails cleanly with "Not logged in" until the user runs claude /login once.
+    async deliver(session: SessionInfo, envelope: string): Promise<DeliveryResult> {
+      if (!session.cwd) {
+        return { ok: false, error: 'claude delivery requires the session cwd (unknown for this session)' };
+      }
+      const { stdout, stderr, code } = await exec('claude', ['-p', '--resume', session.sessionId, envelope], {
+        cwd: session.cwd,
+        timeoutMs,
+      });
+      if (code !== 0) {
+        return { ok: false, error: `claude -p --resume exited ${code}: ${stderr.slice(0, 500)}` };
+      }
+      if (stdout.includes('Not logged in')) {
+        return { ok: false, error: 'claude CLI not logged in (run `claude` once to unlock auto-delivery, see ADR-008)' };
+      }
+      return { ok: true, output: stdout };
+    },
     async listSessions(): Promise<SessionInfo[]> {
       let projectDirs: string[];
       try {

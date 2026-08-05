@@ -48,7 +48,56 @@ const notImplemented = (cmd: string) => () => {
   process.exitCode = 1;
 };
 
-program.command('start').description('Start the anyd daemon').action(notImplemented('start'));
+program
+  .command('start')
+  .description('Start the anyd daemon (foreground) — delivers queued messages')
+  .option('--interval <ms>', 'mailbox poll interval', '1000')
+  .option('--directory-ttl <ms>', 'session directory cache TTL', '30000')
+  .action(async (opts: { interval: string; directoryTtl: string }) => {
+    const adapters = defaultAdapters();
+    const mailbox = openMailbox();
+
+    let cache: { at: number; sessions: Awaited<ReturnType<typeof listAllSessions>>['sessions'] } | null = null;
+    const ttl = Number.parseInt(opts.directoryTtl, 10) || 30_000;
+    const directory = async () => {
+      if (!cache || Date.now() - cache.at > ttl) {
+        const { sessions, errors } = await listAllSessions(adapters);
+        for (const e of errors) console.error(`warning: ${e.agent} scan failed: ${e.error.message}`);
+        cache = { at: Date.now(), sessions };
+      }
+      return cache.sessions;
+    };
+
+    console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
+    const initial = await directory();
+    console.log(`directory: ${initial.length} sessions discovered`);
+
+    const { startDispatcher } = await import('./daemon/dispatcher.js');
+    const running = startDispatcher(
+      {
+        mailbox,
+        adapters: new Map(adapters.map((a) => [a.agent, a])),
+        directory,
+        onEvent: (e) => {
+          const m = e.message;
+          const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
+          console.log(line);
+        },
+      },
+      { intervalMs: Number.parseInt(opts.interval, 10) || 1000 },
+    );
+
+    const shutdown = () => {
+      console.log('anyd daemon stopping');
+      running.stop();
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    await new Promise(() => {
+      /* run until signalled */
+    });
+  });
 program.command('stop').description('Stop the anyd daemon').action(notImplemented('stop'));
 program.command('status').description('Show daemon status and delivery stats').action(notImplemented('status'));
 program
