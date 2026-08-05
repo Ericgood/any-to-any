@@ -14,9 +14,9 @@
 - [x] M1 directory：scanner ×2 + resolve（TDD 30 测试绿，anyd list 真机验证 4157 sessions）
 - [x] M2 mailbox 驿站：SQLite 状态机 + conversations + CLI 四命令（42 测试绿，真机首条消息入站）
 - [x] M3 dispatcher + adapter ×2 + 信封（62 测试绿；真机 Claude→Codex 投递成功且 Codex 回信自动入站）
-- [ ] M4 双向回路 + skill + 冒烟（§1 验收 1-8）
-- [ ] M5 Web Console（SSE+REST+IM 双栏，附件验收 9-12）
-- [ ] M6 收尾：文档、anyd doctor、npm 发版（可选）
+- [x] M4 双向回路 + skill + hook + 冒烟（SMOKE PASS：Codex↔Codex 三消息全 delivered）
+- [x] M5 Web Console（浏览器实测：双栏/气泡/状态/重试/SSE 全通）
+- [x] M6 收尾：doctor 8 项全✓ / setup / README / LICENSE / npm link（publish 留用户）
 
 ## 待办池（Phase 2+）
 - [ ] P2 跨设备：mDNS 发现 + HTTP 直连 + 配对 token
@@ -25,6 +25,9 @@
 - [ ] P3 Kimi / Gemini adapter；投递专用权限 profile（硬隔离）
 - [ ] P3+ A2A 兼容层（anyd 暴露 endpoint + Agent Card）
 - [ ] 官网 anytoany.dev 上线；any2any.dev 301 跳转
+
+## Review（2026-08-05 Phase 1 完成轮）
+Phase 1 M0-M6 全部完成：81 测试全绿（覆盖率 92.7/80/98.4），Codex↔Codex 双向冒烟 PASS，Claude→Codex 真投递成功，Codex→Claude hook 链路验证通过（驿站留有活体演示消息）。Web Console 浏览器实测。教训两条入 lessons.md（资源定位禁猜测兜底；mtime 不可信用文件名时间戳）。待用户：验收、可选 claude 登录、repo 转 public、npm publish。
 
 ## Review（2026-08-05 规范与计划轮）
 规范落地：先文档后动作 / docs 分区 / CHANGELOG 带时间戳 / 每轮必推 GitHub——已写入 CLAUDE.md 成为项目章程。Phase 1 spec 含验收脚本、模块边界、数据模型、信封防注入、TDD 计划、五个里程碑与四项风险的首日实验方案。下一步：用户审阅 spec → M0 开工。

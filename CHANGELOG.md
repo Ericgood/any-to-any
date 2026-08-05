@@ -2,6 +2,15 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — M4+M5+M6 完成：Phase 1 全线落地，等待用户验收
+
+- **M4 双向回路**：SKILL.md（Agent Skills 标准，装入 ~/.claude、~/.codex、~/.agents 三目录并被本会话热加载实证）；Claude 收件 hook（UserPromptSubmit 注入，anyd setup 一键注册、幂等、带备份）；冒烟 SMOKE PASS——Codex↔Codex 双向往返 3 条消息全部 delivered，对方按软约束主动终止连锁
+- **M5 Web Console**：daemon 集成 HTTP+SSE 服务（127.0.0.1:7433，零依赖 node:http）；IM 双栏界面（对话列表/左右气泡/投递状态/失败重试/新建对话/身份切换代发）浏览器实测通过；技术选型修订：零构建单文件 HTML 取代 Vite+React（理由：npm 包零构建链、CSP 友好、~400 行可控）
+- **M6 收尾**：anyd doctor（8 项自检全 ✓）/ setup / status / stop / flush；README 快速开始；LICENSE (MIT)；npm link 全局可用
+- 冒烟带出的真实修复：exec 层改 spawn+stdin ignore（claude CLI stdin 警告）；uuid v7 同秒前缀撞车实证歧义候选机制；回环保护实战拦截 5 连锁（首轮冒烟）
+- 测试 81 个全绿，覆盖率 行 92.7% / 分支 80% / 函数 98.4%（达标 ≥80%）
+- 遗留待用户：验收现场触发 hook 活体演示（驿站已留 1 条 pending 消息）；可选一次性 claude CLI 登录解锁全自动档；repo 转 public 与 npm publish 待用户过目后执行
+
 ## 2026-08-05 — M3 完成：投递引擎全链路真实跑通
 
 - dispatcher（claim→目录定位→信封→adapter 投递→状态回写→stdout 回复自动入站）+ claude/codex 两家 deliver（argv 直传无 shell 注入面）+ 失败退避 30s——累计 62 测试全绿

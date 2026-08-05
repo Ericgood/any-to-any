@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DeliveryAdapter, DeliveryResult, SessionInfo } from '../src/adapters/types.js';
-import { dispatchOnce } from '../src/daemon/dispatcher.js';
+import { dispatchOnce, startDispatcher } from '../src/daemon/dispatcher.js';
 import { REPLY_MARKER } from '../src/envelope.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
@@ -100,5 +100,43 @@ describe('dispatchOnce', () => {
     await run([fakeAdapter('codex', () => ({ ok: true, output: '' }))]);
     expect(mailbox.getMessage(m.id)?.status).toBe('failed');
     expect(mailbox.getMessage(m.id)?.lastError).toMatch(/no adapter/i);
+  });
+
+  it('fails when the directory supplier itself throws', async () => {
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+    await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => {
+        throw new Error('scan blew up');
+      },
+    });
+    expect(mailbox.getMessage(m.id)?.lastError).toMatch(/scan blew up/);
+  });
+
+  it('fails when the adapter deliver call throws (not just rejects politely)', async () => {
+    const throwing: DeliveryAdapter = {
+      agent: 'codex',
+      listSessions: async () => [],
+      deliver: async () => {
+        throw new Error('spawn ENOENT');
+      },
+    };
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+    await run([throwing]);
+    expect(mailbox.getMessage(m.id)?.lastError).toMatch(/ENOENT/);
+  });
+
+  it('startDispatcher drains the queue then stops cleanly', async () => {
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: 'no marker' }));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'one' });
+    const running = startDispatcher(
+      { mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY },
+      { intervalMs: 10 },
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    running.stop();
+    expect(adapter.calls.length).toBeGreaterThanOrEqual(1);
+    expect(mailbox.inbox({})).toHaveLength(0);
   });
 });
