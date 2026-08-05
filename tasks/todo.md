@@ -10,7 +10,7 @@
 - [x] 2026-08-05 Phase 1 技术规格（docs/specs/phase1-mvp.md）
 
 ## Phase 1（等用户审阅 spec 后开工）
-- [ ] M0 脚手架 + 首日通道实验（R1: claude resume 并发行为；R2: codex resume 锁行为）
+- [x] M0 脚手架（TS+vitest+CLI 骨架，build/test 全绿）+ 通道实验（R2 全解除；R1 剩「历史携带」待用户终端验证）
 - [ ] M1 directory：scanner ×2 + resolve（TDD）
 - [ ] M2 mailbox：SQLite + 状态机（TDD）
 - [ ] M3 dispatcher + adapter ×2 + 信封

@@ -1,0 +1,42 @@
+{
+  "name": "anytoany",
+  "version": "0.0.1",
+  "description": "Session-to-session messaging for AI coding agents — let any agent @ any other, across devices and vendors.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://anytoany.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ericgood/any-to-any.git"
+  },
+  "bin": {
+    "anyd": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "commander": "^14.0.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

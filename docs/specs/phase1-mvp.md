@@ -118,6 +118,11 @@ anyd send → mailbox(pending) → dispatcher 轮询(1s) → resolve 目标 sess
 
 ## 9. 风险与首日验证点
 
+> **M0 实验结论（2026-08-05 本机实测）**：
+> **R2 已全部解除** —— `codex exec resume`：✅ 携带完整历史；✅ 与 cwd 无关（thread 全局寻址）；✅ 同一 thread 并发双 resume 无锁冲突无损坏；headless 新 thread 不实时进 session_index.jsonl，**scanner 必须以 `sessions/**/rollout-*.jsonl` 文件名（含创建时间戳+uuid）为真相源**，mtime 不可信。
+> **R1 部分解除** —— `claude -p --resume`：✅ session id 稳定不漂移（续写同一 jsonl，非 fork）；✅ **强依赖 cwd**（必须在 session 所属项目目录执行，否则 "No conversation found"）；⏳ 「携带历史」因沙盒无 Keychain 登录态未测，待用户在真实终端跑 `scripts/experiments/verify-claude-resume.sh`（预期输出 ALPHA）。
+> 环境事实：Codex 认证为文件（`~/.codex/auth.json`），自动化环境可直接跑；Claude 认证在 macOS Keychain，无凭据自动化环境（CI、沙盒）跑不了 headless——daemon 必须运行在用户登录环境（launchd user agent 即可，P2 注意）。
+
 - **R1** `claude -p --resume` 是否强依赖 cwd 与项目目录一致；resume 与正开着的 TUI 同 session 并发时行为（预期：追加新分叉/续写，需实测确认无损坏）。→ M0 实验脚本 1。
 - **R2** `codex exec resume` 对「TUI 正在运行的 thread」续写是否加锁/冲突。→ M0 实验脚本 2。若 R1/R2 存在并发损坏风险，降级方案：投递前检测 session 活跃（进程/文件 mtime），活跃则消息置 `pending` 延迟投递并在 `anyd status` 提示（体验降级但零风险）。
 - **R3** headless 回合的权限不足以执行 `anyd reply`（Bash 权限被拒）→ 备选：daemon 从 headless stdout 解析回复（`--output-format json`），不依赖对方执行命令。M3 时二选一定案。

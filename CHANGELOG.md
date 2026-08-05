@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — M0 完成：脚手架 + 通道实验结论
+
+- 脚手架就绪：TypeScript + vitest + commander CLI 骨架（`anyd` 七个子命令占位），build/test 全绿
+- R2（Codex）风险全解除：resume 携带历史 ✓、cwd 无关 ✓、并发双 resume 无冲突 ✓；发现 headless thread 不实时进 session_index，scanner 改以 rollout 文件名为真相源
+- R1（Claude）：id 稳定不漂移 ✓、强依赖 cwd ✓（adapter 必须 cd 到项目目录）；「历史携带」待用户真实终端验证（scripts/experiments/verify-claude-resume.sh）
+- 环境事实：Claude 认证在 Keychain → daemon 必须跑在用户登录环境；实验误注入教训记入 tasks/lessons.md
+
 ## 2026-08-05 — Web Console 纳入 Phase 1；开工
 
 - 新增 docs/specs/phase1-webui.md：本地可视化控制台（IM 双栏、对话=session 配对、SSE 实时、页面新建连接/代发/重试）——定位：产品可理解性 + 实时监控 + agent 内 @ 失败时的人工兜底
