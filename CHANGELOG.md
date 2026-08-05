@@ -9,6 +9,13 @@
 - **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
 - mailbox 新增 recentActivity；107 测试全绿
 
+## 2026-08-05 — 可见性闭环收尾：重开可见实证 + macOS 系统通知
+
+- 用户实验确认：Codex App 重开会话完整渲染 headless 追加的往返轮次（用户层可见 = 重开可见，非实时；App 运行中不热载）
+- 新增系统通知：daemon 投递成功即弹 macOS 通知提醒「重开该会话可见」（每会话 60s 节流，--no-notify 可关）
+- 教训入档：agent 对自身不可观测事物的断言不作数（Codex 幻觉 DONE 事件）；信封防幻觉条款上线
+- 110 测试全绿
+
 ## 2026-08-05 — @any 寻址层 + 双端可见性（ADR-012，用户核心诉求驱动）
 
 - **@any 寻址层（Phase 2.5）**：daemon 自动把活跃对端会话物化为 `any-` 前缀的 agent 定义（~/.claude/agents/），进入 Claude Code 的 @ 补全列表——用户打 @any 即见候选、选中即确认（预绑定精确 id 零误投）；随目录自动增删、绝不触碰用户自有 agents；首批 10 个已生成并热加载实证

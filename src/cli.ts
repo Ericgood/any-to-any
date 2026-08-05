@@ -56,8 +56,9 @@ program
   .option('--port <port>', 'web console port', '7433')
   .option('--no-web', 'disable the web console server')
   .option('--no-lan', 'disable LAN peering (mDNS + relay)')
+  .option('--no-notify', 'disable macOS notifications on new cross-agent traffic')
   .option('--peer <host:port...>', 'manually add peer daemons (skips mDNS discovery for them)')
-  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean; lan: boolean; peer?: string[] }) => {
+  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean; lan: boolean; notify: boolean; peer?: string[] }) => {
     const adapters = defaultAdapters();
     const mailbox = openMailbox();
     const port = Number.parseInt(opts.port, 10) || 7433;
@@ -153,6 +154,9 @@ program
     const stale = mailbox.recoverStale();
     if (stale > 0) console.log(`recovered ${stale} message(s) stranded by a previous daemon run`);
 
+    const { createNotifier } = await import('./daemon/notify.js');
+    const notifier = createNotifier({ enabled: opts.notify });
+
     console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
@@ -183,6 +187,10 @@ program
           const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.device ?? 'local'}/${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
           console.log(line);
           web?.notifyChange();
+          if (e.kind === 'delivered' && !m.to.device) {
+            const title = cache?.sessions.find((s) => s.sessionId === m.to.sessionId)?.title ?? m.to.sessionId.slice(0, 8);
+            notifier.sessionActivity(m.to.agent, title, m.to.sessionId, 'received');
+          }
         },
       },
       { intervalMs: Number.parseInt(opts.interval, 10) || 1000 },
