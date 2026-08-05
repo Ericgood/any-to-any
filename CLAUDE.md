@@ -14,6 +14,7 @@
 3. **CHANGELOG.md**（仓库根，Markdown）：每次重大变更追加一条，格式 `## YYYY-MM-DD — 标题` + 要点列表。新条目加在最上方。
 4. **时间戳**：每份 docs 文档头部带 `> 创建：YYYY-MM-DD · 最后更新：YYYY-MM-DD`，改动时更新后者。
 5. **每轮工作收尾必须 commit + push 到 GitHub**——保证换设备、换 agent 都能从仓库完整跟进进度。commit 信息用 conventional commits（中文描述可）。
+6. **多 agent 共享工作区纪律**：提交前先 `git status`；只 add 自己本轮改动的文件（精确路径），**禁用 `git add -A` / `git add .`**；工作区里非自己的改动是另一个 agent 的施工现场，不提交、不修改、不回退。
 
 ## 工程约定
 
