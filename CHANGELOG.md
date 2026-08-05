@@ -2,6 +2,11 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 澄清 3f2abaa 提交范围 + 多 agent 工作区纪律入规范
+
+- 澄清：commit 3f2abaa 除 skill 反空转规则外，还意外包含了另一 agent 进行中的 Phase 2 局域网代码（docs/specs/phase2-lan.md、src/cluster/、device 字段改造、cluster 测试）——系 `git add -A` 裹挟所致；main 测试全绿（90 个），内容自洽故不回退
+- 规范新增（CLAUDE.md 第 6 条）：多 agent 共享工作区纪律——精确路径提交，禁用 git add -A；教训入 tasks/lessons.md
+
 ## 2026-08-05 — 治理 agent 空转客套（skill 反空转规则）
 
 - 实测暴露新模式：r2c 会话反复发「确认/状态同步」类零增量新消息，每条开新 context，绕过按线程计数的回环保护
