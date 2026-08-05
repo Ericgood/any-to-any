@@ -133,3 +133,5 @@ Phase 1（同机 Claude Code ↔ Codex）与 Phase 2（局域网跨设备）**�
 ## 许可
 
 [MIT](LICENSE)
+
+<sub>产品 logo（Claude、OpenAI、Kimi、Gemini 等）为各自所有者的商标，仅用于标识对应的 agent 产品。</sub>

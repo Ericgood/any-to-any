@@ -23,6 +23,12 @@
 - **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
 - mailbox 新增 recentActivity；107 测试全绿
 
+## 2026-08-05 — 官方品牌 logo 头像
+
+- 头像从字母色块升级为官方 logo 内嵌 SVG：Claude 星芒 / OpenAI 花环（Codex）/ Kimi / Gemini（来源：simple-icons + Wikimedia Commons 官方 symbol；零外链，全部内嵌）
+- 未收录品牌自动回退字母色块（OpenAI 系已被 simple-icons 应商标政策移除，花环取自 Commons 官方 2025 symbol）；README 增补商标归属注脚
+- 备用 logo 已入库（OpenCode/Copilot/Ollama/Moonshot），未来 adapter 接入即配
+
 ## 2026-08-05 — Web Console 升级为主观察界面：飞书式消息流（用户拍板）
 
 - 调研定案：Codex 官方注入 issue 全部 closed as not planned，Desktop App 无第三方通道；终端系方案（tmux 注入/共享 daemon+--remote）被用户否决——Web Console 正式成为协作主观察面

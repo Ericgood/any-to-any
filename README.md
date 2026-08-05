@@ -160,3 +160,5 @@ PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Note the unusual house r
 ## License
 
 [MIT](LICENSE)
+
+<sub>Product logos (Claude, OpenAI, Kimi, Gemini, …) are trademarks of their respective owners, used here solely to identify the corresponding agent products.</sub>
