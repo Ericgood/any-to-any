@@ -46,3 +46,14 @@ MVP 投递 = 对目标 session 执行一次 headless 续写（`claude -p --resum
 ## ADR-007 品牌与域名定案（2026-08-05，用户拍板）
 
 品牌 **anytoany**，tagline **"Session-to-session messaging for AI coding agents"**。域名 **anytoany.dev** 已注册（any2any.dev 建议做 301 跳转）；anytoany.app/.com 已被他人注册，不追。npm 包名 `anytoany`（已验证可用，未发布）、GitHub `Ericgood/any-to-any`、CLI 命令 `anyd`。命名依据：口播零解释成本；三位一体对齐；any2any 拼写在 AI 圈已是「任意模态」术语且 npm 被占；Codex（collaboration/multi-agent）与 Claude（Agent Teams）的命名先例均用关系词而非机制词，故 session-to-session 作 tagline 不作品牌。
+
+## ADR-008 Claude 入站投递三通道分层（2026-08-05）
+
+**背景（实测）**：用户使用 Claude 桌面客户端；CLI `claude -p` 无登录态（客户端与 CLI 凭据不共享，关沙盒复测确认）；客户端会话与 CLI session 同存储（`~/.claude/projects/`）但客户端另有会话注册表（带 isRunning）；客户端第一方工具 `send_message` 可跨 session 投递（消息以「From 某会话」出现在目标会话，带回链），仅会话内 agent 可调、无人值守会话不可用。
+
+**决定**：Claude 侧入站按可用性分层，daemon 逐层降级：
+1. **Claude→Claude**：发起方 skill 直接用客户端 send_message 投递（不经 daemon 投递管道，驿站记账保持 Web Console 可见）；
+2. **任意→Claude 零依赖档**：驿站 + hook 注入（UserPromptSubmit additionalContext）+ skill 主动查收——无需任何登录设置，被动送达；
+3. **任意→Claude 全自动档**：CLI resume 投递，需用户一次性 `claude` 登录解锁；解锁后目标会话即时自动处理回信。`anyd doctor` 检测并提示，绝不设为前置要求。
+
+Codex 侧不分层（exec resume 已全验证）。

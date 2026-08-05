@@ -2,6 +2,14 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — M2 完成：消息驿站（mailbox）与 conversations
+
+- SQLite 驿站落地：messages 状态机（pending→delivering→delivered/failed→dead，3 次重试）、conversations 无序配对、回环保护（context 深度 12 / 每分钟 6 条）——TDD 12 用例，累计 42 测试全绿
+- CLI 四命令接通：anyd send（@ 目标与 --from 均走三级解析）/ inbox（--take 取件即送达）/ reply（继承线程与对话）/ conversations
+- 真机验证：第一条消息入驿站（本 Claude 会话 → Codex 实验会话），conversations 正确显示配对
+- 术语约定：对用户称「消息驿站」（mailbox 非 email，快递驿站语义：存储-补投-记录-状态）
+- 重要环境发现（ADR-008 方向）：用户走 Claude 桌面客户端，CLI 无登录态；客户端原生 send_message 工具可 Claude↔Claude 直投（含 isRunning 状态）；Claude 入站定为三通道分层（客户端 send_message / hook 注入零依赖 / CLI resume 一次性登录解锁全自动）
+
 ## 2026-08-05 — M1 完成：session 目录与 @ 寻址
 
 - adapters（claude/codex）的 listSessions + 聚合 scanner + resolveTarget 三级匹配（id 前缀 > 标题子串 > 目录名子串），TDD 30 测试全绿

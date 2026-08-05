@@ -1,0 +1,59 @@
+import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import Database from 'better-sqlite3';
+
+export type Db = Database.Database;
+
+export function defaultDbPath(): string {
+  return join(homedir(), '.anytoany', 'mailbox.db');
+}
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  pair_key TEXT NOT NULL UNIQUE,
+  a_agent TEXT NOT NULL,
+  a_session TEXT NOT NULL,
+  b_agent TEXT NOT NULL,
+  b_session TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_message_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id),
+  context_id TEXT NOT NULL,
+  from_agent TEXT NOT NULL,
+  from_session TEXT NOT NULL,
+  to_agent TEXT NOT NULL,
+  to_session TEXT NOT NULL,
+  parts TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_context ON messages(context_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_session, status);
+CREATE TABLE IF NOT EXISTS sessions_cache (
+  agent TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  last_active_at INTEGER NOT NULL,
+  PRIMARY KEY (agent, session_id)
+);
+`;
+
+/** Open (creating if needed) the mailbox database. Pass ':memory:' in tests. */
+export function createDb(path: string = defaultDbPath()): Db {
+  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  const db = new Database(path);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  db.exec(SCHEMA);
+  return db;
+}
