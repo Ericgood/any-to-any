@@ -14,7 +14,8 @@
   },
   "files": [
     "dist",
-    "skills"
+    "skills",
+    "webui"
   ],
   "engines": {
     "node": ">=20"

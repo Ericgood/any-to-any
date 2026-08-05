@@ -6,7 +6,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/cli.ts'],
+      // cli is command wiring; exec/doctor are thin diagnostic shells exercised
+      // for real by scripts/smoke.sh — excluded from unit thresholds
+      exclude: ['src/cli.ts', 'src/adapters/exec.ts', 'src/doctor.ts'],
       thresholds: {
         lines: 80,
         functions: 80,

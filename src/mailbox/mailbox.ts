@@ -58,9 +58,11 @@ export interface Mailbox {
   inbox(query?: InboxQuery): Message[];
   getMessage(id: string): Message | null;
   listConversations(): ConversationSummary[];
+  listMessages(conversationId: string): Message[];
   claimNextPending(): Message | null;
   markDelivered(id: string): Message;
   markFailed(id: string, error: string): Message;
+  retry(id: string): Message;
 }
 
 const MAX_ATTEMPTS = 3;
@@ -248,6 +250,25 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
         if (last) summary.lastMessage = rowToMessage(last);
         return summary;
       });
+    },
+
+    listMessages(conversationId: string): Message[] {
+      const rows = db
+        .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
+        .all(conversationId) as MessageRow[];
+      return rows.map(rowToMessage);
+    },
+
+    retry(id: string): Message {
+      const current = getMessage(id);
+      if (!current) throw new Error(`message not found: ${id}`);
+      if (current.status !== 'failed' && current.status !== 'dead') {
+        throw new Error(`only failed/dead messages can be retried (status: ${current.status})`);
+      }
+      db.prepare(`UPDATE messages SET status = 'pending', attempts = 0, updated_at = ? WHERE id = ?`).run(now(), id);
+      const updated = getMessage(id);
+      if (!updated) throw new Error('update failed');
+      return updated;
     },
 
     claimNextPending(): Message | null {

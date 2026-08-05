@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anytoany console</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --line: #e5e7eb; --text: #111827; --muted: #6b7280;
+    --accent: #2563eb; --claude: #D97757; --codex: #10a37f; --kimi: #7C3AED; --gemini: #4285F4; --user: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 14px/1.5 -apple-system, "PingFang SC", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 15px; }
+  header .tag { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar { width: 320px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  #convos { flex: 1; overflow-y: auto; }
+  .convo { padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .convo:hover { background: #f3f4f6; }
+  .convo.active { background: #eef2ff; }
+  .convo .pair { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .convo .preview { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  .convo .meta { color: var(--muted); font-size: 11px; margin-top: 2px; display: flex; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .badge { background: #dc2626; color: #fff; border-radius: 8px; font-size: 10px; padding: 0 6px; }
+  #thread { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #thread-head { padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; }
+  #messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 72%; }
+  .msg .bubble { padding: 9px 13px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; }
+  .msg.right { align-self: flex-end; }
+  .msg.right .bubble { background: #dbeafe; border-color: #bfdbfe; }
+  .msg .info { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; align-items: center; }
+  .msg.right .info { justify-content: flex-end; }
+  .retry { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  #composer { display: flex; gap: 8px; padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line); }
+  #composer select, #composer input, dialog select, dialog textarea { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  #composer input { flex: 1; }
+  #empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); flex-direction: column; gap: 8px; }
+  dialog { border: none; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,.2); padding: 20px; width: 480px; max-width: 92vw; }
+  dialog::backdrop { background: rgba(0,0,0,.3); }
+  dialog h2 { font-size: 15px; margin-bottom: 14px; }
+  dialog .row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  dialog label { font-size: 12px; color: var(--muted); }
+  dialog select, dialog textarea { width: 100%; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  #status-line { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>anytoany</h1>
+  <span class="tag">session-to-session messaging · 本机控制台</span>
+  <span class="spacer"></span>
+  <button id="new-btn" class="primary">＋ 新建对话</button>
+</header>
+<main>
+  <div id="sidebar">
+    <div id="convos"></div>
+    <div id="status-line">连接中…</div>
+  </div>
+  <div id="thread">
+    <div id="empty">
+      <div>选择左侧对话，或点「＋ 新建对话」让两个 agent 连线</div>
+    </div>
+  </div>
+</main>
+
+<dialog id="new-dialog">
+  <h2>新建对话 — 让一个 session @ 另一个</h2>
+  <div class="row"><label>发起方（消息以它的名义发出）</label><select id="new-from"></select></div>
+  <div class="row"><label>接收方</label><select id="new-to"></select></div>
+  <div class="row"><label>第一条消息</label><textarea id="new-text" rows="3" placeholder="例如：worker.js 的重定向我改成 301 了，你那边帮我跑下路由测试"></textarea></div>
+  <div class="actions">
+    <button id="new-cancel">取消</button>
+    <button id="new-send" class="primary">发送</button>
+  </div>
+</dialog>
+
+<script>
+const AGENT_COLORS = { claude: 'var(--claude)', codex: 'var(--codex)', kimi: 'var(--kimi)', gemini: 'var(--gemini)', user: 'var(--user)' };
+const STATUS_ICON = { pending: '⏳', delivering: '⏫', delivered: '✓', failed: '⚠️', dead: '💀' };
+const state = { sessions: [], conversations: [], activeId: null, messages: [], composeAs: 'a' };
+
+const $ = (sel) => document.querySelector(sel);
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  return r.json();
+};
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sessionTitle = (ref) => {
+  const s = state.sessions.find((x) => x.agent === ref.agent && x.sessionId === ref.sessionId);
+  return s ? s.title : ref.sessionId.slice(0, 8);
+};
+const refLabel = (ref) => `@${ref.agent}:${sessionTitle(ref)}`;
+const dot = (agent) => `<span class="dot" style="background:${AGENT_COLORS[agent] || '#999'}"></span>`;
+const rel = (ms) => {
+  const d = Date.now() - ms;
+  if (d < 60e3) return '刚刚';
+  if (d < 3600e3) return `${Math.floor(d / 60e3)} 分钟前`;
+  if (d < 86400e3) return `${Math.floor(d / 3600e3)} 小时前`;
+  return `${Math.floor(d / 86400e3)} 天前`;
+};
+
+async function refreshAll() {
+  const [s, c] = await Promise.all([api('/api/sessions'), api('/api/conversations')]);
+  state.sessions = s.sessions;
+  state.conversations = c.conversations;
+  renderConvos();
+  if (state.activeId) await loadMessages(state.activeId, { keepScroll: false });
+}
+
+function renderConvos() {
+  const el = $('#convos');
+  el.innerHTML = state.conversations.map((c) => {
+    const failed = c.lastMessage && (c.lastMessage.status === 'failed' || c.lastMessage.status === 'dead');
+    const preview = c.lastMessage ? esc(c.lastMessage.parts.map((p) => p.text).join(' ').slice(0, 60)) : '';
+    return `<div class="convo ${c.id === state.activeId ? 'active' : ''}" data-id="${c.id}" role="button" tabindex="0">
+      <div class="pair">${dot(c.a.agent)}${esc(refLabel(c.a))} ↔ ${dot(c.b.agent)}${esc(refLabel(c.b))}</div>
+      <div class="preview">${preview}</div>
+      <div class="meta"><span>${c.messageCount} 条</span><span>${rel(c.lastMessageAt)}</span>${failed ? '<span class="badge">投递失败</span>' : ''}</div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;color:var(--muted)">还没有对话 — 点右上角新建</div>';
+  el.querySelectorAll('.convo').forEach((n) => n.addEventListener('click', () => selectConvo(n.dataset.id)));
+}
+
+async function selectConvo(id) {
+  state.activeId = id;
+  renderConvos();
+  await loadMessages(id, { keepScroll: false });
+}
+
+async function loadMessages(id, { keepScroll }) {
+  const { messages } = await api(`/api/conversations/${id}/messages`);
+  state.messages = messages;
+  renderThread(keepScroll);
+}
+
+function renderThread(keepScroll) {
+  const convo = state.conversations.find((c) => c.id === state.activeId);
+  if (!convo) return;
+  const thread = $('#thread');
+  const prev = thread.querySelector('#messages');
+  const scrollPos = keepScroll && prev ? prev.scrollTop : null;
+
+  thread.innerHTML = `
+    <div id="thread-head">${dot(convo.a.agent)} ${esc(refLabel(convo.a))} ↔ ${dot(convo.b.agent)} ${esc(refLabel(convo.b))}</div>
+    <div id="messages">${state.messages.map((m) => {
+      const isA = m.from.agent === convo.a.agent && m.from.sessionId === convo.a.sessionId;
+      const retriable = m.status === 'failed' || m.status === 'dead';
+      const via = m.parts.some((p) => p.via === 'webui') ? ' · 来自控制台' : m.parts.some((p) => p.via === 'auto') ? ' · 自动回信' : '';
+      return `<div class="msg ${isA ? 'left' : 'right'}">
+        <div class="bubble">${esc(m.parts.map((p) => p.text).join('\n'))}</div>
+        <div class="info">
+          <span style="color:${AGENT_COLORS[m.from.agent] || '#999'}">${esc(refLabel(m.from))}</span>
+          <span>${STATUS_ICON[m.status] || ''} ${m.status}${via}</span>
+          <span>${rel(m.createdAt)}</span>
+          ${retriable ? `<span class="retry" data-id="${m.id}">重试</span>` : ''}
+          ${m.lastError ? `<span title="${esc(m.lastError)}">ⓘ</span>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <div id="composer">
+      <select id="compose-as">
+        <option value="a">以 ${esc(refLabel(convo.a))} 发送</option>
+        <option value="b">以 ${esc(refLabel(convo.b))} 发送</option>
+      </select>
+      <input id="compose-text" placeholder="输入消息，回车发送（代表所选 session 发给对方）">
+      <button id="compose-send" class="primary">发送</button>
+    </div>`;
+
+  $('#compose-as').value = state.composeAs;
+  $('#compose-as').addEventListener('change', (e) => { state.composeAs = e.target.value; });
+  const doSend = async () => {
+    const text = $('#compose-text').value.trim();
+    if (!text) return;
+    const from = state.composeAs === 'a' ? convo.a : convo.b;
+    const to = state.composeAs === 'a' ? convo.b : convo.a;
+    $('#compose-send').disabled = true;
+    try {
+      await api('/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, text }) });
+      $('#compose-text').value = '';
+      await refreshAll();
+    } finally { $('#compose-send').disabled = false; }
+  };
+  $('#compose-send').addEventListener('click', doSend);
+  $('#compose-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSend(); });
+  thread.querySelectorAll('.retry').forEach((n) => n.addEventListener('click', async () => {
+    await api(`/api/messages/${n.dataset.id}/retry`, { method: 'POST' });
+    await refreshAll();
+  }));
+
+  const box = $('#messages');
+  box.scrollTop = scrollPos !== null ? scrollPos : box.scrollHeight;
+}
+
+function fillSessionSelect(sel) {
+  sel.innerHTML = state.sessions.map((s, i) =>
+    `<option value="${i}">@${s.agent}:${esc(s.title)} — ${esc(s.cwd.split('/').pop() || s.cwd)}</option>`,
+  ).join('');
+}
+
+$('#new-btn').addEventListener('click', async () => {
+  if (!state.sessions.length) await refreshAll();
+  fillSessionSelect($('#new-from'));
+  fillSessionSelect($('#new-to'));
+  $('#new-dialog').showModal();
+});
+$('#new-cancel').addEventListener('click', () => $('#new-dialog').close());
+$('#new-send').addEventListener('click', async () => {
+  const from = state.sessions[+$('#new-from').value];
+  const to = state.sessions[+$('#new-to').value];
+  const text = $('#new-text').value.trim();
+  if (!from || !to || !text) return;
+  if (from.agent === to.agent && from.sessionId === to.sessionId) { alert('发起方和接收方不能是同一个 session'); return; }
+  $('#new-send').disabled = true;
+  try {
+    const { message } = await api('/api/messages', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ from: { agent: from.agent, sessionId: from.sessionId }, to: { agent: to.agent, sessionId: to.sessionId }, text }),
+    });
+    $('#new-dialog').close();
+    $('#new-text').value = '';
+    await refreshAll();
+    await selectConvo(message.conversationId);
+  } finally { $('#new-send').disabled = false; }
+});
+
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => { $('#status-line').textContent = '● 实时连接中'; };
+  es.onmessage = () => { refreshAll().catch(() => {}); };
+  es.onerror = () => { $('#status-line').textContent = '○ 连接断开，重连中…'; };
+}
+
+refreshAll().then(connectSSE).catch((e) => { $('#status-line').textContent = `加载失败: ${e.message}`; });
+</script>
+</body>
+</html>

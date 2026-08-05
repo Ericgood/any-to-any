@@ -50,10 +50,12 @@ const notImplemented = (cmd: string) => () => {
 
 program
   .command('start')
-  .description('Start the anyd daemon (foreground) — delivers queued messages')
+  .description('Start the anyd daemon (foreground) — delivers messages + serves the web console')
   .option('--interval <ms>', 'mailbox poll interval', '1000')
   .option('--directory-ttl <ms>', 'session directory cache TTL', '30000')
-  .action(async (opts: { interval: string; directoryTtl: string }) => {
+  .option('--port <port>', 'web console port', '7433')
+  .option('--no-web', 'disable the web console server')
+  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean }) => {
     const adapters = defaultAdapters();
     const mailbox = openMailbox();
 
@@ -68,9 +70,25 @@ program
       return cache.sessions;
     };
 
+    const { writePid, clearPid, readPid, isAlive } = await import('./daemon/pidfile.js');
+    const existing = readPid();
+    if (existing && isAlive(existing) && existing !== process.pid) {
+      console.error(`daemon already running (pid ${existing}) — stop it first with anyd stop`);
+      process.exit(1);
+    }
+    writePid();
+    process.on('exit', clearPid);
+
     console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
+
+    let web: { notifyChange(): void; close(): void; port: number } | null = null;
+    if (opts.web) {
+      const { startConsoleServer } = await import('./daemon/server.js');
+      web = startConsoleServer({ mailbox, directory, port: Number.parseInt(opts.port, 10) || 7433 });
+      console.log(`web console: http://127.0.0.1:${web.port}`);
+    }
 
     const { startDispatcher } = await import('./daemon/dispatcher.js');
     const running = startDispatcher(
@@ -82,6 +100,7 @@ program
           const m = e.message;
           const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
           console.log(line);
+          web?.notifyChange();
         },
       },
       { intervalMs: Number.parseInt(opts.interval, 10) || 1000 },
@@ -90,6 +109,7 @@ program
     const shutdown = () => {
       console.log('anyd daemon stopping');
       running.stop();
+      web?.close();
       process.exit(0);
     };
     process.on('SIGINT', shutdown);
@@ -98,8 +118,95 @@ program
       /* run until signalled */
     });
   });
-program.command('stop').description('Stop the anyd daemon').action(notImplemented('stop'));
-program.command('status').description('Show daemon status and delivery stats').action(notImplemented('status'));
+program
+  .command('stop')
+  .description('Stop the anyd daemon')
+  .action(async () => {
+    const { readPid, clearPid } = await import('./daemon/pidfile.js');
+    const pid = readPid();
+    if (!pid) {
+      console.log('daemon not running (no pid file)');
+      return;
+    }
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(`sent SIGTERM to daemon (pid ${pid})`);
+    } catch {
+      console.log(`daemon pid ${pid} not alive — cleaning pid file`);
+    }
+    clearPid();
+  });
+program
+  .command('status')
+  .description('Show daemon status and delivery stats')
+  .action(async () => {
+    const { readPid, isAlive } = await import('./daemon/pidfile.js');
+    const pid = readPid();
+    const running = pid !== null && isAlive(pid);
+    console.log(`daemon: ${running ? `running (pid ${pid})` : 'not running'}`);
+    const counts = openMailbox()
+      .inbox({ all: true })
+      .reduce<Record<string, number>>((acc, m) => {
+        acc[m.status] = (acc[m.status] ?? 0) + 1;
+        return acc;
+      }, {});
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    console.log(`mailbox: ${total} messages${total ? ` — ${Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(', ')}` : ''}`);
+  });
+program
+  .command('flush')
+  .description('Deliver all queued messages once, then exit (no daemon needed)')
+  .action(async () => {
+    const adapters = defaultAdapters();
+    const { sessions } = await listAllSessions(adapters);
+    const { dispatchOnce } = await import('./daemon/dispatcher.js');
+    const opts = {
+      mailbox: openMailbox(),
+      adapters: new Map(adapters.map((a) => [a.agent, a])),
+      directory: async () => sessions,
+      onEvent: (e: { kind: string; message: { id: string }; detail?: string }) =>
+        console.log(`${e.kind} ${e.message.id.slice(0, 8)}${e.detail ? ` — ${e.detail}` : ''}`),
+    };
+    let n = 0;
+    while (await dispatchOnce(opts)) n++;
+    console.log(`flushed ${n} message(s)`);
+  });
+program
+  .command('hook')
+  .description('Hook processors wired into agent CLIs (internal)')
+  .argument('<kind>', 'hook kind: claude-prompt-submit')
+  .action(async (kind: string) => {
+    if (kind !== 'claude-prompt-submit') {
+      console.error(`unknown hook kind: ${kind}`);
+      process.exitCode = 1;
+      return;
+    }
+    const chunks: Buffer[] = [];
+    for await (const c of process.stdin) chunks.push(c as Buffer);
+    let input: { session_id?: string } = {};
+    try {
+      input = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { session_id?: string };
+    } catch {
+      /* tolerate malformed hook payloads — emit no context */
+    }
+    const { processPromptSubmitHook } = await import('./hooks/claude-hook.js');
+    console.log(JSON.stringify(processPromptSubmitHook(openMailbox(), input)));
+  });
+program
+  .command('doctor')
+  .description('Check environment readiness for anytoany')
+  .action(async () => {
+    const { runDoctor } = await import('./doctor.js');
+    process.exitCode = (await runDoctor()) ? 0 : 1;
+  });
+program
+  .command('setup')
+  .description('Install the any-to-any skill into agent CLIs and register the Claude hook')
+  .option('--no-hook', 'skip Claude settings.json hook registration')
+  .action(async (opts: { hook: boolean }) => {
+    const { runSetup } = await import('./setup.js');
+    await runSetup({ withHook: opts.hook });
+  });
 program
   .command('list')
   .description('List addressable sessions discovered on this machine')

@@ -110,6 +110,36 @@ describe('mailbox', () => {
     });
   });
 
+  describe('web console support', () => {
+    it('lists messages of a conversation in chronological order', () => {
+      const m1 = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'one' });
+      nowMs += 1000;
+      mailbox.reply(m1.id, 'two');
+      const msgs = mailbox.listMessages(m1.conversationId);
+      expect(msgs.map((m) => m.parts[0]?.text)).toEqual(['one', 'two']);
+      expect(mailbox.listMessages('nonexistent')).toEqual([]);
+    });
+
+    it('retry requeues a failed/dead message with attempts reset', () => {
+      const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+      for (let i = 0; i < 3; i++) {
+        mailbox.claimNextPending();
+        mailbox.markFailed(m.id, 'boom');
+        nowMs += 31_000;
+      }
+      expect(mailbox.getMessage(m.id)?.status).toBe('dead');
+      const retried = mailbox.retry(m.id);
+      expect(retried.status).toBe('pending');
+      expect(retried.attempts).toBe(0);
+      expect(mailbox.claimNextPending()?.id).toBe(m.id);
+    });
+
+    it('retry rejects non-failed messages', () => {
+      const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+      expect(() => mailbox.retry(m.id)).toThrow(/only failed/i);
+    });
+  });
+
   describe('loop protection', () => {
     it('rejects when a context exceeds 12 messages', () => {
       let m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: '0' });

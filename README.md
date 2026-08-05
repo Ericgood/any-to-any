@@ -44,12 +44,38 @@ npx skills add Ericgood/any-to-any
 - **一个 daemon（`anyd`）**：session 目录、消息邮箱、投递引擎；agent 通过 skill 指引的 bash 命令与它交互（`anyd send` / `anyd inbox`），**零 MCP 配置**
 - **局域网直连**：Bonjour/mDNS 自动发现同网设备，daemon 间 HTTP 直连 + 配对 token，无任何第三方服务
 
+## 快速开始（Phase 1：同机 Claude Code ↔ Codex）
+
+```bash
+# 在仓库目录（npm 发版前）
+npm install && npm run build && npm link
+
+anyd setup      # 装 skill 到 ~/.claude、~/.codex、~/.agents + 注册 Claude 收件 hook
+anyd doctor     # 环境自检
+anyd start      # 启动投递 daemon + Web 控制台 http://127.0.0.1:7433
+```
+
+然后在任意一个 agent 会话里说：`@codex:某个会话 帮我看看 X`——skill 会引导它完成寻址与发送；或直接打开 [控制台](http://127.0.0.1:7433) 用「＋ 新建对话」让两个 session 连线。
+
+常用命令：
+
+```bash
+anyd list                 # 本机可寻址的 session（Claude + Codex 混排）
+anyd conversations        # 已建立的连接
+anyd send "@codex:前端" "消息" --from "@claude:后端"
+anyd inbox --take         # 查收并标记送达
+anyd flush                # 无 daemon 时手动投递一轮
+anyd status / stop        # daemon 状态 / 停止
+```
+
+> Claude 会话自动处理消息（而非等用户下次说话时带入）需要 CLI 登录态：终端跑一次 `claude` 登录即可解锁，不做也不影响其余功能（详见 [ADR-008](docs/decisions.md)）。
+
 ## 当前状态
 
-🚧 Phase 1 实施中：同机 Claude Code ↔ Codex 互 @。官网：[anytoany.dev](https://anytoany.dev)（建设中）
+🚧 Phase 1 收尾：同机互 @ 全链路已跑通（Codex↔Codex 双向、Claude→Codex 单向 + 回信入站）。官网：[anytoany.dev](https://anytoany.dev)（建设中）
 
-- [docs/specs/phase1-mvp.md](docs/specs/phase1-mvp.md) — **Phase 1 技术规格（当前施工图）**
-- [docs/decisions.md](docs/decisions.md) — 已拍板的关键决策（ADR-001~007）
+- [docs/specs/phase1-mvp.md](docs/specs/phase1-mvp.md) — **Phase 1 技术规格（当前施工图）** + [Web Console 附件](docs/specs/phase1-webui.md)
+- [docs/decisions.md](docs/decisions.md) — 已拍板的关键决策（ADR-001~008）
 - [docs/analysis.md](docs/analysis.md) — 架构方案分析与推荐
 - [docs/research/](docs/research/) — 各 agent CLI 的接入点调研 + 协议与现有项目盘点
 - [CHANGELOG.md](CHANGELOG.md) — 重大变更记录
