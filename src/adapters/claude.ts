@@ -116,7 +116,7 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): Deliver
         timeoutMs,
       });
       if (code !== 0) {
-        return { ok: false, error: `claude -p --resume exited ${code}: ${stderr.slice(0, 500)}` };
+        return { ok: false, error: `claude -p --resume exited ${code}: …${stderr.slice(-500)}` };
       }
       if (stdout.includes('Not logged in')) {
         return { ok: false, error: 'claude CLI not logged in (run `claude` once to unlock auto-delivery, see ADR-008)' };
