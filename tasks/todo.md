@@ -12,7 +12,7 @@
 ## Phase 1（等用户审阅 spec 后开工）
 - [x] M0 脚手架（TS+vitest+CLI 骨架，build/test 全绿）+ 通道实验（R2 全解除；R1 剩「历史携带」待用户终端验证）
 - [x] M1 directory：scanner ×2 + resolve（TDD 30 测试绿，anyd list 真机验证 4157 sessions）
-- [ ] M2 mailbox：SQLite + 状态机（TDD）
+- [x] M2 mailbox 驿站：SQLite 状态机 + conversations + CLI 四命令（42 测试绿，真机首条消息入站）
 - [ ] M3 dispatcher + adapter ×2 + 信封
 - [ ] M4 双向回路 + skill + 冒烟（§1 验收 1-8）
 - [ ] M5 Web Console（SSE+REST+IM 双栏，附件验收 9-12）
