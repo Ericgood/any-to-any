@@ -70,6 +70,25 @@ anyd status / stop        # daemon 状态 / 停止
 
 > Claude 会话自动处理消息（而非等用户下次说话时带入）需要 CLI 登录态：终端跑一次 `claude` 登录即可解锁，不做也不影响其余功能（详见 [ADR-008](docs/decisions.md)）。
 
+## 跨设备（Phase 2：同一局域网）
+
+在第二台设备（如 Mac mini）上：
+
+```bash
+# 1. 安装（同快速开始）；然后加入同一集群：
+anyd pair --set <第一台机器上 anyd pair --show 打出的 token>
+anyd pair --name mini        # 可选：起个好记的设备名
+anyd start                   # 两台都跑着 daemon
+```
+
+之后两台设备通过 mDNS 自动互相发现（`anyd peers` 查看），目录自动聚合——在 MacBook 的任意 agent 里直接：
+
+```
+@mini/codex:前端重构 worker.js 我改好了，你那边跑下测试
+```
+
+消息经局域网直连投递到 mini 上的 Codex 会话，回信自动路由回来。零第三方服务、零云端，token 不同的设备互相不可见内容（HTTP 401）。
+
 ## 当前状态
 
 🚧 Phase 1 收尾：同机互 @ 全链路已跑通（Codex↔Codex 双向、Claude→Codex 单向 + 回信入站）。官网：[anytoany.dev](https://anytoany.dev)（建设中）

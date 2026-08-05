@@ -96,10 +96,10 @@ const api = async (path, opts) => {
 };
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sessionTitle = (ref) => {
-  const s = state.sessions.find((x) => x.agent === ref.agent && x.sessionId === ref.sessionId);
+  const s = state.sessions.find((x) => x.agent === ref.agent && x.sessionId === ref.sessionId && (x.device || '') === (ref.device || ''));
   return s ? s.title : ref.sessionId.slice(0, 8);
 };
-const refLabel = (ref) => `@${ref.agent}:${sessionTitle(ref)}`;
+const refLabel = (ref) => `${ref.device ? '@' + ref.device + '/' : '@'}${ref.agent}:${sessionTitle(ref)}`;
 const dot = (agent) => `<span class="dot" style="background:${AGENT_COLORS[agent] || '#999'}"></span>`;
 const rel = (ms) => {
   const d = Date.now() - ms;
@@ -203,7 +203,7 @@ function renderThread(keepScroll) {
 
 function fillSessionSelect(sel) {
   sel.innerHTML = state.sessions.map((s, i) =>
-    `<option value="${i}">@${s.agent}:${esc(s.title)} — ${esc(s.cwd.split('/').pop() || s.cwd)}</option>`,
+    `<option value="${i}">${s.device ? '@' + esc(s.device) + '/' : '@'}${s.agent}:${esc(s.title)} — ${esc(s.cwd.split('/').pop() || s.cwd)}</option>`,
   ).join('');
 }
 
@@ -224,7 +224,7 @@ $('#new-send').addEventListener('click', async () => {
   try {
     const { message } = await api('/api/messages', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ from: { agent: from.agent, sessionId: from.sessionId }, to: { agent: to.agent, sessionId: to.sessionId }, text }),
+      body: JSON.stringify({ from: { agent: from.agent, sessionId: from.sessionId, ...(from.device ? { device: from.device } : {}) }, to: { agent: to.agent, sessionId: to.sessionId, ...(to.device ? { device: to.device } : {}) }, text }),
     });
     $('#new-dialog').close();
     $('#new-text').value = '';

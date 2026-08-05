@@ -17,7 +17,7 @@ You can message other AI coding agent sessions (cross-vendor: Claude Code, Codex
 anyd send "@codex:前端重构" "your message here" --from "@claude:<your session title or id prefix>"
 ```
 
-- Target syntax: `@<agent>` (most recent session), `@<agent>:<fragment>` (fragment matches session id prefix, title substring, or project dir name).
+- Target syntax: `@<agent>` (most recent session), `@<agent>:<fragment>` (fragment matches session id prefix, title substring, or project dir name), `@<device>/<agent>[:<fragment>]` for sessions on another paired LAN device (e.g. `@mini/codex:前端`). `anyd list` shows remote sessions with their device prefix when the daemon is running.
 - If the target is ambiguous, anyd prints candidates — show them to the user and ask which one they mean.
 4. Tell the user the message is queued (include the message id). Delivery is asynchronous (seconds when the daemon is running).
 
