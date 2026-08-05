@@ -1,7 +1,9 @@
-/** A discoverable, addressable agent session on this machine. */
+/** A discoverable, addressable agent session (local, or on a paired LAN device). */
 export interface SessionInfo {
   /** Agent kind: 'claude' | 'codex' | ... */
   agent: string;
+  /** Device name for remote sessions; unset = this machine. */
+  device?: string;
   /** Stable session/thread id used for resume-based delivery. */
   sessionId: string;
   /** Human-readable title used for @-target matching and UI display. */

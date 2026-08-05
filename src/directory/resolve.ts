@@ -11,7 +11,7 @@ export type ResolveResult =
   | { ok: true; session: SessionInfo }
   | {
       ok: false;
-      reason: 'not_found' | 'ambiguous' | 'unsupported_device' | 'invalid_target';
+      reason: 'not_found' | 'ambiguous' | 'invalid_target';
       candidates: SessionInfo[];
     };
 
@@ -39,9 +39,13 @@ const byRecency = (a: SessionInfo, b: SessionInfo) => b.lastActiveAt - a.lastAct
 export function resolveTarget(raw: string, sessions: SessionInfo[]): ResolveResult {
   const parsed = parseTarget(raw);
   if (!parsed) return { ok: false, reason: 'invalid_target', candidates: [] };
-  if (parsed.device) return { ok: false, reason: 'unsupported_device', candidates: [] };
 
-  const pool = sessions.filter((s) => s.agent === parsed.agent).sort(byRecency);
+  // no device segment = this machine; '@device/agent' matches that device by ci prefix
+  const deviceMatch = (s: SessionInfo): boolean =>
+    parsed.device
+      ? (s.device ?? '').toLowerCase().startsWith(parsed.device.toLowerCase())
+      : !s.device;
+  const pool = sessions.filter((s) => s.agent === parsed.agent && deviceMatch(s)).sort(byRecency);
   if (pool.length === 0) return { ok: false, reason: 'not_found', candidates: [] };
 
   const first = pool[0];

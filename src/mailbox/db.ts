@@ -15,8 +15,10 @@ CREATE TABLE IF NOT EXISTS conversations (
   pair_key TEXT NOT NULL UNIQUE,
   a_agent TEXT NOT NULL,
   a_session TEXT NOT NULL,
+  a_device TEXT,
   b_agent TEXT NOT NULL,
   b_session TEXT NOT NULL,
+  b_device TEXT,
   created_at INTEGER NOT NULL,
   last_message_at INTEGER NOT NULL
 );
@@ -26,8 +28,10 @@ CREATE TABLE IF NOT EXISTS messages (
   context_id TEXT NOT NULL,
   from_agent TEXT NOT NULL,
   from_session TEXT NOT NULL,
+  from_device TEXT,
   to_agent TEXT NOT NULL,
   to_session TEXT NOT NULL,
+  to_device TEXT,
   parts TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   attempts INTEGER NOT NULL DEFAULT 0,
@@ -48,6 +52,14 @@ CREATE TABLE IF NOT EXISTS sessions_cache (
 );
 `;
 
+/** Phase 2 additive columns for databases created by Phase 1. */
+const MIGRATIONS = [
+  `ALTER TABLE conversations ADD COLUMN a_device TEXT`,
+  `ALTER TABLE conversations ADD COLUMN b_device TEXT`,
+  `ALTER TABLE messages ADD COLUMN from_device TEXT`,
+  `ALTER TABLE messages ADD COLUMN to_device TEXT`,
+];
+
 /** Open (creating if needed) the mailbox database. Pass ':memory:' in tests. */
 export function createDb(path: string = defaultDbPath()): Db {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -55,5 +67,12 @@ export function createDb(path: string = defaultDbPath()): Db {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  for (const migration of MIGRATIONS) {
+    try {
+      db.exec(migration);
+    } catch {
+      /* column already exists — idempotent by design */
+    }
+  }
   return db;
 }

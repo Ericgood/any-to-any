@@ -4,6 +4,8 @@ import type { Db } from './db.js';
 export interface SessionRef {
   agent: string;
   sessionId: string;
+  /** Device name for remote refs; unset = this machine. */
+  device?: string;
 }
 
 export interface MessagePart {
@@ -79,8 +81,10 @@ interface MessageRow {
   context_id: string;
   from_agent: string;
   from_session: string;
+  from_device: string | null;
   to_agent: string;
   to_session: string;
+  to_device: string | null;
   parts: string;
   status: MessageStatus;
   attempts: number;
@@ -89,13 +93,19 @@ interface MessageRow {
   updated_at: number;
 }
 
+function rowToRef(agent: string, session: string, device: string | null): SessionRef {
+  const ref: SessionRef = { agent, sessionId: session };
+  if (device) ref.device = device;
+  return ref;
+}
+
 function rowToMessage(row: MessageRow): Message {
   const msg: Message = {
     id: row.id,
     conversationId: row.conversation_id,
     contextId: row.context_id,
-    from: { agent: row.from_agent, sessionId: row.from_session },
-    to: { agent: row.to_agent, sessionId: row.to_session },
+    from: rowToRef(row.from_agent, row.from_session, row.from_device),
+    to: rowToRef(row.to_agent, row.to_session, row.to_device),
     parts: JSON.parse(row.parts) as MessagePart[],
     status: row.status,
     attempts: row.attempts,
@@ -107,7 +117,7 @@ function rowToMessage(row: MessageRow): Message {
 }
 
 const pairKey = (a: SessionRef, b: SessionRef): string =>
-  [a, b].map((r) => `${r.agent}:${r.sessionId}`).sort().join('|');
+  [a, b].map((r) => `${r.device ?? ''}/${r.agent}:${r.sessionId}`).sort().join('|');
 
 export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbox {
   const now = opts.now ?? Date.now;
@@ -130,9 +140,9 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
     }
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO conversations (id, pair_key, a_agent, a_session, b_agent, b_session, created_at, last_message_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, key, from.agent, from.sessionId, to.agent, to.sessionId, ts, ts);
+      `INSERT INTO conversations (id, pair_key, a_agent, a_session, a_device, b_agent, b_session, b_device, created_at, last_message_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, key, from.agent, from.sessionId, from.device ?? null, to.agent, to.sessionId, to.device ?? null, ts, ts);
     return id;
   };
 
@@ -160,16 +170,18 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
     const conversationId = ensureConversation(input.from, input.to, ts);
     const part: MessagePart = input.via ? { type: 'text', text: input.text, via: input.via } : { type: 'text', text: input.text };
     db.prepare(
-      `INSERT INTO messages (id, conversation_id, context_id, from_agent, from_session, to_agent, to_session, parts, status, attempts, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+      `INSERT INTO messages (id, conversation_id, context_id, from_agent, from_session, from_device, to_agent, to_session, to_device, parts, status, attempts, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
     ).run(
       id,
       conversationId,
       contextId,
       input.from.agent,
       input.from.sessionId,
+      input.from.device ?? null,
       input.to.agent,
       input.to.sessionId,
+      input.to.device ?? null,
       JSON.stringify([part]),
       ts,
       ts,
@@ -230,8 +242,10 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
         id: string;
         a_agent: string;
         a_session: string;
+        a_device: string | null;
         b_agent: string;
         b_session: string;
+        b_device: string | null;
         created_at: number;
         last_message_at: number;
       }>;
@@ -244,8 +258,8 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
           .get(row.id) as MessageRow | undefined;
         const summary: ConversationSummary = {
           id: row.id,
-          a: { agent: row.a_agent, sessionId: row.a_session },
-          b: { agent: row.b_agent, sessionId: row.b_session },
+          a: rowToRef(row.a_agent, row.a_session, row.a_device),
+          b: rowToRef(row.b_agent, row.b_session, row.b_device),
           createdAt: row.created_at,
           lastMessageAt: row.last_message_at,
           messageCount: count,

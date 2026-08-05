@@ -100,12 +100,6 @@ describe('resolveTarget', () => {
     }
   });
 
-  it('device segment → unsupported_device in Phase 1', () => {
-    const r = resolveTarget('@mini/codex:x', SESSIONS);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('unsupported_device');
-  });
-
   it('invalid syntax → invalid_target', () => {
     const r = resolveTarget('not-a-target', SESSIONS);
     expect(r.ok).toBe(false);

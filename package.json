@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
+    "bonjour-service": "^1.4.4",
     "commander": "^14.0.0",
     "uuid": "^11.1.0"
   },
