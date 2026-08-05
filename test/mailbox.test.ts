@@ -140,6 +140,23 @@ describe('mailbox', () => {
     });
   });
 
+  describe('crash recovery', () => {
+    it('requeues messages stranded in delivering by a dead daemon', () => {
+      const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+      mailbox.claimNextPending(); // daemon claims, then "crashes"
+      expect(mailbox.claimNextPending()).toBeNull(); // stranded — nothing claimable
+      const recovered = mailbox.recoverStale();
+      expect(recovered).toBe(1);
+      nowMs += 31_000; // failed path respects the retry backoff
+      expect(mailbox.claimNextPending()?.id).toBe(m.id);
+    });
+
+    it('is a no-op when nothing is stranded', () => {
+      mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+      expect(mailbox.recoverStale()).toBe(0);
+    });
+  });
+
   describe('loop protection', () => {
     it('rejects when a context exceeds 12 messages', () => {
       let m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: '0' });

@@ -55,19 +55,77 @@ program
   .option('--directory-ttl <ms>', 'session directory cache TTL', '30000')
   .option('--port <port>', 'web console port', '7433')
   .option('--no-web', 'disable the web console server')
-  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean }) => {
+  .option('--no-lan', 'disable LAN peering (mDNS + relay)')
+  .option('--peer <host:port...>', 'manually add peer daemons (skips mDNS discovery for them)')
+  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean; lan: boolean; peer?: string[] }) => {
     const adapters = defaultAdapters();
     const mailbox = openMailbox();
+    const port = Number.parseInt(opts.port, 10) || 7433;
 
     let cache: { at: number; sessions: Awaited<ReturnType<typeof listAllSessions>>['sessions'] } | null = null;
     const ttl = Number.parseInt(opts.directoryTtl, 10) || 30_000;
-    const directory = async () => {
+    const localDirectory = async () => {
       if (!cache || Date.now() - cache.at > ttl) {
         const { sessions, errors } = await listAllSessions(adapters);
         for (const e of errors) console.error(`warning: ${e.agent} scan failed: ${e.error.message}`);
         cache = { at: Date.now(), sessions };
       }
       return cache.sessions;
+    };
+
+    // LAN peering (Phase 2): discovery + remote directory aggregation + relay
+    let lan: {
+      selfDevice: string;
+      token: string;
+      registry: import('./cluster/peers.js').PeerRegistry;
+      relay: NonNullable<import('./daemon/dispatcher.js').DispatcherOptions['relay']>;
+    } | null = null;
+    if (opts.lan) {
+      const { loadOrCreateToken, tokenFingerprint } = await import('./cluster/token.js');
+      const { getDeviceName } = await import('./cluster/device.js');
+      const { startPeerRegistry, fetchPeerSessions, relayToPeer } = await import('./cluster/peers.js');
+      const token = loadOrCreateToken();
+      const selfDevice = getDeviceName();
+      const registry = startPeerRegistry({ selfDevice, port, token });
+      for (const spec of opts.peer ?? []) {
+        const [host, p] = spec.split(':');
+        if (!host || !p) continue;
+        const peerPort = Number.parseInt(p, 10);
+        // resolve the peer's real device name so reply routing can find it
+        try {
+          const res = await fetch(`http://${host}:${peerPort}/api/peer/info`, {
+            headers: { 'x-anytoany-token': token },
+            signal: AbortSignal.timeout(5000),
+          });
+          const info = (await res.json()) as { device?: string };
+          registry.addStatic(info.device ?? host, host, peerPort, tokenFingerprint(token));
+          console.log(`lan: static peer @${info.device ?? host} (${host}:${peerPort})`);
+        } catch {
+          console.error(`warning: static peer ${spec} unreachable at startup — will not be usable until restart`);
+        }
+      }
+      lan = {
+        selfDevice,
+        token,
+        registry,
+        relay: async (device, message) => {
+          const peer = registry.get(device);
+          if (!peer) return { ok: false, error: `device "${device}" not found on LAN (anyd peers to inspect)` };
+          return relayToPeer(peer, message, token, selfDevice);
+        },
+      };
+      console.log(`lan: device "${selfDevice}" fp ${tokenFingerprint(token)} — mDNS on, peers aggregate into directory`);
+    }
+
+    const directory = async () => {
+      const local = await localDirectory();
+      if (!lan) return local;
+      const { fetchPeerSessions } = await import('./cluster/peers.js');
+      const remotes = await Promise.allSettled(
+        lan.registry.list().map((p) => fetchPeerSessions(p, lan!.token)),
+      );
+      const remoteSessions = remotes.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+      return [...local, ...remoteSessions];
     };
 
     const { writePid, clearPid, readPid, isAlive } = await import('./daemon/pidfile.js');
@@ -79,14 +137,24 @@ program
     writePid();
     process.on('exit', clearPid);
 
+    const stale = mailbox.recoverStale();
+    if (stale > 0) console.log(`recovered ${stale} message(s) stranded by a previous daemon run`);
+
     console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
 
     let web: { notifyChange(): void; close(): void; port: number } | null = null;
-    if (opts.web) {
+    if (opts.web || lan) {
       const { startConsoleServer } = await import('./daemon/server.js');
-      web = startConsoleServer({ mailbox, directory, port: Number.parseInt(opts.port, 10) || 7433 });
+      web = startConsoleServer({
+        mailbox,
+        directory,
+        port,
+        ...(lan
+          ? { peering: { selfDevice: lan.selfDevice, token: lan.token, localDirectory } }
+          : {}),
+      });
       console.log(`web console: http://127.0.0.1:${web.port}`);
     }
 
@@ -96,9 +164,10 @@ program
         mailbox,
         adapters: new Map(adapters.map((a) => [a.agent, a])),
         directory,
+        ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
         onEvent: (e) => {
           const m = e.message;
-          const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
+          const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.device ?? 'local'}/${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
           console.log(line);
           web?.notifyChange();
         },
@@ -109,6 +178,7 @@ program
     const shutdown = () => {
       console.log('anyd daemon stopping');
       running.stop();
+      lan?.registry.stop();
       web?.close();
       process.exit(0);
     };
@@ -193,6 +263,55 @@ program
     console.log(JSON.stringify(processPromptSubmitHook(openMailbox(), input)));
   });
 program
+  .command('pair')
+  .description('Show or set the LAN cluster token (same token on every device = paired)')
+  .option('--show', 'print this device token and pairing command for other devices')
+  .option('--set <token>', 'join a cluster by writing its token')
+  .option('--name <device>', 'set this device display name')
+  .action(async (opts: { show?: boolean; set?: string; name?: string }) => {
+    const { loadOrCreateToken, setToken, tokenFingerprint } = await import('./cluster/token.js');
+    const { getDeviceName, setDeviceName } = await import('./cluster/device.js');
+    if (opts.name) {
+      setDeviceName(opts.name);
+      console.log(`device name set: ${opts.name}`);
+    }
+    if (opts.set) {
+      setToken(opts.set);
+      console.log(`cluster token saved (fp ${tokenFingerprint(opts.set)}) — restart anyd start to apply`);
+      return;
+    }
+    const token = loadOrCreateToken();
+    console.log(`device: ${getDeviceName()}`);
+    console.log(`token fingerprint: ${tokenFingerprint(token)}`);
+    if (opts.show) {
+      console.log(`\non the other device, run:\n  anyd pair --set ${token}`);
+    } else {
+      console.log(`run with --show to print the token for pairing another device`);
+    }
+  });
+program
+  .command('peers')
+  .description('List LAN peers discovered via mDNS (requires running daemon on both ends)')
+  .action(async () => {
+    const { loadOrCreateToken, tokenFingerprint } = await import('./cluster/token.js');
+    const { getDeviceName } = await import('./cluster/device.js');
+    const { startPeerRegistry } = await import('./cluster/peers.js');
+    const fp = tokenFingerprint(loadOrCreateToken());
+    const registry = startPeerRegistry({ selfDevice: getDeviceName(), port: 0, token: loadOrCreateToken() });
+    console.log('browsing mDNS for 3s…');
+    await new Promise((r) => setTimeout(r, 3000));
+    const peers = registry.list();
+    registry.stop();
+    if (peers.length === 0) {
+      console.log('no peers found (is anyd start running on the other device? same network?)');
+      return;
+    }
+    for (const p of peers) {
+      const paired = p.fp === fp ? 'paired' : 'NOT paired (different token — run anyd pair)';
+      console.log(`@${p.device}  ${p.host}:${p.port}  ${paired}`);
+    }
+  });
+program
   .command('doctor')
   .description('Check environment readiness for anytoany')
   .action(async () => {
@@ -229,7 +348,8 @@ program
     }
     for (const s of shown) {
       const id = s.sessionId.slice(0, 8);
-      console.log(`@${s.agent}:${s.title}  [${id}]  (${formatRelativeTime(s.lastActiveAt)}, ${shortenHome(s.cwd)})`);
+      const prefix = s.device ? `@${s.device}/` : '@';
+      console.log(`${prefix}${s.agent}:${s.title}  [${id}]  (${formatRelativeTime(s.lastActiveAt)}, ${shortenHome(s.cwd)})`);
     }
     if (sessions.length > shown.length) {
       console.log(`… ${sessions.length - shown.length} more (use --limit 0 for all)`);
@@ -244,15 +364,45 @@ program
   .argument('<target>', 'target session, @<agent>[:<session>]')
   .argument('<message>', 'message text')
   .option('--from <self>', 'sender identity, @<agent>:<session> (resolved like a target)')
-  .action(async (target: string, message: string, opts: { from?: string }) => {
-    const to = await resolveOrExit(target);
+  .option('--port <port>', 'daemon port for delegation', '7433')
+  .action(async (target: string, message: string, opts: { from?: string; port: string }) => {
     const from: SessionRef = opts.from
       ? await resolveOrExit(opts.from)
       : { agent: 'user', sessionId: 'cli' };
-    const m = openMailbox().send({ from, to, text: message });
-    console.log(`queued ${m.id}`);
-    console.log(`  to: @${to.agent}:${to.title} [${to.sessionId.slice(0, 8)}]`);
-    console.log(`  delivery starts once the daemon is running (anyd start, M3)`);
+
+    // prefer the daemon: its directory aggregates LAN peers, so @device/… resolves
+    try {
+      const res = await fetch(`http://127.0.0.1:${opts.port}/api/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target, from, text: message }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const body = (await res.json()) as {
+        message?: Message;
+        resolvedTarget?: { agent: string; title: string; sessionId: string; device?: string };
+        error?: string;
+        candidates?: Array<{ agent: string; title: string; sessionId: string; device?: string }>;
+      };
+      if (res.ok && body.message && body.resolvedTarget) {
+        const t = body.resolvedTarget;
+        console.log(`queued ${body.message.id}`);
+        console.log(`  to: ${t.device ? `@${t.device}/` : '@'}${t.agent}:${t.title} [${t.sessionId.slice(0, 8)}]`);
+        return;
+      }
+      console.error(`error: ${body.error ?? `daemon returned ${res.status}`}`);
+      for (const c of body.candidates ?? []) {
+        console.error(`  candidate: ${c.device ? `@${c.device}/` : '@'}${c.agent}:${c.title}  [${c.sessionId.slice(0, 8)}]`);
+      }
+      process.exit(1);
+    } catch {
+      // daemon not running — local-only fallback (no LAN targets)
+      const to = await resolveOrExit(target);
+      const m = openMailbox().send({ from, to, text: message });
+      console.log(`queued ${m.id} (daemon offline — local resolution only)`);
+      console.log(`  to: @${to.agent}:${to.title} [${to.sessionId.slice(0, 8)}]`);
+      console.log(`  delivery starts once the daemon is running (anyd start)`);
+    }
   });
 program
   .command('inbox')

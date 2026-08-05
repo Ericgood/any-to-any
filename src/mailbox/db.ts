@@ -1,12 +1,12 @@
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { anytoanyHome } from '../home.js';
 import Database from 'better-sqlite3';
 
 export type Db = Database.Database;
 
 export function defaultDbPath(): string {
-  return join(homedir(), '.anytoany', 'mailbox.db');
+  return join(anytoanyHome(), '.anytoany', 'mailbox.db');
 }
 
 const SCHEMA = `

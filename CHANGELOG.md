@@ -19,6 +19,17 @@
 - hook 活体演示成功：用户说话瞬间 UserPromptSubmit 注入 Codex 消息，Claude 当场回执
 - 修复双注入竞争：hook 取件曾连 dispatcher 投递中（delivering）的消息一并抢走，致同一消息 resume+hook 双注入；inbox 增 pendingOnly，hook 只取 strictly-pending（82 测试全绿）
 
+## 2026-08-05 — Phase 2 核心完成：局域网跨设备互通（单机双 daemon 全链路实证）
+
+- device 寻址全线贯通：`@设备/agent:片段` 三段式解析、SessionRef/驿站/conversations 均带 device（SQLite 幂等迁移）
+- 对等互联：mDNS 广播发现（bonjour-service）+ 静态 peer 注入（--peer，启动时查 /api/peer/info 取真名）；配对 = 共享 token（`anyd pair --show/--set/--name`，指纹进 TXT）
+- 安全分层：server 绑 0.0.0.0 后，非 /api/peer/* 路由强制 loopback-only；peer 路由强制 X-Anytoany-Token（401 拒绝）
+- relay 路由：dispatcher 按 to.device 分流——本机走 adapter，远端 POST 交给对方 daemon（视角翻转，contextId 保线程，回信反向路由）
+- CLI send 委托 daemon（/api/send，聚合目录才能解析远端目标），daemon 离线降级本地解析；`ANYTOANY_HOME` 隔离实例数据
+- **单机双 daemon 冒烟实证全链路**：alpha 聚合 beta 的 4167 个远端 session → @beta/codex 投递 relay 成功 → beta 本地投递真实 Codex 会话 → LAN_ACK 回信反向 relay 回 alpha → alpha 用 Claude resume 把回信真实注入发起方会话（Claude 全自动档登录后首战，实际送达）
+- 冒烟暴露并修复崩溃恢复缺口：daemon 死在投递中会让消息悬挂 delivering 永不重试——启动时 recoverStale() 重置进重试通道（at-least-once）
+- 测试 97 个全绿；真双机验收待用户在 Mac mini 上执行（README 已有三条命令指引）
+
 ## 2026-08-05 — M4+M5+M6 完成：Phase 1 全线落地，等待用户验收
 
 - **M4 双向回路**：SKILL.md（Agent Skills 标准，装入 ~/.claude、~/.codex、~/.agents 三目录并被本会话热加载实证）；Claude 收件 hook（UserPromptSubmit 注入，anyd setup 一键注册、幂等、带备份）；冒烟 SMOKE PASS——Codex↔Codex 双向往返 3 条消息全部 delivered，对方按软约束主动终止连锁

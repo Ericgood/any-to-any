@@ -67,6 +67,8 @@ export interface Mailbox {
   markDelivered(id: string): Message;
   markFailed(id: string, error: string): Message;
   retry(id: string): Message;
+  /** Requeue messages stranded in 'delivering' by a crashed daemon (at-least-once). */
+  recoverStale(): number;
 }
 
 const MAX_ATTEMPTS = 3;
@@ -286,6 +288,16 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
       const updated = getMessage(id);
       if (!updated) throw new Error('update failed');
       return updated;
+    },
+
+    recoverStale(): number {
+      const result = db
+        .prepare(
+          `UPDATE messages SET status = 'failed', last_error = 'daemon restarted mid-delivery (message may have been injected)', updated_at = ?
+           WHERE status = 'delivering'`,
+        )
+        .run(now());
+      return result.changes;
     },
 
     claimNextPending(): Message | null {

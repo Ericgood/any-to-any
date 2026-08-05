@@ -127,6 +127,32 @@ describe('dispatchOnce', () => {
     expect(mailbox.getMessage(m.id)?.lastError).toMatch(/ENOENT/);
   });
 
+  it('relays messages targeting another device instead of local delivery', async () => {
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const relayed: Array<{ device: string; id: string }> = [];
+    const m = mailbox.send({ from: CLAUDE_A, to: { ...CODEX_B, device: 'mini' }, text: 'go remote' });
+    await dispatchOnce({
+      mailbox,
+      adapters: new Map([[adapter.agent, adapter]]),
+      directory: async () => DIRECTORY,
+      selfDevice: 'macbook',
+      relay: async (device, msg) => {
+        relayed.push({ device, id: msg.id });
+        return { ok: true };
+      },
+    });
+    expect(relayed).toEqual([{ device: 'mini', id: m.id }]);
+    expect(adapter.calls).toHaveLength(0); // local adapter untouched
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+
+  it('fails relay-targeted messages when relay is not configured', async () => {
+    const m = mailbox.send({ from: CLAUDE_A, to: { ...CODEX_B, device: 'mini' }, text: 'x' });
+    await run([fakeAdapter('codex', () => ({ ok: true, output: '' }))]);
+    expect(mailbox.getMessage(m.id)?.status).toBe('failed');
+    expect(mailbox.getMessage(m.id)?.lastError).toMatch(/relay/i);
+  });
+
   it('startDispatcher drains the queue then stops cleanly', async () => {
     const adapter = fakeAdapter('codex', () => ({ ok: true, output: 'no marker' }));
     mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'one' });

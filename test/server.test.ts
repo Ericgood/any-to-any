@@ -79,3 +79,55 @@ describe('console server', () => {
     expect((await fetch(base + '/api/nope')).status).toBe(404);
   });
 });
+
+describe('peer endpoints', () => {
+  const PEER_PORT = 17434;
+  const peerBase = `http://127.0.0.1:${PEER_PORT}`;
+  let mailbox: Mailbox;
+  let server: RunningServer;
+
+  beforeAll(() => {
+    mailbox = createMailbox(createDb(':memory:'));
+    server = startConsoleServer({
+      mailbox,
+      directory: async () => DIRECTORY,
+      port: PEER_PORT,
+      changePollMs: 60_000,
+      peering: { selfDevice: 'testbox', token: 'secret-token', localDirectory: async () => DIRECTORY },
+    });
+  });
+  afterAll(() => server.close());
+
+  it('rejects peer requests without the cluster token', async () => {
+    expect((await fetch(peerBase + '/api/peer/sessions')).status).toBe(401);
+  });
+
+  it('serves peer info and sessions with a valid token', async () => {
+    const headers = { 'x-anytoany-token': 'secret-token' };
+    const info = (await (await fetch(peerBase + '/api/peer/info', { headers })).json()) as { device: string };
+    expect(info.device).toBe('testbox');
+    const { sessions } = (await (await fetch(peerBase + '/api/peer/sessions', { headers })).json()) as {
+      sessions: unknown[];
+    };
+    expect(sessions).toHaveLength(2);
+  });
+
+  it('accepts relayed messages into the local mailbox with context preserved', async () => {
+    const r = await fetch(peerBase + '/api/peer/messages', {
+      method: 'POST',
+      headers: { 'x-anytoany-token': 'secret-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contextId: 'ctx-from-remote-1',
+        from: { agent: 'claude', sessionId: CLAUDE_A.sessionId, device: 'macbook' },
+        to: { agent: 'codex', sessionId: CODEX_B.sessionId },
+        text: 'relayed hello',
+      }),
+    });
+    expect(r.status).toBe(201);
+    const queued = mailbox.inbox({ toSession: CODEX_B.sessionId });
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.contextId).toBe('ctx-from-remote-1');
+    expect(queued[0]?.from.device).toBe('macbook');
+    expect(queued[0]?.to.device).toBeUndefined(); // local target on this side
+  });
+});

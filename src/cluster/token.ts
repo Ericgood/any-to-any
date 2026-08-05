@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { anytoanyHome } from '../home.js';
 
 const TOKEN_FILE = 'cluster-token';
 
@@ -10,7 +10,7 @@ function tokenPath(home: string): string {
 }
 
 /** Shared-secret pairing (ADR-002): same token on every device = one cluster. */
-export function loadOrCreateToken(home: string = homedir()): string {
+export function loadOrCreateToken(home: string = anytoanyHome()): string {
   const path = tokenPath(home);
   if (existsSync(path)) return readFileSync(path, 'utf8').trim();
   const token = randomBytes(24).toString('hex');
@@ -19,7 +19,7 @@ export function loadOrCreateToken(home: string = homedir()): string {
   return token;
 }
 
-export function setToken(token: string, home: string = homedir()): void {
+export function setToken(token: string, home: string = anytoanyHome()): void {
   mkdirSync(join(home, '.anytoany'), { recursive: true });
   writeFileSync(tokenPath(home), `${token.trim()}\n`, { mode: 0o600 });
 }
