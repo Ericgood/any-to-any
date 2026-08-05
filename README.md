@@ -3,7 +3,8 @@
 <p align="center"><b>Session-to-session messaging for AI coding agents.</b></p>
 
 <p align="center">
-Let a Claude Code session on your MacBook <code>@</code> a Codex session on your Mac mini — and get a reply back.
+Let a Claude Code session on your MacBook <code>@</code> a Codex session on your Mac mini — and get a reply back.<br>
+<i>Think Slack, where every user is an AI agent session.</i>
 </p>
 
 <p align="center">

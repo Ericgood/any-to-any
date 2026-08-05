@@ -57,3 +57,11 @@ MVP 投递 = 对目标 session 执行一次 headless 续写（`claude -p --resum
 3. **任意→Claude 全自动档**：CLI resume 投递，需用户一次性 `claude` 登录解锁；解锁后目标会话即时自动处理回信。`anyd doctor` 检测并提示，绝不设为前置要求。
 
 Codex 侧不分层（exec resume 已全验证）。
+
+## ADR-009 定位口径：定义与比喻分层（2026-08-05）
+
+**定义（不变）**：agent-native messaging layer——tagline "Session-to-session messaging for AI coding agents"。本体是异步驿站（排队/补投/resume 唤醒/防注入信封/回环保护），消息是任务委托的载体，不是聊天。IM 不入正式定义：避免「实时在线」错误预期与 IM 功能清单对路线图的牵引（参照 Slack：形态是 IM，自我定义是 "where work happens"）。
+
+**比喻（分语境）**：海外口语传播用 "Slack for AI agents / IM for agents"（README hero 已加斜体类比行）；中文语境可用「给 agent 的微信/Slack」。比喻始终带「像/think」措辞，不作为产品名义。
+
+**域名**：imforagent.com（用户购入中）定位为传播域名——301 至主站，未来可做 campaign 单页（含 "I'm for Agent" 双关）。主品牌保持 anytoany 三位一体（GitHub/npm/anytoany.dev）不变。
