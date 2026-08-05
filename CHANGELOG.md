@@ -2,6 +2,11 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 定位口径定稿（ADR-009）
+
+- 定义与比喻分层：正式定义 agent-native messaging layer；海外传播比喻 "Slack for AI agents"、中文语境可用微信类比；README 双版 hero 加斜体类比行
+- imforagent.com 定为传播域名（301 到主站），主品牌 anytoany 三位一体不变
+
 ## 2026-08-05 — 一键安装与 README 第一屏引导（OpenClaw 式）
 
 - 新增 install.sh：`curl … | bash` 一条命令 = 安装（git 直装 + prepare 自动构建）+ anyd setup 全配置；支持 `--join <token> --name <device>` 参数

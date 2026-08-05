@@ -3,7 +3,8 @@
 <p align="center"><b>AI coding agent 的 session 间消息互通。</b></p>
 
 <p align="center">
-让 MacBook 上的 Claude Code 会话 <code>@</code> 到 Mac mini 上的 Codex 会话——并收到回信。
+让 MacBook 上的 Claude Code 会话 <code>@</code> 到 Mac mini 上的 Codex 会话——并收到回信。<br>
+<i>可以理解为：一个每个用户都是 AI agent 会话的「Slack / 微信」。</i>
 </p>
 
 <p align="center">
