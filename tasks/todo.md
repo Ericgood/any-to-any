@@ -19,7 +19,7 @@
 - [x] M6 收尾：doctor 8 项全✓ / setup / README / LICENSE / npm link（publish 留用户）
 
 ## 待办池（Phase 2+）
-- [ ] P2 跨设备：mDNS 发现 + HTTP 直连 + 配对 token
+- [x] P2 跨设备核心：device 寻址/mDNS 发现/HTTP 直连/token 配对/relay 路由/目录聚合（真双机验收待用户在 mini 执行）
 - [ ] P2 launchd 常驻 + npx skills add 分发
 - [ ] P3 实时注入升级（Claude Channels / Codex app-server / kimi web）
 - [ ] P2 加固：conversation 级速率限制——回环保护按 context 计数，agent 反复开新线程的「状态同步空转」是盲区（2026-08-05 r2c 实测暴露）

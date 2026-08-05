@@ -2,6 +2,14 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — Phase 2 完成：局域网跨设备互通（LAN SMOKE PASS）
+
+- 全链路实证（单机双 daemon 模拟 alpha/beta 双设备）：alpha 驿站 → token 校验 relay → beta 驿站 → beta 本地投递真实 Codex 会话 → LAN_ACK 回信 → relay 回 alpha → **经 Claude resume 注入真实发起会话**（用户登录后全自动档跨设备同场实证）
+- 能力清单：`@设备/agent:会话` 三段寻址；mDNS 自动发现（`_anytoany._tcp`）+ 共享 token 配对（`anyd pair --show/--set/--name`，不同 token 401 隔离）；daemon 间 HTTP 直连 relay（视角翻转，context 跨机保线程）；目录聚合（`anyd list` 显示远端设备前缀）；`/api/send` 目标解析端点 + CLI send 委托 daemon；ANYTOANY_HOME 实例隔离；recoverStale 崩溃恢复（delivering 滞留重入队）
+- 安全分层：本地控制台端点严格 loopback-only（非环回 403）；仅 /api/peer/* 对局域网开放且强制 token
+- Web Console 与 skill 同步支持 device 标注与 @device/ 语法；97 测试全绿
+- Mac mini 真双机验收待用户执行（README「跨设备」三条命令）
+
 ## 2026-08-05 — 澄清 3f2abaa 提交范围 + 多 agent 工作区纪律入规范
 
 - 澄清：commit 3f2abaa 除 skill 反空转规则外，还意外包含了另一 agent 进行中的 Phase 2 局域网代码（docs/specs/phase2-lan.md、src/cluster/、device 字段改造、cluster 测试）——系 `git add -A` 裹挟所致；main 测试全绿（90 个），内容自洽故不回退
