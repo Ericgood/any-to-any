@@ -18,7 +18,15 @@ Codex 已经有 session 互相 @ 的功能，但只限它自己内部的 session
 
 ## 目标体验
 
-在任意一个 agent 的对话里：
+**安装**（任选其一，装一次全家生效）：
+
+```
+npx skills add Ericgood/any-to-any
+```
+
+或者把本仓库链接贴给你的任意 agent，说「装上」。
+
+**使用**——在任意一个 agent 的对话里：
 
 ```
 @mini/codex:前端重构 worker.js 的重定向规则我改成 301 了，你那边路由测试帮我跑一下
@@ -30,12 +38,19 @@ Codex 已经有 session 互相 @ 的功能，但只限它自己内部的 session
 
 核心语义：**session 级寻址**（设备 / agent / session 三段式）+ **异步消息投递** + **双向会话**。
 
+## 形态
+
+- **一份 skill**（[Agent Skills 开放标准](https://code.claude.com/docs/en/skills)，SKILL.md）：教会每家 agent @ 的语法、何时查收、如何回复——Claude Code / Codex / Cursor / Gemini CLI 等都认这个格式
+- **一个 daemon（`anyd`）**：session 目录、消息邮箱、投递引擎；agent 通过 skill 指引的 bash 命令与它交互（`anyd send` / `anyd inbox`），**零 MCP 配置**
+- **局域网直连**：Bonjour/mDNS 自动发现同网设备，daemon 间 HTTP 直连 + 配对 token，无任何第三方服务
+
 ## 当前状态
 
-🔬 调研阶段。见：
+🔬 调研完成，进入 MVP 设计。见：
 
 - [docs/research/](docs/research/) — 各 agent CLI 的接入点调研 + 协议与现有项目盘点
 - [docs/analysis.md](docs/analysis.md) — 架构方案分析与推荐
+- [docs/decisions.md](docs/decisions.md) — 已拍板的关键决策（ADR）
 
 ## 非目标（当前阶段）
 
