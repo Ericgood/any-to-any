@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — tmux 实时通道定案（ADR-013）：官方无注入计划，tmux 注入实证成功
+
+- 调研落盘（research-codex-live-inject.md）：官方 `codex inject` 提案 closed not planned；社区请愿 Channels 等价物无承诺——短期无官方通道
+- R7 实证：tmux 中的 Codex TUI 经 send-keys 注入 = 实时 + 对话流原生可见 + 完整交互环境（连带解决 ADR-010 headless 无环境问题）；TUI 原生 steer 排队兜底忙碌场景
+- ADR-013：新增 tmux 投递通道（anyd tmux 启动器 + 映射表零猜测关联 + bracketed paste 防多行提前提交），优先级高于 resume；实现进行中
+- 文档卫生：合并 decisions.md 中三条重复 ADR-012，删除已被证伪的幻觉"实证"表述；滞留 delivering 消息手动落账
+
 ## 2026-08-05 — 上下文对称可见性（ADR-012）+ @any 寻址层（Phase 2.5）
 
 - **双端收件 hook**：统一 processPromptHook 服务 Claude 与 Codex（查证 Codex UserPromptSubmit 同构支持），setup 同时注册两家配置；pending 完整注入 + 已处理往返的 FYI 知情摘要（游标防重复、明示勿再响应）——headless 协同活动在两家 App 对话流中可见；Codex 会话经驿站实证「hook 消息已在 App 对话流可见」
