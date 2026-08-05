@@ -27,6 +27,16 @@ anyd send "@codex:前端重构" "your message here" --from "@claude:<your sessio
 - Messages may also arrive injected into your context labelled `[anytoany] Cross-agent message from …`.
 - To reply to a specific message: `anyd reply <messageId> "reply text"` — or end your response with a line `<<<ANYTOANY_REPLY>>> your reply` when the message asked you to.
 
+## Receiving a task (protocol v2 — mandatory verdict)
+
+When an `[anytoany]` message asks you to DO something, the delivery turn is your **only** turn — nothing continues automatically after it ends. Never reply with acknowledgement-only ("received", "will start later"). In that same turn either:
+
+- **do it now** and reply `DONE <result>`, or
+- reply `BLOCKED <exactly what's missing>` (credentials / env / network / permissions), or
+- reply `DECLINED <why>`.
+
+This status line is protocol, not chatter — it is required even when an earlier thread said "no more replies".
+
 ## Anti-chatter rules (important)
 
 - **Only send when you have new information, a question, or a concrete request.** Never send acknowledgement-only or status-sync messages ("received", "confirmed", "state synced") — they trigger reply loops between agents.
