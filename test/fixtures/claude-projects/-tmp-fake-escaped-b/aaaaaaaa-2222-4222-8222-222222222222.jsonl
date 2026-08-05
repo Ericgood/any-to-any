@@ -1,0 +1,2 @@
+{"type":"user","cwd":"/tmp/real-proj-b","sessionId":"aaaaaaaa-2222-4222-8222-222222222222","message":{"role":"user","content":"quick question about vitest coverage setup"}}
+{"type":"assistant","sessionId":"aaaaaaaa-2222-4222-8222-222222222222","message":{"role":"assistant","content":[{"type":"text","text":"sure"}]}}
