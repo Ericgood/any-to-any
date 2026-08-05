@@ -83,18 +83,6 @@ Codex 侧不分层（exec resume 已全验证）。
 1. 信封 v2（已实施）：明示「这是你唯一的回合」，强制以 `DONE <结果> / BLOCKED <缺什么> / DECLINED <原因>` 三态之一（纯问答直接作答）收尾；明确纯确认式回复无效；明确协议表态豁免于任何先前线程的反空转约定。skill 同步接收规范。
 2. P3 任务语义（参照 Codex multi-agent V2 的 wait / followup_task / interrupt 与 A2A Task 生命周期）：消息 kind=task、状态机（accepted/working/done/blocked）、发起方 followup 驱动、Console 显示任务态而非仅投递态。
 
-## ADR-012 上下文对称的可见性方案：出站天然留痕 + 入站双端 hook 注入（2026-08-05，用户核心诉求）
-
-**诉求**：本产品的核心是「利用双方不对称的上下文并让其对称」，对称必须在各家 App 自己的对话流中可见——headless resume 写入磁盘但 App 不热载，导致 Codex 端「所见非所得」。
-
-**探测结论**：Codex Desktop 内嵌内核、不跑 app-server daemon（`app-server-control.sock` 不存在，ipc.sock 对 JSON-RPC 握手静默），当前无官方通道注入 App 活动线程——实时注入待 OpenAI 开口。app-server 协议 schema 已导出（122 方法，thread/loaded/list、turn/steer、thread/inject_items 齐备），daemon-hosted 会话场景留 P3。
-
-**方案（已实施）**：
-1. **出站天然可见**：agent 在交互会话里执行 anyd send，对话流自然留痕（无需任何机制）；
-2. **入站双端 hook**：查证 Codex 支持 UserPromptSubmit + additionalContext（与 Claude 同构），统一处理器 `processPromptHook` 服务两家（`anyd hook claude-prompt-submit|codex-prompt-submit`），setup 同时注册 `~/.claude/settings.json` 与 `~/.codex/hooks.json`；
-3. **知情摘要（digest）**：hook 除注入 pending 消息外，以游标（~/.anytoany/hook-cursors/）追踪并注入「该会话自上次以来已自动处理的往返摘要」，明确标注 FYI ONLY / 勿再响应（防重复执行）——headless 活动因此在 App 对话流中留痕。
-4. **实证**：Codex 会话经驿站回报「DONE hook 消息已在 Codex App 对话流中可见，测试成功」；Claude 端 digest 同步在真实会话生效。
-
 ## ADR-012 上下文对称的可见性：双端收件 hook + 活动摘要（2026-08-05，用户核心诉求）
 
 **诉求**：产品核心是「利用双方不对称的上下文并让其对称」——对称必须在各家 App 的对话流里留痕可见，否则用户无法确认同步是否发生。
@@ -113,3 +101,15 @@ Codex 侧不分层（exec resume 已全验证）。
 **实验结论（用户亲测）**：Codex App 重开会话时完整渲染磁盘 rollout 的全部轮次（含 headless 追加的 anytoany 往返）——用户层可见性 = 「重开可见」，非实时。App 运行中不热载外部轮次。
 
 **补全方案（已实施）**：daemon 在消息成功投递到本机会话时发 macOS 系统通知（「@codex:某会话 收到新消息——重新打开该会话可见」），每会话 60 秒节流，`--no-notify` 可关。用户层可见性最终形态 = 系统通知（即时知道）+ 重开会话（App 内完整回看）+ Web Console（实时全景）+ hook 摘要（模型层知情）。实时进入 App UI 待厂商开放注入通道（P3 跟踪）。
+
+## ADR-013 tmux 实时通道：第三条投递通道（2026-08-05，用户否决通知方案后实证定案）
+
+**背景**：用户否决「系统通知 + 重开会话」的体验；调研确认官方无外部注入计划（`codex inject` 提案 closed not planned，见 docs/research/research-codex-live-inject.md）。
+
+**实证（R7）**：tmux 中运行的 Codex TUI 经 send-keys 注入——消息实时进入、对话流原生显示、回合在交互会话本体执行（完整登录态/env/hooks，一并解决 ADR-010 headless 无环境问题）。
+
+**决定**：新增 tmux 投递通道，优先级高于 headless resume：
+1. `anyd tmux <agent>` 启动器：tmux 中启动 CLI 会话 + marker 法探测新 session + 写映射表（~/.anytoany/tmux-map.json）——零猜测关联（吸取误投教训，不做 cwd 启发式）；
+2. dispatcher 投递优先查映射表：pane 存活 → `load-buffer` + `paste-buffer -p`（bracketed paste 防多行提前提交）+ Enter 注入；pane 消亡 → 清映射回落 resume；
+3. tmux 通道信封变体：回复指引改为「运行 anyd reply」（交互会话有权限；无 stdout 可解析 REPLY 标记）；
+4. 通道矩阵定案：tmux TUI（实时/可见/全环境）＞ headless resume（可达，重开可见+通知）＞ 驿站排队（离线）。用户心智：想让哪个会话实时可协作，就用 anyd tmux 启动它。
