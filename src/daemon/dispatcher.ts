@@ -1,4 +1,5 @@
 import type { DeliveryAdapter, SessionInfo } from '../adapters/types.js';
+import { routeForMessage } from '../cluster/routing.js';
 import { renderEnvelope, extractReply } from '../envelope.js';
 import type { Mailbox, Message } from '../mailbox/mailbox.js';
 
@@ -15,6 +16,10 @@ export interface DispatcherOptions {
   /** Session directory supplier (cached by the caller as needed). */
   directory: () => Promise<SessionInfo[]>;
   onEvent?: (event: DispatchEvent) => void;
+  /** This machine's device name; unset disables relay routing (Phase 1 mode). */
+  selfDevice?: string;
+  /** Hand a message to a paired peer daemon (Phase 2 LAN). */
+  relay?: (device: string, message: Message) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: string): string =>
@@ -31,6 +36,21 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     emit({ kind: 'failed', message: failed, detail: error });
     return true;
   };
+
+  const route = routeForMessage(claimed, opts.selfDevice ?? '');
+  if (route.kind === 'relay') {
+    if (!opts.relay) return fail(`target device "${route.device}" requires LAN relay (not configured)`);
+    let relayed;
+    try {
+      relayed = await opts.relay(route.device, claimed);
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e));
+    }
+    if (!relayed.ok) return fail(relayed.error ?? `relay to ${route.device} failed`);
+    const delivered = opts.mailbox.markDelivered(claimed.id);
+    emit({ kind: 'delivered', message: delivered, detail: `relayed-to:${route.device}` });
+    return true;
+  }
 
   let sessions: SessionInfo[];
   try {
