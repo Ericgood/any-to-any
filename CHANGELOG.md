@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 一键安装与 README 第一屏引导（OpenClaw 式）
+
+- 新增 install.sh：`curl … | bash` 一条命令 = 安装（git 直装 + prepare 自动构建）+ anyd setup 全配置；支持 `--join <token> --name <device>` 参数
+- 新增 `anyd pair --invite`：直接打印「贴到另一台设备终端（或贴给那边的 agent）」的完整命令（安装器+token），跨设备对齐一步到位
+- README（英/中）重排：Install / Link a second device / Send your first message 三节前置到第一屏；旧安装内容折叠为 manual setup
+- 修复 badge 渲染事故：img alt 含 `>` 被 GitHub HTML 解析截断致溢出裸文本（用户截图报告）
+
 ## 2026-08-05 — 开源标准化：英文主体 README + 完整社区脚手架
 
 - README 重写为英文主体（badges/架构图/安全模型/路线图/agent 支持矩阵），新增 README.zh-CN.md 中文版互链

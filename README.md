@@ -9,7 +9,7 @@ Let a Claude Code session on your MacBook <code>@</code> a Codex session on your
 <p align="center">
   <a href="https://github.com/Ericgood/any-to-any/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Ericgood/any-to-any/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
-  <img alt="Node >= 20" src="https://img.shields.io/badge/node-%3E%3D20-brightgreen">
+  <img alt="node 20 plus" src="https://img.shields.io/badge/node-20%2B-brightgreen">
   <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg">
   <a href="https://anytoany.dev"><img alt="Website" src="https://img.shields.io/badge/web-anytoany.dev-8A2BE2"></a>
 </p>
@@ -19,6 +19,42 @@ Let a Claude Code session on your MacBook <code>@</code> a Codex session on your
 </p>
 
 ---
+
+## Install
+
+One command — installs the CLI, configures every agent on the machine (skill + inbox hook):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
+```
+
+Then start it:
+
+```bash
+anyd start      # delivery daemon + web console at http://127.0.0.1:7433
+```
+
+> 🤖 **Agent-native install**: paste this repo URL into any coding agent and say *"install this"* — the installer and skill do the rest.
+
+## Link a second device
+
+On the first machine:
+
+```bash
+anyd pair --invite
+```
+
+It prints a **single copy-paste command** (installer + cluster token). Paste it into the other machine's terminal — or hand it to any agent running there — and both devices are aligned: discovered via mDNS, directories merged, ready to relay.
+
+## Send your first message
+
+Inside any agent session:
+
+```
+@codex:frontend can you rerun the route tests? I changed the redirect logic.
+```
+
+Cross-device works the same: `@mini/codex:frontend …`. The reply lands back in your session automatically. Or open the [web console](http://127.0.0.1:7433) and wire two sessions together by hand.
 
 ## Why
 
@@ -53,45 +89,32 @@ The target session receives it, does the work, replies — and the reply lands b
 - **LAN peering, zero services** — daemons find each other via mDNS/Bonjour, pair with a shared token, and relay messages over direct LAN HTTP. Different token → HTTP 401. Nothing ever leaves your network.
 - **A web console** — an IM-style view (`http://127.0.0.1:7433`) of every cross-agent conversation: bubbles, delivery states, retries, and a "new conversation" flow to wire two sessions together manually.
 
-## Quick start
-
-```bash
-npm install && npm run build && npm link   # from the repo (npm package coming soon)
-
-anyd setup      # install the skill into ~/.claude, ~/.codex, ~/.agents + register the Claude inbox hook
-anyd doctor     # environment self-check
-anyd start      # delivery daemon + web console at http://127.0.0.1:7433
-```
-
-Then, inside any agent session:
-
-```
-@codex:frontend can you rerun the route tests? I changed the redirect logic.
-```
-
-Or open the [web console](http://127.0.0.1:7433) and click **New conversation** to connect two sessions manually — useful for bootstrapping and for watching your agents talk in real time.
-
-### Everyday commands
+## Everyday commands
 
 ```bash
 anyd list                  # all addressable sessions (Claude + Codex, local + LAN)
 anyd conversations         # established session pairs
 anyd send "@codex:front" "message" --from "@claude:backend"
 anyd inbox --take          # pull & ack waiting messages
+anyd peers                 # LAN devices and pairing state
+anyd doctor                # environment self-check
 anyd status / stop         # daemon state / stop
 ```
 
-### Cross-device (LAN)
-
-On the second machine:
+<details>
+<summary>Manual setup (without the installer) / from source</summary>
 
 ```bash
-anyd pair --set <token printed by `anyd pair --show` on machine one>
-anyd pair --name mini      # give it a friendly device name
-anyd start
+git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
+npm install && npm run build && npm link
+anyd setup                 # skill + hooks
+# manual pairing, if you prefer not to use `anyd pair --invite`:
+anyd pair --show           # machine one: print the token
+anyd pair --set <token>    # machine two: join
+anyd pair --name mini      # optional friendly device name
 ```
 
-Devices discover each other via mDNS (`anyd peers`), directories merge automatically, and `@mini/codex:frontend` just works. Replies route back across the LAN and are injected into the originating session.
+</details>
 
 ## Target syntax
 
