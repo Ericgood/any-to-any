@@ -9,6 +9,13 @@
 - **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
 - mailbox 新增 recentActivity；107 测试全绿
 
+## 2026-08-05 — @any 寻址层 + 双端可见性（ADR-012，用户核心诉求驱动）
+
+- **@any 寻址层（Phase 2.5）**：daemon 自动把活跃对端会话物化为 `any-` 前缀的 agent 定义（~/.claude/agents/），进入 Claude Code 的 @ 补全列表——用户打 @any 即见候选、选中即确认（预绑定精确 id 零误投）；随目录自动增删、绝不触碰用户自有 agents；首批 10 个已生成并热加载实证
+- **双端收件 hook（上下文对称可见性）**：查证 Codex 支持 UserPromptSubmit+additionalContext（与 Claude 同构）；统一 hook 处理器两层注入——pending 完整注入取件 + 已处理往返的活动摘要（FYI 防重复处理、游标去重）；setup 同时注册双端 hook；实测 Codex App 会话摘要注入成功
+- 探测记录：Codex Desktop 内嵌内核无官方注入通道（app-server proxy 需独立 daemon；实时档留待官方开口，P3 跟踪）
+- 107 测试全绿
+
 ## 2026-08-05 — 信封协议 v2：强制表态（ADR-011，实战事故驱动）
 
 - 事故：Codex headless 回合对任务仅「确认收到」即结束（不执行不回信），需用户人肉追问才开工——根因：回合一次性无「稍后」、反空转规则被泛化、协议无任务表态

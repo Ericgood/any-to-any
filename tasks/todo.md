@@ -18,6 +18,11 @@
 - [x] M5 Web Console（浏览器实测：双栏/气泡/状态/重试/SSE 全通）
 - [x] M6 收尾：doctor 8 项全✓ / setup / README / LICENSE / npm link（publish 留用户）
 
+## Phase 2.5（2026-08-05 完成）
+- [x] @any 寻址层：sync-agents 自动物化 + 预绑定精确 id（spec: docs/specs/phase2.5-at-mention.md）
+- [x] 信封 v2 强制表态（DONE/BLOCKED/DECLINED）
+- [x] 双端收件 hook + 活动摘要（Codex App 内可见性）
+
 ## 待办池（Phase 2+）
 - [x] P2 跨设备核心：device 寻址/mDNS 发现/HTTP 直连/token 配对/relay 路由/目录聚合（真双机验收待用户在 mini 执行）
 - [ ] P2 launchd 常驻 + npx skills add 分发

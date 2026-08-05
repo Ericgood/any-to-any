@@ -94,3 +94,16 @@ Codex 侧不分层（exec resume 已全验证）。
 2. **入站双端 hook**：查证 Codex 支持 UserPromptSubmit + additionalContext（与 Claude 同构），统一处理器 `processPromptHook` 服务两家（`anyd hook claude-prompt-submit|codex-prompt-submit`），setup 同时注册 `~/.claude/settings.json` 与 `~/.codex/hooks.json`；
 3. **知情摘要（digest）**：hook 除注入 pending 消息外，以游标（~/.anytoany/hook-cursors/）追踪并注入「该会话自上次以来已自动处理的往返摘要」，明确标注 FYI ONLY / 勿再响应（防重复执行）——headless 活动因此在 App 对话流中留痕。
 4. **实证**：Codex 会话经驿站回报「DONE hook 消息已在 Codex App 对话流中可见，测试成功」；Claude 端 digest 同步在真实会话生效。
+
+## ADR-012 上下文对称的可见性：双端收件 hook + 活动摘要（2026-08-05，用户核心诉求）
+
+**诉求**：产品核心是「利用双方不对称的上下文并让其对称」——对称必须在各家 App 的对话流里留痕可见，否则用户无法确认同步是否发生。
+
+**探测结论**：Codex Desktop 为内嵌内核的独立进程，无官方通道注入其活动线程（`app-server proxy` 需独立 daemon 的 control socket，App 不使用之；`ipc.sock` 非 app-server 协议入口）。实时进入 App UI 暂不可行，等待官方开口。
+
+**方案（已实施）**：
+1. 出站天然可见（agent 在会话内执行 anyd send，对话流留痕）；
+2. 入站可见 = 双端 UserPromptSubmit hook（Codex hooks 与 Claude 格式兼容且支持 additionalContext，已查证官方文档）：统一处理器 `processPromptHook` 两层注入——pending 消息完整注入并取件；已处理往返以「活动摘要」形式注入（FYI ONLY，明示勿回复勿执行防重复处理），文件游标保证每条只展示一次；
+3. `anyd setup` 同时注册 `~/.claude/settings.json` 与 `~/.codex/hooks.json`（均幂等+备份）。
+
+**效果**：在任一家 App 里与会话对话时，该会话的跨 agent 活动自动出现在对话流中——所见即所得的被动档；实时档留待厂商通道开放（P3 跟踪）。
