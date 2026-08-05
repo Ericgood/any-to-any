@@ -50,6 +50,8 @@ export interface InboxQuery {
   toSession?: string;
   take?: boolean;
   all?: boolean;
+  /** Only strictly-pending messages — excludes 'delivering' (dispatcher-owned) and 'failed'. */
+  pendingOnly?: boolean;
 }
 
 export interface Mailbox {
@@ -198,7 +200,8 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
     inbox(query: InboxQuery = {}): Message[] {
       const clauses: string[] = [];
       const params: unknown[] = [];
-      if (!query.all) clauses.push(`status IN ('pending', 'delivering', 'failed')`);
+      if (query.pendingOnly) clauses.push(`status = 'pending'`);
+      else if (!query.all) clauses.push(`status IN ('pending', 'delivering', 'failed')`);
       if (query.toSession) {
         clauses.push('to_session = ?');
         params.push(query.toSession);
