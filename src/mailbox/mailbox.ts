@@ -69,6 +69,8 @@ export interface Mailbox {
   retry(id: string): Message;
   /** Requeue messages stranded in 'delivering' by a crashed daemon (at-least-once). */
   recoverStale(): number;
+  /** All traffic touching a session (either direction) since a timestamp — for visibility digests. */
+  recentActivity(sessionId: string, sinceMs: number, limit?: number): Message[];
 }
 
 const MAX_ATTEMPTS = 3;
@@ -298,6 +300,17 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
         )
         .run(now());
       return result.changes;
+    },
+
+    recentActivity(sessionId: string, sinceMs: number, limit = 10): Message[] {
+      const rows = db
+        .prepare(
+          `SELECT * FROM messages
+           WHERE (to_session = ? OR from_session = ?) AND updated_at > ?
+           ORDER BY created_at ASC LIMIT ?`,
+        )
+        .all(sessionId, sessionId, sinceMs, limit) as MessageRow[];
+      return rows.map(rowToMessage);
     },
 
     claimNextPending(): Message | null {

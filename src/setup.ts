@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 const require = createRequire(import.meta.url);
 
 const HOOK_COMMAND = 'anyd hook claude-prompt-submit';
+const CODEX_HOOK_COMMAND = 'anyd hook codex-prompt-submit';
 
 /** Skill install targets: per-agent dirs plus the shared Agent Skills dir. */
 function skillTargets(home: string): string[] {
@@ -70,6 +71,35 @@ function installClaudeHook(home: string): 'installed' | 'already-installed' {
   return 'installed';
 }
 
+/**
+ * Register the inbox hook in ~/.codex/hooks.json (Codex hooks are
+ * format-compatible with Claude's). Idempotent, timestamped backup.
+ */
+function installCodexHook(home: string): 'installed' | 'already-installed' {
+  const hooksPath = join(home, '.codex', 'hooks.json');
+  let config: { hooks?: Record<string, HookMatcher[]>; [k: string]: unknown } = {};
+  if (existsSync(hooksPath)) {
+    config = JSON.parse(readFileSync(hooksPath, 'utf8')) as typeof config;
+  }
+  const matchers: HookMatcher[] = config.hooks?.['UserPromptSubmit'] ?? [];
+  const present = matchers.some((m) => m.hooks.some((h) => h.command === CODEX_HOOK_COMMAND));
+  if (present) return 'already-installed';
+
+  if (existsSync(hooksPath)) {
+    copyFileSync(hooksPath, `${hooksPath}.bak-anytoany-${Date.now()}`);
+  }
+  const next = {
+    ...config,
+    hooks: {
+      ...(config.hooks ?? {}),
+      UserPromptSubmit: [...matchers, { hooks: [{ type: 'command', command: CODEX_HOOK_COMMAND }] }],
+    },
+  };
+  mkdirSync(dirname(hooksPath), { recursive: true });
+  writeFileSync(hooksPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  return 'installed';
+}
+
 export interface SetupOptions {
   withHook: boolean;
   home?: string;
@@ -89,8 +119,14 @@ export async function runSetup(opts: SetupOptions): Promise<void> {
         ? 'claude hook registered in ~/.claude/settings.json (backup saved)'
         : 'claude hook already registered',
     );
+    const codexResult = installCodexHook(home);
+    console.log(
+      codexResult === 'installed'
+        ? 'codex hook registered in ~/.codex/hooks.json (backup saved)'
+        : 'codex hook already registered',
+    );
   } else {
-    console.log('claude hook skipped (--no-hook)');
+    console.log('hooks skipped (--no-hook)');
   }
 
   console.log('\nnext steps:');

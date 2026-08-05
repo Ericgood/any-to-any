@@ -119,13 +119,26 @@ program
 
     const directory = async () => {
       const local = await localDirectory();
-      if (!lan) return local;
-      const { fetchPeerSessions } = await import('./cluster/peers.js');
-      const remotes = await Promise.allSettled(
-        lan.registry.list().map((p) => fetchPeerSessions(p, lan!.token)),
-      );
-      const remoteSessions = remotes.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-      return [...local, ...remoteSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+      let all = local;
+      if (lan) {
+        const { fetchPeerSessions } = await import('./cluster/peers.js');
+        const remotes = await Promise.allSettled(
+          lan.registry.list().map((p) => fetchPeerSessions(p, lan!.token)),
+        );
+        const remoteSessions = remotes.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+        all = [...local, ...remoteSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+      }
+      // Phase 2.5: keep the @any- mention agents in step with the live directory
+      try {
+        const { syncMentionAgents } = await import('./cluster/sync-agents.js');
+        const { written, removed } = await syncMentionAgents(all, mailbox.listConversations());
+        if (written.length || removed.length) {
+          console.log(`mention agents: +${written.length} -${removed.length} (~/.claude/agents/any-*)`);
+        }
+      } catch (e) {
+        console.error(`warning: mention agent sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return all;
     };
 
     const { writePid, clearPid, readPid, isAlive } = await import('./daemon/pidfile.js');
@@ -244,23 +257,23 @@ program
 program
   .command('hook')
   .description('Hook processors wired into agent CLIs (internal)')
-  .argument('<kind>', 'hook kind: claude-prompt-submit')
+  .argument('<kind>', 'hook kind: claude-prompt-submit | codex-prompt-submit')
   .action(async (kind: string) => {
-    if (kind !== 'claude-prompt-submit') {
+    if (kind !== 'claude-prompt-submit' && kind !== 'codex-prompt-submit') {
       console.error(`unknown hook kind: ${kind}`);
       process.exitCode = 1;
       return;
     }
     const chunks: Buffer[] = [];
     for await (const c of process.stdin) chunks.push(c as Buffer);
-    let input: { session_id?: string } = {};
+    let input: { session_id?: string; thread_id?: string } = {};
     try {
-      input = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { session_id?: string };
+      input = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { session_id?: string; thread_id?: string };
     } catch {
       /* tolerate malformed hook payloads — emit no context */
     }
-    const { processPromptSubmitHook } = await import('./hooks/claude-hook.js');
-    console.log(JSON.stringify(processPromptSubmitHook(openMailbox(), input)));
+    const { processPromptHook } = await import('./hooks/prompt-hook.js');
+    console.log(JSON.stringify(processPromptHook(openMailbox(), input)));
   });
 program
   .command('pair')
