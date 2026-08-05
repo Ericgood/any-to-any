@@ -41,4 +41,12 @@ describe('claude UserPromptSubmit hook', () => {
   it('handles missing session_id gracefully', () => {
     expect(processPromptSubmitHook(mailbox, {})).toEqual({});
   });
+
+  it('does not steal messages the dispatcher is actively delivering (double-inject bug)', () => {
+    const m = mailbox.send({ from: CODEX_B, to: CLAUDE_A, text: 'in flight via resume' });
+    mailbox.claimNextPending(); // dispatcher claimed it → delivering
+    const out = processPromptSubmitHook(mailbox, { session_id: CLAUDE_A.sessionId });
+    expect(out).toEqual({});
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivering');
+  });
 });

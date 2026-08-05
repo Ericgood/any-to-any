@@ -2,6 +2,12 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 验收现场：全自动闭环实证 + 双注入竞争修复
+
+- 用户完成一次性 claude CLI 登录 → 全自动档实证：Codex 确认消息由 `claude -p --resume` 直接唤醒 Claude 会话处理（本条目所在回合即该投递）；彩蛋 thread 三条消息全 delivered，Claude↔Codex 双向全自动闭环完成
+- hook 活体演示成功：用户说话瞬间 UserPromptSubmit 注入 Codex 消息，Claude 当场回执
+- 修复双注入竞争：hook 取件曾连 dispatcher 投递中（delivering）的消息一并抢走，致同一消息 resume+hook 双注入；inbox 增 pendingOnly，hook 只取 strictly-pending（82 测试全绿）
+
 ## 2026-08-05 — M4+M5+M6 完成：Phase 1 全线落地，等待用户验收
 
 - **M4 双向回路**：SKILL.md（Agent Skills 标准，装入 ~/.claude、~/.codex、~/.agents 三目录并被本会话热加载实证）；Claude 收件 hook（UserPromptSubmit 注入，anyd setup 一键注册、幂等、带备份）；冒烟 SMOKE PASS——Codex↔Codex 双向往返 3 条消息全部 delivered，对方按软约束主动终止连锁

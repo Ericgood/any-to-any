@@ -20,7 +20,9 @@ export function processPromptSubmitHook(
   input: PromptSubmitHookInput,
 ): PromptSubmitHookOutput {
   if (!input.session_id) return {};
-  const waiting = mailbox.inbox({ toSession: input.session_id, take: true });
+  // pendingOnly: a 'delivering' message is dispatcher-owned (resume in flight) —
+  // taking it here would double-inject the same message into the session
+  const waiting = mailbox.inbox({ toSession: input.session_id, take: true, pendingOnly: true });
   if (waiting.length === 0) return {};
 
   const blocks = waiting.map((m) => {
