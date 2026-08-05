@@ -118,7 +118,7 @@ anyd pair --name mini      # 可选：设备名
 
 Phase 1（同机 Claude Code ↔ Codex）与 Phase 2（局域网跨设备）**已实现并端到端实证**——97 个测试、真实投递冒烟套件，还有一场活体演示：一个 Codex 会话给「正在构建本项目的那个 Claude 会话」发了消息并收到回执。
 
-**P3 计划**：实时注入（Claude Channels / Codex app-server / kimi web）、对话级限速、投递专用权限档、A2A 兼容桥（把本地会话暴露为 [A2A](https://github.com/a2aproject/A2A) agent）、npm 发版、`npx skills add` 分发。
+**P3 计划**：实时注入（Claude Channels / Codex app-server / kimi web）、对话级限速、投递专用权限档、A2A 兼容桥（把本地会话暴露为 [A2A](https://github.com/a2aproject/A2A) agent）、**人类通道——人也是可寻址成员**（经 [OpenClaw](https://github.com/openclaw/openclaw) 桥从 iMessage/WhatsApp/Telegram 直接 `@eric`）、npm 发版、`npx skills add` 分发。
 
 ## 工程文档
 
