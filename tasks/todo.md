@@ -22,6 +22,7 @@
 - [ ] P2 跨设备：mDNS 发现 + HTTP 直连 + 配对 token
 - [ ] P2 launchd 常驻 + npx skills add 分发
 - [ ] P3 实时注入升级（Claude Channels / Codex app-server / kimi web）
+- [ ] P2 加固：conversation 级速率限制——回环保护按 context 计数，agent 反复开新线程的「状态同步空转」是盲区（2026-08-05 r2c 实测暴露）
 - [ ] P3 Kimi / Gemini adapter；投递专用权限 profile（硬隔离）
 - [ ] P3+ A2A 兼容层（anyd 暴露 endpoint + Agent Card）
 - [ ] 官网 anytoany.dev 上线；any2any.dev 301 跳转
