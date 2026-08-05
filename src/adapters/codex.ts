@@ -117,12 +117,14 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
           const idx = index.get(sessionId);
           const title = (idx?.threadName ?? basename(cwd) ?? '').trim() || 'untitled';
           const st = await stat(path);
+          // index updated_at can be weeks stale (the desktop app doesn't bump it);
+          // the rollout file mtime moves on every turn — trust whichever is newer
           sessions.push({
             agent: 'codex',
             sessionId,
             title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
             cwd,
-            lastActiveAt: idx?.updatedAtMs ?? st.mtimeMs,
+            lastActiveAt: Math.max(idx?.updatedAtMs ?? 0, st.mtimeMs),
           });
         } catch {
           // unreadable rollout — skip rather than fail the whole scan

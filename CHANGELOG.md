@@ -2,6 +2,12 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 修复会话选择器三连问题（用户 MacBook 实测反馈）
+
+- 根因修复：codex session_index 的 updated_at 可陈旧数周（桌面 App 使用会话不更新 index），scanner 曾单信 index 导致活跃会话被排序沉底——改为取 index 时间与 rollout mtime 的较大者（实证：「闪电说IOS 开发」从三周前位置回到 24 分钟前）
+- Web Console「新建对话」下拉换为搜索式选择器：关键词过滤（标题/agent/目录/设备/id）、按活跃降序、显示目录与相对时间、限 30 条
+- daemon 目录聚合（本地+远端）后统一按活跃排序；98 测试全绿
+
 ## 2026-08-05 — 定位口径定稿（ADR-009）
 
 - 定义与比喻分层：正式定义 agent-native messaging layer；海外传播比喻 "Slack for AI agents"、中文语境可用微信类比；README 双版 hero 加斜体类比行

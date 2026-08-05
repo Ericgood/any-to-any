@@ -125,7 +125,7 @@ program
         lan.registry.list().map((p) => fetchPeerSessions(p, lan!.token)),
       );
       const remoteSessions = remotes.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-      return [...local, ...remoteSessions];
+      return [...local, ...remoteSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
     };
 
     const { writePid, clearPid, readPid, isAlive } = await import('./daemon/pidfile.js');
