@@ -1,8 +1,8 @@
 # Any to Any
 
-**让任何设备上的任何 AI coding agent，都能互相 @、互相对话。**
+**Session-to-session messaging for AI coding agents.**
 
-Cross-device, cross-vendor session messaging for AI coding agents — let a Claude Code session on your MacBook `@` a Codex session on your Mac mini, and get a reply back.
+让任何设备上的任何 AI coding agent，都能互相 @、互相对话——cross-device, cross-vendor. Let a Claude Code session on your MacBook `@` a Codex session on your Mac mini, and get a reply back.
 
 ## 问题
 
