@@ -40,5 +40,21 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-interop",
+    "claude-code",
+    "codex",
+    "session-messaging",
+    "multi-agent",
+    "agent-skills",
+    "cross-device",
+    "mdns",
+    "cli"
+  ],
+  "author": "Ericgood and the anytoany agents (https://github.com/Ericgood/any-to-any)",
+  "bugs": {
+    "url": "https://github.com/Ericgood/any-to-any/issues"
   }
 }

@@ -2,6 +2,12 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 开源标准化：英文主体 README + 完整社区脚手架
+
+- README 重写为英文主体（badges/架构图/安全模型/路线图/agent 支持矩阵），新增 README.zh-CN.md 中文版互链
+- 新增开源标配：CONTRIBUTING.md（含多 agent 共享工作区家规与 adapter 开发指南）、SECURITY.md（私密漏洞报告 + 设计不变量）、CODE_OF_CONDUCT.md、GitHub Actions CI（macOS/Ubuntu × Node 20/22）、issue/PR 模板
+- package.json 补 keywords/author/bugs；GitHub repo 补 description/homepage/topics
+
 ## 2026-08-05 — Phase 2 完成：局域网跨设备互通（LAN SMOKE PASS）
 
 - 全链路实证（单机双 daemon 模拟 alpha/beta 双设备）：alpha 驿站 → token 校验 relay → beta 驿站 → beta 本地投递真实 Codex 会话 → LAN_ACK 回信 → relay 回 alpha → **经 Claude resume 注入真实发起会话**（用户登录后全自动档跨设备同场实证）
