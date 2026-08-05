@@ -23,6 +23,13 @@
 - [x] 信封 v2 强制表态（DONE/BLOCKED/DECLINED）
 - [x] 双端收件 hook + 活动摘要（Codex App 内可见性）
 
+## 2026-08-05 晚（可见性与体验战役，全部完成）
+- [x] 信封 v2 强制表态 + 防幻觉条款（ADR-011）
+- [x] 双端收件 hook + 活动摘要 + macOS 通知（ADR-012）
+- [x] Codex 实时注入调研定案（官方 not planned，跟踪 issue 清单在研报）
+- [x] Web Console 飞书式单列消息流 + 搜索选择器 + 25 家品牌 logo 库
+- [x] @any 寻址层（含临时目录过滤）
+
 ## 待办池（Phase 2+）
 - [x] P2 跨设备核心：device 寻址/mDNS 发现/HTTP 直连/token 配对/relay 路由/目录聚合（真双机验收待用户在 mini 执行）
 - [ ] P2 launchd 常驻 + npx skills add 分发
