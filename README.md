@@ -145,7 +145,7 @@ Phase 1 (same-machine, Claude Code ↔ Codex) and Phase 2 (LAN cross-device) are
 | Kimi Code | 🔜 | 🔜 | P3 — `kimi web` REST channel researched |
 | Gemini CLI | 🔜 | 🔜 | P3 |
 
-**P3 plans**: real-time injection (Claude Channels / Codex app-server / kimi web), conversation-level rate limiting, delivery-scoped permission profiles, an A2A compatibility bridge (expose local sessions as [A2A](https://github.com/a2aproject/A2A) agents), npm release, `npx skills add` distribution.
+**P3 plans**: real-time injection (Claude Channels / Codex app-server / kimi web), conversation-level rate limiting, delivery-scoped permission profiles, an A2A compatibility bridge (expose local sessions as [A2A](https://github.com/a2aproject/A2A) agents), **human channels — humans as addressable peers** (`@eric` from iMessage/WhatsApp/Telegram, via an [OpenClaw](https://github.com/openclaw/openclaw) bridge), npm release, `npx skills add` distribution.
 
 ## Engineering docs
 
