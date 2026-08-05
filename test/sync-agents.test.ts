@@ -39,6 +39,21 @@ describe('syncMentionAgents', () => {
     expect(body).toContain('model: haiku');
   });
 
+  it('excludes temp-dir sessions (smoke leftovers) from the mention list', async () => {
+    const agentsDir = setup();
+    const { written } = await syncMentionAgents(
+      [
+        s({}),
+        s({ sessionId: '019f9999-0000-7000-8000-000000000009', cwd: '/private/tmp/anytoany-smoke.abcd', title: 'smoke' }),
+        s({ sessionId: '019f9998-0000-7000-8000-000000000008', cwd: '/tmp/x', title: 'tmp' }),
+      ],
+      [],
+      { agentsDir },
+    );
+    expect(written).toHaveLength(1);
+    expect(readdirSync(agentsDir)).toEqual(['any-codex-shandianshuo-ios.md']);
+  });
+
   it('includes device prefix for remote sessions', async () => {
     const agentsDir = setup();
     await syncMentionAgents([s({ device: 'mini', sessionId: '019f0000-0000-7000-8000-000000000001' })], [], { agentsDir });

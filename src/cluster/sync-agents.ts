@@ -81,7 +81,10 @@ export async function syncMentionAgents(
   const maxPerAgent = options.maxPerAgent ?? DEFAULT_MAX_PER_AGENT;
   mkdirSync(agentsDir, { recursive: true });
 
-  const candidates = sessions.filter((s) => s.agent !== 'claude');
+  // temp-dir sessions (smoke tests, scratch experiments) must not pollute the mention list
+  const isTemp = (cwd: string): boolean =>
+    cwd.startsWith('/tmp/') || cwd.startsWith('/private/tmp/') || cwd.startsWith('/var/folders/') || cwd === '';
+  const candidates = sessions.filter((s) => s.agent !== 'claude' && !isTemp(s.cwd));
   const partnerIds = new Set(
     conversations.flatMap((c) => [c.a, c.b]).filter((r) => r.agent !== 'claude').map((r) => r.sessionId),
   );
