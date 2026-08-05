@@ -102,14 +102,12 @@ Codex 侧不分层（exec resume 已全验证）。
 
 **补全方案（已实施）**：daemon 在消息成功投递到本机会话时发 macOS 系统通知（「@codex:某会话 收到新消息——重新打开该会话可见」），每会话 60 秒节流，`--no-notify` 可关。用户层可见性最终形态 = 系统通知（即时知道）+ 重开会话（App 内完整回看）+ Web Console（实时全景）+ hook 摘要（模型层知情）。实时进入 App UI 待厂商开放注入通道（P3 跟踪）。
 
-## ADR-013 tmux 实时通道：第三条投递通道（2026-08-05，用户否决通知方案后实证定案）
+## ADR-013 实时通道双模定案：共享 app-server（主）+ tmux 注入（兜底）（2026-08-05，两轮调研+实证）
 
-**背景**：用户否决「系统通知 + 重开会话」的体验；调研确认官方无外部注入计划（`codex inject` 提案 closed not planned，见 docs/research/research-codex-live-inject.md）。
+**背景**：用户否决「通知+重开」体验；官方 `codex inject` 提案 closed not planned；Desktop App 确凿无外部注入路径（single-writer 约束 + #25914 实测失败）。完整调研见 docs/research/research-codex-live-inject.md。
 
-**实证（R7）**：tmux 中运行的 Codex TUI 经 send-keys 注入——消息实时进入、对话流原生显示、回合在交互会话本体执行（完整登录态/env/hooks，一并解决 ADR-010 headless 无环境问题）。
+**模式 A（协议模式，主推）**：`anyd live codex` = 起共享 `codex app-server --listen unix://<sock>`（仅 loopback/UDS，绝不绑 0.0.0.0——Origin 实测未鉴权连入风险）+ 以官方参数 `codex --remote <sock>` 启动 TUI 挂上共享运行时。投递走 JSON-RPC `turn/start` / `turn/steer`（in-flight 追加）：协议级可靠、多行无坑、UI 可见（已知 #15320 外部 turn 重绘可能延迟，内容最终出现）。参照实现 kcosr/codex-threads（send/steer/自愈 resume）。
 
-**决定**：新增 tmux 投递通道，优先级高于 headless resume：
-1. `anyd tmux <agent>` 启动器：tmux 中启动 CLI 会话 + marker 法探测新 session + 写映射表（~/.anytoany/tmux-map.json）——零猜测关联（吸取误投教训，不做 cwd 启发式）；
-2. dispatcher 投递优先查映射表：pane 存活 → `load-buffer` + `paste-buffer -p`（bracketed paste 防多行提前提交）+ Enter 注入；pane 消亡 → 清映射回落 resume；
-3. tmux 通道信封变体：回复指引改为「运行 anyd reply」（交互会话有权限；无 stdout 可解析 REPLY 标记）；
-4. 通道矩阵定案：tmux TUI（实时/可见/全环境）＞ headless resume（可达，重开可见+通知）＞ 驿站排队（离线）。用户心智：想让哪个会话实时可协作，就用 anyd tmux 启动它。
+**模式 B（tmux 兜底）**：对未走 --remote 的 tmux TUI 用 load-buffer + paste-buffer -p 注入。已实证可行（R7），但 #4446 实锤流式期间输入会被忽略而非排队——必须 capture-pane 忙碌检测 + 空闲重试，仅作兜底。
+
+**通道矩阵定案**：app-server live（实时/可见/全环境/协议级）＞ tmux 注入（实时/可见/按键级）＞ headless resume（可达，重开可见+通知）＞ 驿站排队（离线）。Desktop App 场景维持 resume+通知+hook 摘要，跟踪 #25914/#17101 等官方动向。用户心智不变：想让哪个会话实时可协作，用 `anyd live codex` 启动它。
