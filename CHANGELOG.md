@@ -2,6 +2,12 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — Web Console 纳入 Phase 1；开工
+
+- 新增 docs/specs/phase1-webui.md：本地可视化控制台（IM 双栏、对话=session 配对、SSE 实时、页面新建连接/代发/重试）——定位：产品可理解性 + 实时监控 + agent 内 @ 失败时的人工兜底
+- phase1-mvp.md 同步修订：新增 conversations（连接）数据模型与 `anyd conversations` 命令；skill 改为「先查已连接列表」；里程碑扩至 M6（M5=Web Console）
+- Phase 1 动工：M0 脚手架 + R1/R2 通道实验
+
 ## 2026-08-05 — 项目规范建立与 Phase 1 计划定稿
 
 - 建立项目规范（CLAUDE.md）：先文档后动作、docs/ 分区、CHANGELOG 制度、时间戳、每轮收尾必推 GitHub

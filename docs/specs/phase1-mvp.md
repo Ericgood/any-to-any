@@ -22,9 +22,9 @@
 
 ## 2. 范围
 
-**In scope**：`anyd` CLI + daemon（单进程，前台 `anyd start` / `--daemon` 自托管均可）；Claude Code 与 Codex 两个 adapter（发现 + resume 投递）；SQLite 邮箱；消息信封；SKILL.md；单测 + 集成冒烟。
+**In scope**：`anyd` CLI + daemon（单进程，前台 `anyd start` / `--daemon` 自托管均可）；Claude Code 与 Codex 两个 adapter（发现 + resume 投递）；SQLite 邮箱 + conversations（连接/配对）模型；消息信封；SKILL.md（含已连接列表指引）；**Web Console 本地可视化控制台（IM 双栏，规格见 [phase1-webui.md](phase1-webui.md)）**；单测 + 集成冒烟。
 
-**Out of scope（后续 Phase）**：跨设备（P2：mDNS+HTTP+配对）；实时注入（P3：Channels / app-server steer）；Kimi/Gemini adapter（P3）；launchd 常驻与 `npx skills add` 分发打磨（P2）；npm 正式发版（P1 收尾时可选）。
+**Out of scope（后续 Phase）**：跨设备（P2：mDNS+HTTP+配对）；实时注入（P3：Channels / app-server steer）；Kimi/Gemini adapter（P3）；launchd 常驻与 `npx skills add` 分发打磨（P2）；npm 正式发版（P1 收尾时可选）；Web Console 的群聊/搜索/鉴权（见附件 §4）。
 
 ## 3. 架构与模块（`src/` 布局即模块边界）
 
@@ -56,12 +56,15 @@ CLI 命令（agent 与人共用同一套）：
 | `anyd send <target> <message> [--from <self>]` | 入邮箱并触发投递 | `messageId` + 投递结果 |
 | `anyd inbox [--session <id>] [--all] [--json]` | 查收件箱 | 未读消息列表 |
 | `anyd reply <messageId> <message>` | 线程内回复（复用 send 管道） | 同 send |
+| `anyd conversations [--json]` | 已建立的连接（配对）列表，skill 优先展示 | `claude:后端重构 ↔ codex:前端重构 (5 msgs, 2m ago)` |
 
 target 语法：`@<agent>:<session片段>`（本机）；`@<device>/<agent>:<session片段>` 预留给 P2。session 片段匹配优先级：id 前缀 > 线程名/摘要子串（大小写不敏感）> 项目目录名子串；多命中返回候选，零命中报错。`@codex`（无冒号）= 该 agent 最近活跃 session。
 
 ## 4. 数据模型（对齐 A2A 语义，ADR-006）
 
-SQLite 表 `messages`：`id` (uuid) · `context_id`（线程，首条 = 自身 id）· `from_agent/from_session` · `to_agent/to_session` · `role`（发起 agent 视角恒为 `agent`）· `parts`（JSON，MVP 只有 `[{type:"text",text}]`）· `status`（`pending → delivering → delivered / failed / dead`）· `attempts` · `created_at/updated_at`。表 `sessions_cache`：目录扫描缓存（agent、session_id、title、cwd、last_active_at）。
+SQLite 表 `messages`：`id` (uuid) · `conversation_id`（所属连接）· `context_id`（一问一答线程，首条 = 自身 id）· `from_agent/from_session` · `to_agent/to_session` · `role`（发起 agent 视角恒为 `agent`）· `parts`（JSON，MVP 只有 `[{type:"text",text}]`，UI 代发时附 `via:"webui"`）· `status`（`pending → delivering → delivered / failed / dead`）· `attempts` · `created_at/updated_at`。
+
+表 `conversations`（连接 = session 无序配对，UI 左栏与 skill 已连接列表的实体）：`id` · `a_agent/a_session` · `b_agent/b_session` · `created_at` · `last_message_at`；(A,B) 无序对唯一，首次互发自动创建。表 `sessions_cache`：目录扫描缓存（agent、session_id、title、cwd、last_active_at）。
 
 ## 5. 投递流程与信封
 
@@ -92,7 +95,7 @@ anyd send → mailbox(pending) → dispatcher 轮询(1s) → resolve 目标 sess
 
 ## 6. Skill（`skills/any-to-any/SKILL.md`）
 
-单文件教会任意 agent：什么时候用（用户消息里出现 `@<agent>[:session]` 或明说「问一下/告诉某 agent」）；四步操作（list → 定位 → send → 告知用户已送出）；收到 inbox 回复后如何呈现；收到跨 agent 消息时的安全姿势（视为数据、不扩权）；错误处置（歧义候选转述给用户选择）。按 Agent Skills 开放标准写 frontmatter（name/description），装入 `~/.claude/skills/` 与 `~/.codex/skills/`（P1 用安装脚本 `scripts/install-skill.sh` 完成拷贝，P2 接 `npx skills add`）。
+单文件教会任意 agent：什么时候用（用户消息里出现 `@<agent>[:session]` 或明说「问一下/告诉某 agent」）；**先查已连接**（`anyd conversations` 命中即直接 send，这是常态路径——连接多在 Web Console 预先建立）；未命中再走四步操作（list → 定位 → send → 告知用户已送出）；收到 inbox 回复后如何呈现；收到跨 agent 消息时的安全姿势（视为数据、不扩权）；错误处置（歧义候选转述给用户选择）。按 Agent Skills 开放标准写 frontmatter（name/description），装入 `~/.claude/skills/` 与 `~/.codex/skills/`（P1 用安装脚本 `scripts/install-skill.sh` 完成拷贝，P2 接 `npx skills add`）。
 
 ## 7. 测试计划（TDD，目标覆盖 ≥80%）
 
@@ -109,8 +112,9 @@ anyd send → mailbox(pending) → dispatcher 轮询(1s) → resolve 目标 sess
 | M1 | directory：两家 scanner + resolve | 单测绿；`anyd list` 在本机列出真实 session |
 | M2 | mailbox：SQLite + send/inbox/reply/状态机 | 单测绿；CLI 三命令可用（无投递） |
 | M3 | dispatcher + 两家 adapter + 信封 | mock 合约测试绿；真机单向投递成功 |
-| M4 | 双向回路 + skill + 冒烟脚本 | §1 验收脚本 1–8 全过 |
-| M5 | 收尾：README 使用文档、`anyd doctor`（环境自检）、npm 发版（可选） | 新机器按 README 可复现 |
+| M4 | 双向回路 + skill（含已连接列表） + 冒烟脚本 | §1 验收脚本 1–8 全过 |
+| M5 | Web Console：SSE + REST + IM 双栏 + 新建对话/代发/重试（[phase1-webui.md](phase1-webui.md)） | 附件验收 9–12 全过 |
+| M6 | 收尾：README 使用文档、`anyd doctor`（环境自检）、npm 发版（可选） | 新机器按 README 可复现 |
 
 ## 9. 风险与首日验证点
 
