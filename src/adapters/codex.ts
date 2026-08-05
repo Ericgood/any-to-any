@@ -1,0 +1,115 @@
+import { open, readdir, readFile, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
+import type { AgentAdapter, SessionInfo } from './types.js';
+
+const ROLLOUT_RE =
+  /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
+
+const FIRST_LINE_MAX = 1024 * 1024; // session_meta can carry long base_instructions
+const TITLE_MAX = 80;
+
+interface CodexAdapterOptions {
+  sessionsDir?: string;
+  indexFile?: string;
+}
+
+interface IndexEntry {
+  threadName: string;
+  updatedAtMs?: number;
+}
+
+/** Read up to the first newline without loading the whole rollout file. */
+async function readFirstLine(path: string): Promise<string | null> {
+  const fd = await open(path, 'r');
+  try {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    const buf = Buffer.alloc(64 * 1024);
+    while (total < FIRST_LINE_MAX) {
+      const { bytesRead } = await fd.read(buf, 0, buf.length, total);
+      if (bytesRead === 0) break;
+      const nl = buf.subarray(0, bytesRead).indexOf(0x0a);
+      if (nl !== -1) {
+        chunks.push(Buffer.from(buf.subarray(0, nl)));
+        return Buffer.concat(chunks).toString('utf8');
+      }
+      chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
+      total += bytesRead;
+    }
+    return total > 0 ? Buffer.concat(chunks).toString('utf8') : null;
+  } finally {
+    await fd.close();
+  }
+}
+
+async function loadIndex(indexFile: string): Promise<Map<string, IndexEntry>> {
+  const map = new Map<string, IndexEntry>();
+  let raw: string;
+  try {
+    raw = await readFile(indexFile, 'utf8');
+  } catch {
+    return map;
+  }
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const rec = JSON.parse(line) as { id?: string; thread_name?: string; updated_at?: string };
+      if (!rec.id || typeof rec.thread_name !== 'string') continue;
+      const entry: IndexEntry = { threadName: rec.thread_name };
+      const ts = rec.updated_at ? Date.parse(rec.updated_at) : NaN;
+      if (!Number.isNaN(ts)) entry.updatedAtMs = ts;
+      map.set(rec.id, entry); // later lines win — index is append-mostly
+    } catch {
+      // skip corrupt index lines
+    }
+  }
+  return map;
+}
+
+export function createCodexAdapter(options: CodexAdapterOptions = {}): AgentAdapter {
+  const sessionsDir = options.sessionsDir ?? join(homedir(), '.codex', 'sessions');
+  const indexFile = options.indexFile ?? join(homedir(), '.codex', 'session_index.jsonl');
+
+  return {
+    agent: 'codex',
+    async listSessions(): Promise<SessionInfo[]> {
+      let entries: string[];
+      try {
+        entries = (await readdir(sessionsDir, { recursive: true })) as string[];
+      } catch {
+        return []; // codex not installed / no sessions yet
+      }
+      const index = await loadIndex(indexFile);
+
+      const sessions: SessionInfo[] = [];
+      for (const rel of entries) {
+        const name = basename(rel);
+        const m = ROLLOUT_RE.exec(name);
+        if (!m || !m[1]) continue;
+        const sessionId = m[1];
+        const path = join(sessionsDir, rel);
+        try {
+          const first = await readFirstLine(path);
+          if (!first) continue;
+          const meta = JSON.parse(first) as { type?: string; payload?: { cwd?: string } };
+          if (meta.type !== 'session_meta') continue;
+          const cwd = typeof meta.payload?.cwd === 'string' ? meta.payload.cwd : '';
+          const idx = index.get(sessionId);
+          const title = (idx?.threadName ?? basename(cwd) ?? '').trim() || 'untitled';
+          const st = await stat(path);
+          sessions.push({
+            agent: 'codex',
+            sessionId,
+            title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
+            cwd,
+            lastActiveAt: idx?.updatedAtMs ?? st.mtimeMs,
+          });
+        } catch {
+          // unreadable rollout — skip rather than fail the whole scan
+        }
+      }
+      return sessions;
+    },
+  };
+}

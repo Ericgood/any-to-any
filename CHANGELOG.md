@@ -2,6 +2,12 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — M1 完成：session 目录与 @ 寻址
+
+- adapters（claude/codex）的 listSessions + 聚合 scanner + resolveTarget 三级匹配（id 前缀 > 标题子串 > 目录名子串），TDD 30 测试全绿
+- 关键实现决策：Claude 的 cwd 从 jsonl 内容读（目录名转义不可靠，实测有目录名与真实 cwd 不一致的 session）；title 取最后一条 custom-title；Codex 以 rollout 文件为真相源、session_index 仅补充 thread_name
+- `anyd list` 真机验证：混合列出本机 4157 个真实 session（含正在进行的本会话），全扫 1.7s，默认 --limit 20
+
 ## 2026-08-05 — M0 完成：脚手架 + 通道实验结论
 
 - 脚手架就绪：TypeScript + vitest + commander CLI 骨架（`anyd` 七个子命令占位），build/test 全绿
