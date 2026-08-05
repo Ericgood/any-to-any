@@ -111,3 +111,9 @@ Codex 侧不分层（exec resume 已全验证）。
 **模式 B（tmux 兜底）**：对未走 --remote 的 tmux TUI 用 load-buffer + paste-buffer -p 注入。已实证可行（R7），但 #4446 实锤流式期间输入会被忽略而非排队——必须 capture-pane 忙碌检测 + 空闲重试，仅作兜底。
 
 **通道矩阵定案**：app-server live（实时/可见/全环境/协议级）＞ tmux 注入（实时/可见/按键级）＞ headless resume（可达，重开可见+通知）＞ 驿站排队（离线）。Desktop App 场景维持 resume+通知+hook 摘要，跟踪 #25914/#17101 等官方动向。用户心智不变：想让哪个会话实时可协作，用 `anyd live codex` 启动它。
+
+## ADR-012 最终结论：Web Console 为主观察面；Codex App 实时注入等待官方（2026-08-05，调研定案+用户拍板）
+
+**调研定案**（docs/research/research-codex-live-inject.md）：官方注入相关 issue 全部 closed as not planned；Desktop App 为私有 stdio 单客户端（第三方 attach 实测失败），唯一入站为 OpenAI 私有 relay（手机配对）；CLI 侧存在共享 daemon + `codex --remote` 正路（kcosr/codex-threads 已趟通）与 tmux 注入通用解——均需终端形态，用户否决（不弃桌面 App 体验）。
+
+**决定**：① Web Console 升级为协作主观察界面，时间线重构为飞书/Slack 式单列消息流（头像色块+名称+精确时间戳+状态，无左右之分——第三方观察者视角无「我」）；② Codex App 内可见性维持「通知+重开」与 hook 模型层知情，实时注入跟踪官方 issue（MCP 通知提案 #17543、App attach #25914、TUI 外部 turn 重绘 #15320）；③ tmux/远程 daemon 方案记入调研报告备查，不实施。

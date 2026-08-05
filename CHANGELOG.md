@@ -23,6 +23,12 @@
 - **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
 - mailbox 新增 recentActivity；107 测试全绿
 
+## 2026-08-05 — Web Console 升级为主观察界面：飞书式消息流（用户拍板）
+
+- 调研定案：Codex 官方注入 issue 全部 closed as not planned，Desktop App 无第三方通道；终端系方案（tmux 注入/共享 daemon+--remote）被用户否决——Web Console 正式成为协作主观察面
+- 时间线重构：飞书/Slack 式单列消息流——色块头像（C/X/K/G）+ 发送者名称 + 精确时间戳（HH:MM）+ 状态尾注 + 跨天分隔线；废除微信式左右气泡（第三方观察者视角无「我」）
+- 新增调研报告 docs/research/research-codex-live-inject.md（可行路径排序与跟踪 issue 清单）
+
 ## 2026-08-05 — 可见性闭环收尾：重开可见实证 + macOS 系统通知
 
 - 用户实验确认：Codex App 重开会话完整渲染 headless 追加的往返轮次（用户层可见 = 重开可见，非实时；App 运行中不热载）
