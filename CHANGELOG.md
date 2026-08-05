@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — ADR-013 修订：实时通道双模（共享 app-server 为主，tmux 为兜底）
+
+- 子代理调研报告完整落盘（research-codex-live-inject.md，26+ 来源）：发现协议级正路——`codex app-server --listen` 共享 daemon + 官方参数 `codex --remote` 挂载 TUI + 外部 turn/start/steer（kcosr/codex-threads 已验证此架构）
+- 实锤 tmux 流派坑：#4446 流式输出期间注入会被忽略而非排队——tmux 降为兜底通道，必须忙碌检测
+- 安全红线：app-server socket 仅 UDS/loopback（Origin 实测 0.0.0.0 未鉴权可连入执行命令）
+- Desktop App 确凿无解（single-writer + #25914），维持 resume+通知+hook 摘要组合，跟踪官方 issue
+
 ## 2026-08-05 — tmux 实时通道定案（ADR-013）：官方无注入计划，tmux 注入实证成功
 
 - 调研落盘（research-codex-live-inject.md）：官方 `codex inject` 提案 closed not planned；社区请愿 Channels 等价物无承诺——短期无官方通道
