@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 修复：Codex 子代理线程混入可寻址目录（用户实投失败反馈）
+
+- 根因：用户从选择器选中的 codex 会话实为 multi-agent v2 的 sub-agent 线程，Codex 官方拒绝对其直接注入（app-server -32600 "direct input is not allowed for sub-agents"）
+- 修复：scanner 依据 session_meta 的 `thread_source=subagent` / `parent_thread_id` 过滤全部子代理线程（不可寻址即不出现）；fixture + 用例防回归
+- 附带修复：deliver 错误日志曾截取 stderr 前 500 字符（全是 banner），真错误在尾部被吃——改取尾部 500 字符
+- 99 测试全绿
+
 ## 2026-08-05 — 修复会话选择器三连问题（用户 MacBook 实测反馈）
 
 - 根因修复：codex session_index 的 updated_at 可陈旧数周（桌面 App 使用会话不更新 index），scanner 曾单信 index 导致活跃会话被排序沉底——改为取 index 时间与 rollout mtime 的较大者（实证：「闪电说IOS 开发」从三周前位置回到 24 分钟前）

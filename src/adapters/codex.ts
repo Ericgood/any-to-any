@@ -88,7 +88,8 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
         session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
       );
       if (code !== 0) {
-        return { ok: false, error: `codex exec resume exited ${code}: ${stderr.slice(0, 500)}` };
+        // the actual error is at the END of stderr (after the banner + prompt echo)
+        return { ok: false, error: `codex exec resume exited ${code}: …${stderr.slice(-500)}` };
       }
       return { ok: true, output: stdout };
     },
@@ -111,8 +112,14 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
         try {
           const first = await readFirstLine(path);
           if (!first) continue;
-          const meta = JSON.parse(first) as { type?: string; payload?: { cwd?: string } };
+          const meta = JSON.parse(first) as {
+            type?: string;
+            payload?: { cwd?: string; parent_thread_id?: string; thread_source?: string };
+          };
           if (meta.type !== 'session_meta') continue;
+          // multi-agent sub-agent threads reject direct input (app-server -32600) —
+          // they are parent-driven and must not be addressable
+          if (meta.payload?.parent_thread_id || meta.payload?.thread_source === 'subagent') continue;
           const cwd = typeof meta.payload?.cwd === 'string' ? meta.payload.cwd : '';
           const idx = index.get(sessionId);
           const title = (idx?.threadName ?? basename(cwd) ?? '').trim() || 'untitled';

@@ -59,6 +59,11 @@ describe('codex adapter listSessions', () => {
     expect(sessions).toHaveLength(2); // ghost 9999… from index must not appear
   });
 
+  it('excludes multi-agent sub-agent threads (they reject direct input)', async () => {
+    const sessions = await adapter.listSessions();
+    expect(sessions.find((x) => x.sessionId === '55555555-5555-4555-8555-555555555555')).toBeUndefined();
+  });
+
   it('lastActiveAt trusts the newer of index updated_at and file mtime (stale-index bug)', async () => {
     const sessions = await adapter.listSessions();
     const indexed = sessions.find((x) => x.sessionId === '33333333-3333-4333-8333-333333333333');
