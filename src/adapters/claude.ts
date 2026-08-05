@@ -24,9 +24,18 @@ interface ParsedLine {
   message?: { content?: unknown };
 }
 
+/** System-wrapped user turns (command caveats etc.) are not usable as titles. */
+const NON_TITLE_PREFIXES = ['<local-command-caveat>', 'Caveat:', '<command-name>', '<system-reminder>'];
+
+function usableTitle(text: string): string | undefined {
+  const t = text.trim();
+  if (!t || NON_TITLE_PREFIXES.some((p) => t.startsWith(p))) return undefined;
+  return t;
+}
+
 function extractUserText(line: ParsedLine): string | undefined {
   const content = line.message?.content;
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return usableTitle(content);
   if (Array.isArray(content)) {
     for (const part of content) {
       if (
@@ -35,7 +44,8 @@ function extractUserText(line: ParsedLine): string | undefined {
         (part as { type?: string }).type === 'text' &&
         typeof (part as { text?: unknown }).text === 'string'
       ) {
-        return (part as { text: string }).text;
+        const usable = usableTitle((part as { text: string }).text);
+        if (usable) return usable;
       }
     }
   }
@@ -82,7 +92,8 @@ async function readSession(path: string, mtimeMs: number, size: number): Promise
       lastCustomTitle = line.customTitle;
     }
     if (firstUserText === undefined && line.type === 'user') {
-      firstUserText = extractUserText(line);
+      const text = extractUserText(line);
+      if (text !== undefined) firstUserText = text;
     }
   }
 
