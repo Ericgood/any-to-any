@@ -13,7 +13,7 @@
 - [x] M0 脚手架（TS+vitest+CLI 骨架，build/test 全绿）+ 通道实验（R2 全解除；R1 剩「历史携带」待用户终端验证）
 - [x] M1 directory：scanner ×2 + resolve（TDD 30 测试绿，anyd list 真机验证 4157 sessions）
 - [x] M2 mailbox 驿站：SQLite 状态机 + conversations + CLI 四命令（42 测试绿，真机首条消息入站）
-- [ ] M3 dispatcher + adapter ×2 + 信封
+- [x] M3 dispatcher + adapter ×2 + 信封（62 测试绿；真机 Claude→Codex 投递成功且 Codex 回信自动入站）
 - [ ] M4 双向回路 + skill + 冒烟（§1 验收 1-8）
 - [ ] M5 Web Console（SSE+REST+IM 双栏，附件验收 9-12）
 - [ ] M6 收尾：文档、anyd doctor、npm 发版（可选）

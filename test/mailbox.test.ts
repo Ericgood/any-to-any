@@ -66,13 +66,15 @@ describe('mailbox', () => {
       expect(done.status).toBe('delivered');
     });
 
-    it('failed under the retry limit is re-claimable with attempts incremented', () => {
+    it('failed under the retry limit is re-claimable only after the backoff window', () => {
       const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
       mailbox.claimNextPending();
       const failed = mailbox.markFailed(m.id, 'err 1');
       expect(failed.status).toBe('failed');
       expect(failed.attempts).toBe(1);
       expect(failed.lastError).toBe('err 1');
+      expect(mailbox.claimNextPending()).toBeNull(); // within backoff — not yet retryable
+      nowMs += 31_000;
       expect(mailbox.claimNextPending()?.id).toBe(m.id);
     });
 
@@ -81,6 +83,7 @@ describe('mailbox', () => {
       for (let i = 0; i < 3; i++) {
         expect(mailbox.claimNextPending()?.id).toBe(m.id);
         mailbox.markFailed(m.id, 'boom');
+        nowMs += 31_000; // pass the retry backoff window
       }
       expect(mailbox.getMessage(m.id)?.status).toBe('dead');
       expect(mailbox.claimNextPending()).toBeNull();
