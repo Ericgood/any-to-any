@@ -37,6 +37,18 @@ describe('runSetup', () => {
     const second = JSON.parse(readFileSync(settingsPath, 'utf8')) as typeof first;
     expect(second.hooks['UserPromptSubmit']).toHaveLength(1);
   });
+
+  it('registers the codex hook in ~/.codex/hooks.json idempotently', async () => {
+    await runSetup({ withHook: true, home });
+    const hooksPath = join(home, '.codex', 'hooks.json');
+    const first = JSON.parse(readFileSync(hooksPath, 'utf8')) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+    expect(first.hooks['UserPromptSubmit']?.some((m) => m.hooks.some((h) => h.command.includes('codex-prompt-submit')))).toBe(true);
+    await runSetup({ withHook: true, home });
+    const second = JSON.parse(readFileSync(hooksPath, 'utf8')) as typeof first;
+    expect(second.hooks['UserPromptSubmit']).toHaveLength(1);
+  });
 });
 
 describe('pidfile', () => {

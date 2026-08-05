@@ -82,3 +82,15 @@ Codex 侧不分层（exec resume 已全验证）。
 **决定**：
 1. 信封 v2（已实施）：明示「这是你唯一的回合」，强制以 `DONE <结果> / BLOCKED <缺什么> / DECLINED <原因>` 三态之一（纯问答直接作答）收尾；明确纯确认式回复无效；明确协议表态豁免于任何先前线程的反空转约定。skill 同步接收规范。
 2. P3 任务语义（参照 Codex multi-agent V2 的 wait / followup_task / interrupt 与 A2A Task 生命周期）：消息 kind=task、状态机（accepted/working/done/blocked）、发起方 followup 驱动、Console 显示任务态而非仅投递态。
+
+## ADR-012 上下文对称的可见性方案：出站天然留痕 + 入站双端 hook 注入（2026-08-05，用户核心诉求）
+
+**诉求**：本产品的核心是「利用双方不对称的上下文并让其对称」，对称必须在各家 App 自己的对话流中可见——headless resume 写入磁盘但 App 不热载，导致 Codex 端「所见非所得」。
+
+**探测结论**：Codex Desktop 内嵌内核、不跑 app-server daemon（`app-server-control.sock` 不存在，ipc.sock 对 JSON-RPC 握手静默），当前无官方通道注入 App 活动线程——实时注入待 OpenAI 开口。app-server 协议 schema 已导出（122 方法，thread/loaded/list、turn/steer、thread/inject_items 齐备），daemon-hosted 会话场景留 P3。
+
+**方案（已实施）**：
+1. **出站天然可见**：agent 在交互会话里执行 anyd send，对话流自然留痕（无需任何机制）；
+2. **入站双端 hook**：查证 Codex 支持 UserPromptSubmit + additionalContext（与 Claude 同构），统一处理器 `processPromptHook` 服务两家（`anyd hook claude-prompt-submit|codex-prompt-submit`），setup 同时注册 `~/.claude/settings.json` 与 `~/.codex/hooks.json`；
+3. **知情摘要（digest）**：hook 除注入 pending 消息外，以游标（~/.anytoany/hook-cursors/）追踪并注入「该会话自上次以来已自动处理的往返摘要」，明确标注 FYI ONLY / 勿再响应（防重复执行）——headless 活动因此在 App 对话流中留痕。
+4. **实证**：Codex 会话经驿站回报「DONE hook 消息已在 Codex App 对话流中可见，测试成功」；Claude 端 digest 同步在真实会话生效。

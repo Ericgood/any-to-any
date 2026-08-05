@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-05 — 上下文对称可见性（ADR-012）+ @any 寻址层（Phase 2.5）
+
+- **双端收件 hook**：统一 processPromptHook 服务 Claude 与 Codex（查证 Codex UserPromptSubmit 同构支持），setup 同时注册两家配置；pending 完整注入 + 已处理往返的 FYI 知情摘要（游标防重复、明示勿再响应）——headless 协同活动在两家 App 对话流中可见；Codex 会话经驿站实证「hook 消息已在 App 对话流可见」
+- 探测结论存档：Codex Desktop 内嵌内核无官方注入通道（app-server 122 方法 schema 已导出，daemon-hosted 场景留 P3）
+- **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
+- mailbox 新增 recentActivity；107 测试全绿
+
 ## 2026-08-05 — 信封协议 v2：强制表态（ADR-011，实战事故驱动）
 
 - 事故：Codex headless 回合对任务仅「确认收到」即结束（不执行不回信），需用户人肉追问才开工——根因：回合一次性无「稍后」、反空转规则被泛化、协议无任务表态
