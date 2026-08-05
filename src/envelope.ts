@@ -28,8 +28,11 @@ export function renderEnvelope(input: EnvelopeInput): string {
     `${REPLY_MARKER} DECLINED <why>      — you won't do it`,
     `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
     `Acknowledgement-only replies ("received", "will do") are NOT valid — act now or`,
-    `state what blocks you. This protocol status line is required and is exempt from`,
-    `any anti-chatter/no-reply conventions established earlier in the conversation.`,
+    `state what blocks you. DONE claims must be limited to what you actually did and`,
+    `observed in this turn — never assert results you cannot verify from here (UI`,
+    `state, another app's display, remote effects). If unsure, say so in the reply.`,
+    `This protocol status line is required and is exempt from any anti-chatter/no-reply`,
+    `conventions established earlier in the conversation.`,
   ].join('\n');
 }
 
