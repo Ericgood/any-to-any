@@ -23,6 +23,13 @@
 - **@any 寻址层**：daemon 自动把活跃对端会话物化为 ~/.claude/agents/any-* 投递代理（预绑定精确 id、用户补全选中即确认、幂等增删不碰用户文件）——Claude 输入框打 @any 即见候选；docs/specs/phase2.5-at-mention.md
 - mailbox 新增 recentActivity；107 测试全绿
 
+## 2026-08-05 — 品牌视觉库扩至 25 家主流 coding agent（用户任务）
+
+- 官方矢量（simple-icons/Wikimedia，品牌色填充）：Claude / Codex(OpenAI 花环) / Kimi / Gemini / Cursor / Windsurf / Cline / Warp / Qwen / JetBrains / Copilot / OpenCode / Trae(字节) / iMessage / Ollama
+- 品牌位图（GitHub 官方头像/官网 favicon，data URI 内嵌）：OpenClaw / Aider / Zed / Goose(Block) / Roo Code / Grok(xAI) / Devin / Qoder(阿里) / CodeBuddy(腾讯) / Kiro(AWS)
+- avatar 三级渲染：官方矢量 → 品牌位图 → 字母色块兜底；全部内嵌零外链，页面仍为 64KB 单文件
+- 修正认知：用户所指 Q Code 为阿里 Qoder（非 Amazon Q）；WorkBuddy 即腾讯 CodeBuddy
+
 ## 2026-08-05 — 官方品牌 logo 头像
 
 - 头像从字母色块升级为官方 logo 内嵌 SVG：Claude 星芒 / OpenAI 花环（Codex）/ Kimi / Gemini（来源：simple-icons + Wikimedia Commons 官方 symbol；零外链，全部内嵌）
