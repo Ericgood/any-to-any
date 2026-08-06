@@ -9,7 +9,7 @@ import { anytoanyHome } from './home.js';
  * a daemon restart.
  */
 export interface MachineConfig {
-  zcode?: { deliverMode?: string };
+  zcode?: { deliverMode?: string; deliverTimeoutSec?: number };
   codex?: { sandbox?: string };
 }
 

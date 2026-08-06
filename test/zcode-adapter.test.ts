@@ -130,3 +130,24 @@ describe('per-machine delivery mode escalation', () => {
     expect(modeOf(exec.mock.calls as never)).toBe('build');
   });
 });
+
+describe('per-machine turn timeout', () => {
+  it('honors deliverTimeoutSec within sane bounds; rejects silly values', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const cfg = join(dir, 'config-timeout.json');
+    const seen: number[] = [];
+    const exec: ExecFn = async (_c, _a, opts) => {
+      seen.push(opts.timeoutMs);
+      return { stdout: 'ok', stderr: '', code: 0 };
+    };
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+
+    writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'build', deliverTimeoutSec: 900 } }));
+    await a.deliver(SESS, 'E');
+    expect(seen[0]).toBe(900_000);
+
+    writeFileSync(cfg, JSON.stringify({ zcode: { deliverTimeoutSec: 5 } })); // below floor
+    await a.deliver(SESS, 'E');
+    expect(seen[1]).toBe(300_000);
+  });
+});
