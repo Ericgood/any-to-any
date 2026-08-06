@@ -95,3 +95,38 @@ describe('zcode delivery', () => {
     expect(r.error).toContain('exited 1');
   });
 });
+
+describe('per-machine delivery mode escalation', () => {
+  const okExec: ExecFn = async () => ({ stdout: 'ok', stderr: '', code: 0 });
+  const modeOf = (calls: Array<[string, string[], unknown]>) => {
+    const args = calls[0]?.[1] ?? [];
+    return args[args.indexOf('--mode') + 1];
+  };
+
+  it('honors the machine owner opt-in from config.json', async () => {
+    const cfg = join(dir, 'config.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'yolo' } }));
+    const exec = vi.fn(okExec);
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+    await a.deliver(SESS, 'E');
+    expect(modeOf(exec.mock.calls as never)).toBe('yolo');
+  });
+
+  it('rejects unknown modes and falls back to build', async () => {
+    const cfg = join(dir, 'config-bad.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'root-me-please' } }));
+    const exec = vi.fn(okExec);
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+    await a.deliver(SESS, 'E');
+    expect(modeOf(exec.mock.calls as never)).toBe('build');
+  });
+
+  it('defaults to build when no config exists', async () => {
+    const exec = vi.fn(okExec);
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: join(dir, 'nope.json') });
+    await a.deliver(SESS, 'E');
+    expect(modeOf(exec.mock.calls as never)).toBe('build');
+  });
+});
