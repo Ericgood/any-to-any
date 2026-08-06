@@ -216,10 +216,11 @@ function renderThread(keepScroll) {
     $('#compose-send').disabled = true;
     try {
       if (state.composeAs === 'me') {
-        // The user speaks to the whole "room": one copy to each side.
+        // The user speaks to the whole "room": one copy to each side,
+        // pinned to THIS conversation so the three-party context stays in one thread.
         const me = { agent: 'user', sessionId: 'cli' };
         for (const to of [convo.a, convo.b]) {
-          await api('/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: me, to, text }) });
+          await api('/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: me, to, text, conversationId: convo.id }) });
         }
       } else {
         const from = state.composeAs === 'a' ? convo.a : convo.b;

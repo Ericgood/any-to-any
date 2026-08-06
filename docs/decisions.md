@@ -117,3 +117,13 @@ Codex 侧不分层（exec resume 已全验证）。
 **调研定案**（docs/research/research-codex-live-inject.md）：官方注入相关 issue 全部 closed as not planned；Desktop App 为私有 stdio 单客户端（第三方 attach 实测失败），唯一入站为 OpenAI 私有 relay（手机配对）；CLI 侧存在共享 daemon + `codex --remote` 正路（kcosr/codex-threads 已趟通）与 tmux 注入通用解——均需终端形态，用户否决（不弃桌面 App 体验）。
 
 **决定**：① Web Console 升级为协作主观察界面，时间线重构为飞书/Slack 式单列消息流（头像色块+名称+精确时间戳+状态，无左右之分——第三方观察者视角无「我」）；② Codex App 内可见性维持「通知+重开」与 hook 模型层知情，实时注入跟踪官方 issue（MCP 通知提案 #17543、App attach #25914、TUI 外部 turn 重绘 #15320）；③ tmux/远程 daemon 方案记入调研报告备查，不实施。
+
+## ADR-014 三方上下文定案：用户消息寄生 pair 线程；群聊 room 模型列为下一阶段头号演进（2026-08-06，真实首日使用暴露）
+
+**背景**：跨机双 agent 协作真实跑通当晚，用户以本人身份向对话双方广播（webui「以我的身份发给双方」初版实现为两条独立定向消息），双边 pair 唯一约束把它们裂成两个新对话——用户原话：「肯定是我们三个共同构成一个群聊啊，要不然这个上下文也太不好管理了」。
+
+**决策（短期，已实施）**：
+- `SendInput.conversationId` 显式落点——user 广播钉在原 A↔B 对话；`reply()` 继承原消息 conversationId（对 user 寄生消息的回信不再按 from/to 反推分裂出 user↔agent 新对话）；
+- UI：`user:cli` 统一显示「我（用户）」；user 消息气泡标注去向；composer 三态（代 A / 代 B / 以我发给双方，后者仅 agent↔agent 对话显示）。
+
+**决策（长期，P3 头号架构演进）**：conversation 从 (A,B) 无序对升级为成员集合 room（user + 任意多 agent）：一条消息多接收方 per-recipient 投递态、room 级 context 与回环预算、信封告知参与者名单、跨机 room id 同步。与任务生命周期语义（反乒乓根治）同属「从信件模型走向协作模型」的一揽子演进。
