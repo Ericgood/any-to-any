@@ -2,6 +2,15 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-06 — 🎉 跨设备双机链路端到端全通（MacBook ↔ Mac mini，含 ZCode）
+
+- **P2 跨设备目标真机达成**：MacBook `@macbook` ↔ Mac mini `@mini` 配对（同 token fp）、mDNS 互发现、目录聚合（本机 4045 + mini 38 会话）、跨机投递与回信回流全链路实测通过——探针消息 MacBook → mini 的 ZCode「sunogate开发」会话，ZCode 真实执行并回报正确工作目录，回信跨机回流 MacBook 驿站
+- **ZCode auth 打通**：CLI OAuth 服务端未上线（全路径探测 404，最新引擎同），定案走 Coding Plan API key（官方文档背书：key 为 ZCode 官方连接方式、与 App 同订阅配额池、`api.z.ai/api/anthropic` 端点）；`~/.zcode/cli/config.json` 结构自反编译确认并双机配置，本机 headless PONG 冒烟 + 真实投递均通过
+- **分发定案：dist 构建产物随仓库入库，git 安装零编译**——mini 真机连踩两坑（npm git-dep 构建环境 `tsc not found`；`npx -y tsc` 误拉 npm 上同名废包）后拍板；prepare 改为 dist 缺失才构建；CLAUDE.md 增约定「改 src 提交前必须 build 并连 dist 一起提交」
+- mini 部署模式验证：任务说明贴给 mini 的 Codex，由对端 agent 自主安装+验收——「贴给任何 agent 就能装」的分发理念首次真机闭环
+- peer 目录按 host:port 去重（设备改名/幽灵广播不再让同一台机器聚合两次）；虚拟 user 收件人的回信直接标记 delivered（驿站即收件箱，console 不再误报红色 failed）
+- @any 跨机物化生效：`any-mini-zcode-sunogate` 等 mini 会话自动出现在 MacBook 的 Claude `@` 补全
+
 ## 2026-08-06 — ZCode adapter（第四家：智谱 Z.ai）+ mDNS 稳定性根治
 
 - **新 adapter：ZCode**（智谱 Z.ai 桌面 ADE，用户称 Z code）——发现读 `~/.zcode/cli/db/db.sqlite`（readonly，App/CLI 同库同 id，三种子代理形态过滤），投递用 App 内置引擎 `zcode.cjs --resume sess_xxx --mode build --prompt`（显式非 yolo，安全底线）；mini 侧零新安装。调研+实测报告见 docs/research/research-zcode.md（含 0.15.2 引擎七条勘误：--max-turns/--settings 未实装、login 端点已 404、ZCODE_MODEL 可用、runtime 不接 shared credentials 等）

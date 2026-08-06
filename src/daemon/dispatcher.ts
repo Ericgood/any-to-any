@@ -37,6 +37,14 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     return true;
   };
 
+  // Replies addressed to the human (webui/CLI sender) have no session to
+  // resume — landing in the mailbox IS the delivery (read in the console).
+  if (claimed.to.agent === 'user') {
+    const delivered = opts.mailbox.markDelivered(claimed.id);
+    emit({ kind: 'delivered', message: delivered, detail: 'user-inbox' });
+    return true;
+  }
+
   const route = routeForMessage(claimed, opts.selfDevice ?? '');
   if (route.kind === 'relay') {
     if (!opts.relay) return fail(`target device "${route.device}" requires LAN relay (not configured)`);

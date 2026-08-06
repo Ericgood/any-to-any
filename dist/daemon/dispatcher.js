@@ -12,6 +12,13 @@ export async function dispatchOnce(opts) {
         emit({ kind: 'failed', message: failed, detail: error });
         return true;
     };
+    // Replies addressed to the human (webui/CLI sender) have no session to
+    // resume — landing in the mailbox IS the delivery (read in the console).
+    if (claimed.to.agent === 'user') {
+        const delivered = opts.mailbox.markDelivered(claimed.id);
+        emit({ kind: 'delivered', message: delivered, detail: 'user-inbox' });
+        return true;
+    }
     const route = routeForMessage(claimed, opts.selfDevice ?? '');
     if (route.kind === 'relay') {
         if (!opts.relay)
