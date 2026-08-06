@@ -90,4 +90,12 @@ node "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs" \
 6. **`zcode login` 在 0.15.2 已死**：其 OAuth 端点 `POST https://zcode.z.ai/api/v1/oauth/cli/init` 实测 404（服务端已下线该版本端点）→「OAuth response is not valid JSON」。
 7. ~~auth 的两条可行路：升级 App 跑 login / 手配 API key~~ **2026-08-06 深夜续测（App 3.6.5 / 引擎 0.16.1）推翻前半**：升级无效——`zcode login` 的 OAuth 服务在智谱**服务端未部署**。证据链：0.16.1 端点仍为 `zcode.z.ai/api/v1/oauth/cli/init`（404）；`ZCODE_ENDPOINT_ORIGIN` env 实存且生效，指向 `api.z.ai` 后得到网关层 200 + 业务 envelope `{"code":500,"msg":"404 NOT_FOUND"}`（初测只看 HTTP 码误判为活端点——再次验证信号错位教训）；`zcode.z.ai/oauth/cli/init` 307 → `/cn/...` → Next.js 404 页。0.16.1 新增的 CodingPlanApiKeyResolver（`resolveZaiBizToken`/`resolveBizApiKey`）只在 login 流程内用（access_token 换持久 apiKey 写 config），runtime 依旧不接 shared credentials（0.16.1 复测 missing API key 同 0.15.2）。bundle 里的 `--api-key` 字符串是内嵌 ansible 补全数据库的假线索。**唯一可行路：用户从 Z.ai 控制台取 Coding Plan API key，按 §7.4 结构写 `~/.zcode/cli/config.json`**（provider id 用 `zai-coding-plan`，baseURL `https://api.z.ai/api/anthropic`——与社区 Claude Code + GLM Coding Plan 配置同源）。CLI OAuth 服务端上线后 login 路径自动恢复可用。
 
+## 8. 官方文档查证（2026-08-06 深夜，回应用户质疑「key 与客户端是否一套」）
+
+- ZCode 官方文档目录**无任何 CLI/headless/login 章节**（[docs](https://zcode.z.ai/en/docs)）——CLI 未正式发布，App 内打包超前于服务端，与 §7 端点探测结论互证。
+- [Connect Models & Plans](https://zcode.z.ai/en/docs/configuration)：ZCode 官方三种连接方式 = Z.ai 账号登录（App 当前用）/ BigModel 账号 / **Use API Key**（欢迎屏一等公民选项）——API key 是官方登录方式，非旁门。
+- [Coding Plan Quick Start](https://docs.z.ai/devpack/quick-start)：key 创建地址 [z.ai/manage-apikey/apikey-list](https://z.ai/manage-apikey/apikey-list)（个人版 Individual Coding Plan > Plan Overview 下创建）；**key 用量计入订阅配额**（非按量计费）——App 与 key 同一个 plan 池；anthropic 兼容端点 `https://api.z.ai/api/anthropic`（与本机 App 配置实测一致）。
+- [Coding Plan Overview](https://docs.z.ai/devpack/overview)：官方定位就是「一个订阅用于 Claude Code、Cline、OpenCode 等多个 coding 工具」——headless 唤起 ZCode 自家引擎属最正统用法。
+- 结论三层同一：**同一订阅配额（官方文档）· 同一会话库（本机实测，CLI 建的会话出现在 App 列表）· key 为官方连接方式（App 欢迎屏）**。
+
 Sources: [ZCODE Docs](https://zcode.z.ai/en/docs/install) · [智谱 ZCode 3.0 发布](https://zhuanlan.zhihu.com/p/2052115075520008864) · [paseo#1670](https://github.com/getpaseo/paseo/issues/1670) · 本机 `/Applications/ZCode.app` + `~/.zcode/`（v3.5.3 实测）
