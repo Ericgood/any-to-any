@@ -2,6 +2,13 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-06 — 反乒乓：BLOCKED 互确认环的止血（首次真实双 agent 协作暴露）
+
+- 真实场景：用户经 console 派任务给 mini/ZCode → ZCode 回 BLOCKED（等用户 TCC 授权）→ Codex 回 BLOCKED 确认 → 双方以「我在等用户」互相回执 9+ 条不止——**低频乒乓钻过速率保护**（每轮双端各跑一次模型，频率低于 6条/分阈值），只能靠 12 深度硬顶烧钱兜底
+- 根因三层：信封 v2 强制表态的副作用（状态回执也是消息、也逼对方表态）；跨厂商信件模型缺 Codex 式任务生命周期语义（waiting 态下主管知道不用回）；无「零新增不回发」判断
+- 止血两层（TDD，134/134）：**dispatcher 机械抑制**——BLOCKED 回 BLOCKED 不回发（单边更新即断环；实质性回复如「换方案B」照常流转）；**信封/skill 协议增 NOOP**——对方消息仅为状态回执时回 `NOOP`，中继不回发
+- 根治方向记入 P3 backlog：任务生命周期语义（task/waiting/followup/interrupt，对齐 Codex 内部多 agent 模型）
+
 ## 2026-08-06 — 🎉 跨设备双机链路端到端全通（MacBook ↔ Mac mini，含 ZCode）
 
 - **P2 跨设备目标真机达成**：MacBook `@macbook` ↔ Mac mini `@mini` 配对（同 token fp）、mDNS 互发现、目录聚合（本机 4045 + mini 38 会话）、跨机投递与回信回流全链路实测通过——探针消息 MacBook → mini 的 ZCode「sunogate开发」会话，ZCode 真实执行并回报正确工作目录，回信跨机回流 MacBook 驿站

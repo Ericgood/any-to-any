@@ -187,3 +187,55 @@ describe('virtual user recipient', () => {
     expect(events).toEqual(['delivered']);
   });
 });
+
+describe('anti-pingpong suppression', () => {
+  const mkOpts = (mailbox: Mailbox, output: string) => ({
+    mailbox,
+    adapters: new Map<string, DeliveryAdapter>([
+      ['codex', fakeAdapter('codex', () => ({ ok: true, output }))],
+    ]),
+    directory: async () => DIRECTORY,
+  });
+
+  it('a BLOCKED reply to a BLOCKED message is suppressed — two waiting agents must not ack forever', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'BLOCKED waiting for user authorization' });
+    const events: string[] = [];
+    const details: string[] = [];
+    await dispatchOnce({
+      ...mkOpts(mailbox, `did some thinking\n${REPLY_MARKER} BLOCKED same here, waiting for the user`),
+      onEvent: (e) => {
+        events.push(e.kind);
+        if (e.detail) details.push(e.detail);
+      },
+    });
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+    expect(events).toEqual(['delivered', 'reply-rejected']);
+    expect(details.join(' ')).toContain('pingpong');
+    expect(mailbox.inbox({ all: true })).toHaveLength(1); // no reply filed
+  });
+
+  it('a NOOP reply is never filed back', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'DONE deployed, no further action' });
+    const events: string[] = [];
+    await dispatchOnce({
+      ...mkOpts(mailbox, `${REPLY_MARKER} NOOP`),
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(events).toEqual(['delivered', 'reply-rejected']);
+    expect(mailbox.inbox({ all: true })).toHaveLength(1);
+  });
+
+  it('a substantive (non-BLOCKED) reply to a BLOCKED message still flows', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'BLOCKED waiting for user authorization' });
+    const events: string[] = [];
+    await dispatchOnce({
+      ...mkOpts(mailbox, `${REPLY_MARKER} 换方案B：不等授权，先用模拟数据把流程跑通`),
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(events).toEqual(['delivered', 'reply-filed']);
+    expect(mailbox.inbox({ all: true })).toHaveLength(2);
+  });
+});

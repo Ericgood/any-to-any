@@ -68,6 +68,22 @@ export async function dispatchOnce(opts) {
     emit({ kind: 'delivered', message: delivered });
     const replyText = extractReply(result.output ?? '');
     if (replyText) {
+        // Anti-pingpong: a BLOCKED status answered with another BLOCKED status is
+        // two waiting agents confirming each other — zero information, endless
+        // round-trips (each too slow to trip the rate guard). Same for explicit
+        // NOOP replies (envelope's "nothing new to add" escape hatch).
+        const incoming = claimed.parts.map((p) => p.text).join('\n').trimStart();
+        const reply = replyText.trimStart();
+        const isNoop = reply === 'NOOP' || reply.startsWith('NOOP ');
+        const blockedPingpong = incoming.startsWith('BLOCKED') && reply.startsWith('BLOCKED');
+        if (isNoop || blockedPingpong) {
+            emit({
+                kind: 'reply-rejected',
+                message: delivered,
+                detail: isNoop ? 'noop reply — not filed' : 'blocked-pingpong suppressed',
+            });
+            return true;
+        }
         try {
             const reply = opts.mailbox.reply(claimed.id, replyText, 'auto');
             emit({ kind: 'reply-filed', message: reply });
