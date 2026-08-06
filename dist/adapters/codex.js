@@ -1,0 +1,128 @@
+import { open, readdir, readFile, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
+import { realExec } from './exec.js';
+const ROLLOUT_RE = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
+const FIRST_LINE_MAX = 1024 * 1024; // session_meta can carry long base_instructions
+const TITLE_MAX = 80;
+/** Read up to the first newline without loading the whole rollout file. */
+async function readFirstLine(path) {
+    const fd = await open(path, 'r');
+    try {
+        const chunks = [];
+        let total = 0;
+        const buf = Buffer.alloc(64 * 1024);
+        while (total < FIRST_LINE_MAX) {
+            const { bytesRead } = await fd.read(buf, 0, buf.length, total);
+            if (bytesRead === 0)
+                break;
+            const nl = buf.subarray(0, bytesRead).indexOf(0x0a);
+            if (nl !== -1) {
+                chunks.push(Buffer.from(buf.subarray(0, nl)));
+                return Buffer.concat(chunks).toString('utf8');
+            }
+            chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
+            total += bytesRead;
+        }
+        return total > 0 ? Buffer.concat(chunks).toString('utf8') : null;
+    }
+    finally {
+        await fd.close();
+    }
+}
+async function loadIndex(indexFile) {
+    const map = new Map();
+    let raw;
+    try {
+        raw = await readFile(indexFile, 'utf8');
+    }
+    catch {
+        return map;
+    }
+    for (const line of raw.split('\n')) {
+        if (!line.trim())
+            continue;
+        try {
+            const rec = JSON.parse(line);
+            if (!rec.id || typeof rec.thread_name !== 'string')
+                continue;
+            const entry = { threadName: rec.thread_name };
+            const ts = rec.updated_at ? Date.parse(rec.updated_at) : NaN;
+            if (!Number.isNaN(ts))
+                entry.updatedAtMs = ts;
+            map.set(rec.id, entry); // later lines win — index is append-mostly
+        }
+        catch {
+            // skip corrupt index lines
+        }
+    }
+    return map;
+}
+export function createCodexAdapter(options = {}) {
+    const sessionsDir = options.sessionsDir ?? join(homedir(), '.codex', 'sessions');
+    const indexFile = options.indexFile ?? join(homedir(), '.codex', 'session_index.jsonl');
+    const exec = options.exec ?? realExec;
+    const timeoutMs = options.deliverTimeoutMs ?? 300_000;
+    return {
+        agent: 'codex',
+        // Verified 2026-08-05: exec resume carries full history, is cwd-independent,
+        // and tolerates concurrent resumes of the same thread (spec §9 R2).
+        async deliver(session, envelope) {
+            const { stdout, stderr, code } = await exec('codex', ['exec', 'resume', session.sessionId, '--skip-git-repo-check', envelope], session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
+            if (code !== 0) {
+                // the actual error is at the END of stderr (after the banner + prompt echo)
+                return { ok: false, error: `codex exec resume exited ${code}: …${stderr.slice(-500)}` };
+            }
+            return { ok: true, output: stdout };
+        },
+        async listSessions() {
+            let entries;
+            try {
+                entries = (await readdir(sessionsDir, { recursive: true }));
+            }
+            catch {
+                return []; // codex not installed / no sessions yet
+            }
+            const index = await loadIndex(indexFile);
+            const sessions = [];
+            for (const rel of entries) {
+                const name = basename(rel);
+                const m = ROLLOUT_RE.exec(name);
+                if (!m || !m[1])
+                    continue;
+                const sessionId = m[1];
+                const path = join(sessionsDir, rel);
+                try {
+                    const first = await readFirstLine(path);
+                    if (!first)
+                        continue;
+                    const meta = JSON.parse(first);
+                    if (meta.type !== 'session_meta')
+                        continue;
+                    // multi-agent sub-agent threads reject direct input (app-server -32600) —
+                    // they are parent-driven and must not be addressable
+                    if (meta.payload?.parent_thread_id || meta.payload?.thread_source === 'subagent')
+                        continue;
+                    const cwd = typeof meta.payload?.cwd === 'string' ? meta.payload.cwd : '';
+                    const idx = index.get(sessionId);
+                    const title = (idx?.threadName ?? basename(cwd) ?? '').trim() || 'untitled';
+                    const st = await stat(path);
+                    // index updated_at can be weeks stale (the desktop app doesn't bump it);
+                    // the rollout file mtime moves on every turn — trust whichever is newer
+                    sessions.push({
+                        agent: 'codex',
+                        sessionId,
+                        title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
+                        cwd,
+                        lastActiveAt: Math.max(idx?.updatedAtMs ?? 0, st.mtimeMs),
+                    });
+                }
+                catch {
+                    // unreadable rollout — skip rather than fail the whole scan
+                }
+            }
+            return sessions;
+        },
+    };
+}
+//# sourceMappingURL=codex.js.map

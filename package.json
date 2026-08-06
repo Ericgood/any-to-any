@@ -21,12 +21,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npx -y tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "prepare": "npm run build"
+    "prepare": "test -f dist/cli.js || npm run build"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
