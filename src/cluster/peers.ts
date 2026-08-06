@@ -91,6 +91,12 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
         fp: txt.fp ?? '',
         lastSeenAt: Date.now(),
       });
+      // Same endpoint under another name = the device was renamed (or a ghost
+      // advert from its previous daemon) — drop the stale alias so the
+      // directory doesn't aggregate one machine twice.
+      for (const [key, p] of peers) {
+        if (key !== device.toLowerCase() && p.host === host && p.port === service.port) peers.delete(key);
+      }
     };
     browser.on('up', upsert);
     browser.on('down', (service: Service) => {
