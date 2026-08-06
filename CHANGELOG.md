@@ -2,6 +2,14 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-07 — 修复 codex --sandbox 旗标位置回归（Codex 收不到回信的真凶）
+
+- 回归根因：机主提权的 `--sandbox` 拼在 `resume` 子命令之后 → codex CLI 报 unexpected argument (exit 2)，开启 codex 提权的机器上所有投进本机 Codex 的消息（含 mini ZCode 的回信）全部失败，用户现象「Codex 永远等不到回复」
+- 修复：`--sandbox` 移到 `exec` 与 `resume` 之间（真实 argv 实测通过），单测锁死顺序；143 全绿
+- 用户真实数据补救：那条因此死掉的最新回信（mini ZCode「DONE write-smoke」+ CRX 私钥反问）从 dead 复活重投，已成功 delivered 进 Codex 会话；重启后零新增 --sandbox 错误
+- 教训入 tasks/lessons.md：子命令 CLI 旗标发版前必须按真实 argv 验证位置，不能只凭 --help 有该旗标就随意摆放
+
+
 ## 2026-08-07 — ZCode 无头回合的机主提权（真实协作卡点）
 
 - 真实暴露：Codex 指挥 mini/ZCode 修系统（改 env、launchctl）时，ZCode「只读」干不了活——根因是 adapter 的安全默认 `--mode build` 在无头回合无人点确认，需确认工具全被拒绝

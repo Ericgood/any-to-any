@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-08-07 — CLI 旗标位置没按真实 argv 验证就发版，造成全量投递回归
+- **错误**：给 codex 加 `--sandbox` 提权时，只看了 `codex exec --help` 确认旗标存在，就把它拼在 `exec resume <id> --skip-git-repo-check` **之后**发版。实际 `--sandbox` 是 `exec` 的旗标、不属于 `resume` 子命令，CLI 报 `unexpected argument '--sandbox'` (exit 2)——机主一旦开启 codex 提权，**每一条投进本机 Codex 的消息（含所有回信）全部失败**，用户现象是「Codex 永远收不到回复」。三次真实往返被废。
+- **正确做法**：涉及子命令的 CLI 旗标，发版前必须用**真实 argv 跑一次**验证解析通过（`codex exec --sandbox X resume <假id> ...` 看是否越过 arg parsing 只在业务层报错），不能只凭 `--help` 里「有这个旗标」就假设位置随便放。子命令 ≠ 父命令的旗标作用域。
+- **附带**：诊断「A 收不到 B 的回复」类问题，先查 daemon 日志的 `failed` 行拿到确切 stderr，比从症状反推快得多——本案日志里 `unexpected argument '--sandbox'` 一行直接定位。
+
 ## 2026-08-06 — 测试直打真实用户目录，谋杀线上 daemon 的 pid 文件
 - **错误**：setup.test.ts 里的 pidfile 测试段调用 `writePid()/clearPid()` 时没传隔离 home（这两个函数默认走真实 `~/.anytoany/`）——每跑一次 vitest 就把正在运行的 daemon 的 pid 文件覆盖再删除。次日造成三次 `anyd stop` 失明 + pid 归属排障绕路，耗费一小时才抓到现行（起 daemon → 跑 vitest → 盯 pid 文件消失）。
 - **正确做法**：① 任何测试触碰「按默认路径解析真实用户目录」的函数，必须显式注入隔离 home（参数或 env），写完自查一遍默认参数链路最终落在哪个真实路径；② 排障时对「文件莫名消失」这类幽灵现象，早做**抓现行实验**（before/after 快照 + 逐候选排除）而不是连续推理猜测——本案推理绕了三轮，实验一发命中。
