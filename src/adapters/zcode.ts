@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
+import { anytoanyHome } from '../home.js';
 import { realExec } from './exec.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
@@ -14,6 +15,31 @@ interface ZcodeAdapterOptions {
   engineBin?: string;
   exec?: ExecFn;
   deliverTimeoutMs?: number;
+  /** anytoany machine config (~/.anytoany/config.json) — delivery mode opt-in. */
+  configFile?: string;
+}
+
+const ZCODE_MODES = new Set(['plan', 'edit', 'build', 'yolo']);
+
+/**
+ * Delivery permission mode for headless zcode turns. Default 'build': safe,
+ * but confirmation-gated tools are DENIED headless (no human to approve), so
+ * the session is effectively read-only. The MACHINE OWNER may escalate via
+ * ~/.anytoany/config.json → { "zcode": { "deliverMode": "yolo" } } — an
+ * explicit local opt-in; never controlled by the sending agent. Read per
+ * delivery so edits apply without a daemon restart.
+ */
+function loadDeliverMode(configFile: string): string {
+  try {
+    const raw = JSON.parse(readFileSync(configFile, 'utf8')) as {
+      zcode?: { deliverMode?: string };
+    };
+    const mode = raw.zcode?.deliverMode;
+    if (mode && ZCODE_MODES.has(mode)) return mode;
+  } catch {
+    /* no config or unreadable — stay on the safe default */
+  }
+  return 'build';
 }
 
 /** Loosely-typed row: survive schema drift across ZCode versions. */
@@ -46,6 +72,7 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
   const dbFile = options.dbFile ?? defaultDbFile();
   const exec = options.exec ?? realExec;
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
+  const configFile = options.configFile ?? join(anytoanyHome(), '.anytoany', 'config.json');
 
   return {
     agent: 'zcode',
@@ -62,12 +89,12 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
         ...(session.cwd ? ['--cwd', session.cwd] : []),
         '--resume',
         session.sessionId,
-        // headless --prompt defaults to yolo (skips ALL permission gates);
-        // build is ZCode's regular working mode — never escalate.
+        // Never inherit zcode's headless default (yolo) implicitly — the mode
+        // comes from the safe default or the machine owner's explicit opt-in.
         // NB: --max-turns/--settings appear in 0.15.2 help text but its parser
         // rejects them (verified) — turn count is bounded by the exec timeout.
         '--mode',
-        'build',
+        loadDeliverMode(configFile),
         '--prompt',
         envelope,
       ];

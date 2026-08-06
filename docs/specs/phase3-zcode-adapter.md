@@ -17,7 +17,8 @@
 
 - 引擎解析优先级：`ANYTOANY_ZCODE_BIN` env → PATH 上的 `zcode`（当前官方无此分发，预留）→ `/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs`。`.cjs` 用 `node` 执行。
 - argv：`--cwd <cwd>（有则传）--resume <sessionId> --mode build --max-turns 25 --prompt <envelope>`
-- **安全底线：显式 `--mode build`**——`--prompt` 无头默认 yolo（跳过全部权限确认），绝不使用；build 为 ZCode 常规工作模式，等价 codex exec 默认权限层级。
+- **安全底线：显式 `--mode build`**——`--prompt` 无头默认 yolo（跳过全部权限确认），绝不隐式继承；build 为 ZCode 常规工作模式，等价 codex exec 默认权限层级。
+- **权限模式与机主授权（2026-08-07 增补，真实协作暴露）**：build 模式下需确认的工具在无头回合会被直接拒绝（无人点确认）→ 会话事实只读，Codex 指挥 ZCode 写系统即卡死。定案：**机主显式提权**——目标机器的 `~/.anytoany/config.json` 写 `{ "zcode": { "deliverMode": "yolo" } }`（白名单校验 plan/edit/build/yolo，非法值回退 build；每次投递实时读盘，改配置免重启）。提权决定权只在机主手里，发消息的 agent 永远无法指定模式。风险边界如实告知：开启后该机被唤起的 ZCode 回合无确认执行命令，信封防注入是提示层非强制层，仅建议在自有集群（token 独享）内开启。此为「投递级权限档案」（P3）第一块砖。
 - 超时 300s；失败取 stderr 尾部 500 字符（错误在横幅回显之后，对齐 codex 经验）。
 - 不用 `--json`：回信抽取靠 stdout 文本中的 REPLY_MARKER，JSON 转义会污染 marker 之后的正文。
 
