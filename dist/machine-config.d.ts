@@ -7,6 +7,7 @@
 export interface MachineConfig {
     zcode?: {
         deliverMode?: string;
+        deliverTimeoutSec?: number;
     };
     codex?: {
         sandbox?: string;

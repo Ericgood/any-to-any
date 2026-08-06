@@ -34,6 +34,12 @@ function loadDeliverMode(configFile: string): string {
   return mode && ZCODE_MODES.has(mode) ? mode : 'build';
 }
 
+/** Owner-configured per-turn budget (heavy tasks outgrow the 300s default). */
+function loadDeliverTimeoutMs(configFile: string): number | null {
+  const sec = readMachineConfig(configFile).zcode?.deliverTimeoutSec;
+  return typeof sec === 'number' && sec >= 60 && sec <= 3600 ? sec * 1000 : null;
+}
+
 /** Loosely-typed row: survive schema drift across ZCode versions. */
 interface SessionRow {
   id?: unknown;
@@ -91,10 +97,11 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
         envelope,
       ];
       const viaNode = engine.endsWith('.cjs') || engine.endsWith('.js');
+      const turnTimeoutMs = options.deliverTimeoutMs ?? loadDeliverTimeoutMs(configFile) ?? timeoutMs;
       const { stdout, stderr, code } = await exec(
         viaNode ? 'node' : engine,
         viaNode ? [engine, ...args] : args,
-        session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
+        session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
       );
       if (code !== 0) {
         return { ok: false, error: `zcode resume exited ${code}: …${stderr.slice(-500)}` };

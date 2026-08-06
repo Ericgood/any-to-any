@@ -20,6 +20,11 @@ function loadDeliverMode(configFile) {
     const mode = readMachineConfig(configFile).zcode?.deliverMode;
     return mode && ZCODE_MODES.has(mode) ? mode : 'build';
 }
+/** Owner-configured per-turn budget (heavy tasks outgrow the 300s default). */
+function loadDeliverTimeoutMs(configFile) {
+    const sec = readMachineConfig(configFile).zcode?.deliverTimeoutSec;
+    return typeof sec === 'number' && sec >= 60 && sec <= 3600 ? sec * 1000 : null;
+}
 function defaultDbFile() {
     // Fixed path on purpose: ZCODE_DATA_BASE_DIR in engine 0.15.2 only relocates
     // credentials, NOT this db (verified) — honoring it here would desync us.
@@ -66,7 +71,8 @@ export function createZcodeAdapter(options = {}) {
                 envelope,
             ];
             const viaNode = engine.endsWith('.cjs') || engine.endsWith('.js');
-            const { stdout, stderr, code } = await exec(viaNode ? 'node' : engine, viaNode ? [engine, ...args] : args, session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
+            const turnTimeoutMs = options.deliverTimeoutMs ?? loadDeliverTimeoutMs(configFile) ?? timeoutMs;
+            const { stdout, stderr, code } = await exec(viaNode ? 'node' : engine, viaNode ? [engine, ...args] : args, session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs });
             if (code !== 0) {
                 return { ok: false, error: `zcode resume exited ${code}: …${stderr.slice(-500)}` };
             }
