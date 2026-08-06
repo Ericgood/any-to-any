@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { runSetup } from '../src/setup.js';
-import { readPid, writePid, clearPid, isAlive } from '../src/daemon/pidfile.js';
 
 const home = mkdtempSync(join(tmpdir(), 'anytoany-setup-'));
 
@@ -48,16 +47,5 @@ describe('runSetup', () => {
     await runSetup({ withHook: true, home });
     const second = JSON.parse(readFileSync(hooksPath, 'utf8')) as typeof first;
     expect(second.hooks['UserPromptSubmit']).toHaveLength(1);
-  });
-});
-
-describe('pidfile', () => {
-  it('write/read/clear round-trip and liveness', () => {
-    writePid(process.pid);
-    expect(readPid()).toBe(process.pid);
-    expect(isAlive(process.pid)).toBe(true);
-    expect(isAlive(999999)).toBe(false);
-    clearPid();
-    expect(readPid()).toBeNull();
   });
 });

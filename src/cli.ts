@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
+import { createZcodeAdapter } from './adapters/zcode.js';
 import { resolveTarget } from './directory/resolve.js';
 import { listAllSessions } from './directory/scanner.js';
 import { formatRelativeTime, shortenHome } from './format.js';
@@ -12,7 +13,7 @@ import { createMailbox, type Message, type SessionRef } from './mailbox/mailbox.
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
 
-const defaultAdapters = () => [createClaudeAdapter(), createCodexAdapter()];
+const defaultAdapters = () => [createClaudeAdapter(), createCodexAdapter(), createZcodeAdapter()];
 const openMailbox = () => createMailbox(createDb());
 
 /** Resolve an @-target into a concrete session, printing candidates on failure. */
@@ -236,10 +237,25 @@ program
   .description('Stop the anyd daemon')
   .action(async () => {
     const { readPid, clearPid } = await import('./daemon/pidfile.js');
-    const pid = readPid();
+    let pid = readPid();
     if (!pid) {
-      console.log('daemon not running (no pid file)');
-      return;
+      // pid file lost (crashed starter, manual delete) — find the daemon by name
+      const { execSync } = await import('node:child_process');
+      try {
+        const out = execSync('pgrep -f "anyd start"', { encoding: 'utf8' });
+        const found = out
+          .split('\n')
+          .map((l) => Number.parseInt(l, 10))
+          .filter((n) => Number.isFinite(n) && n !== process.pid);
+        pid = found[0] ?? null;
+      } catch {
+        pid = null; // pgrep exits non-zero when nothing matches
+      }
+      if (!pid) {
+        console.log('daemon not running (no pid file, no process)');
+        return;
+      }
+      console.log(`pid file missing — found daemon by process name (pid ${pid})`);
     }
     try {
       process.kill(pid, 'SIGTERM');
