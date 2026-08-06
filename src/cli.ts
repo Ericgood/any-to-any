@@ -148,8 +148,23 @@ program
       console.error(`daemon already running (pid ${existing}) — stop it first with anyd stop`);
       process.exit(1);
     }
+    // A live console on our port means another anyd owns this machine even if
+    // its pid file is gone — bail BEFORE touching the pid file, or our exit
+    // cleanup would erase the survivor's record.
+    if (opts.web || lan) {
+      const occupied = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
+        signal: AbortSignal.timeout(1500),
+      }).then(
+        () => true,
+        () => false,
+      );
+      if (occupied) {
+        console.error(`port ${port} is already serving — another anyd is running (anyd stop first)`);
+        process.exit(1);
+      }
+    }
     writePid();
-    process.on('exit', clearPid);
+    process.on('exit', () => clearPid(process.pid));
 
     const stale = mailbox.recoverStale();
     if (stale > 0) console.log(`recovered ${stale} message(s) stranded by a previous daemon run`);
@@ -169,7 +184,14 @@ program
         directory,
         port,
         ...(lan
-          ? { peering: { selfDevice: lan.selfDevice, token: lan.token, localDirectory } }
+          ? {
+              peering: {
+                selfDevice: lan.selfDevice,
+                token: lan.token,
+                localDirectory,
+                peers: () => lan?.registry.list() ?? [],
+              },
+            }
           : {}),
       });
       console.log(`web console: http://127.0.0.1:${web.port}`);
@@ -320,24 +342,59 @@ program
   });
 program
   .command('peers')
-  .description('List LAN peers discovered via mDNS (requires running daemon on both ends)')
-  .action(async () => {
+  .description('List LAN peers discovered via mDNS (asks the running daemon; passive scan as fallback)')
+  .option('--port <port>', 'local daemon console port', '7433')
+  .action(async (opts: { port: string }) => {
     const { loadOrCreateToken, tokenFingerprint } = await import('./cluster/token.js');
     const { getDeviceName } = await import('./cluster/device.js');
-    const { startPeerRegistry } = await import('./cluster/peers.js');
     const fp = tokenFingerprint(loadOrCreateToken());
-    const registry = startPeerRegistry({ selfDevice: getDeviceName(), port: 0, token: loadOrCreateToken() });
-    console.log('browsing mDNS for 3s…');
-    await new Promise((r) => setTimeout(r, 3000));
-    const peers = registry.list();
-    registry.stop();
+    const port = Number.parseInt(opts.port, 10) || 7433;
+
+    interface PeerRow {
+      device: string;
+      host: string;
+      port: number;
+      fp: string;
+      paired?: boolean;
+    }
+    let peers: PeerRow[] | null = null;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/peers`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const body = (await res.json()) as { lan: boolean; peers: PeerRow[] };
+        if (!body.lan) {
+          console.log('daemon is running with LAN peering disabled (--no-lan)');
+          return;
+        }
+        peers = body.peers;
+      }
+    } catch {
+      /* daemon not running or older build — fall back to a passive scan */
+    }
+    if (peers === null) {
+      const { startPeerRegistry } = await import('./cluster/peers.js');
+      const registry = startPeerRegistry({
+        selfDevice: getDeviceName(),
+        port: 0,
+        token: loadOrCreateToken(),
+        publish: false, // browse-only: a CLI scan has no console port to announce
+      });
+      console.log('daemon not reachable — passive mDNS scan for 3s…');
+      await new Promise((r) => setTimeout(r, 3000));
+      peers = registry.list();
+      registry.stop();
+    }
+    console.log(`self: @${getDeviceName()}  fp ${fp}`);
     if (peers.length === 0) {
       console.log('no peers found (is anyd start running on the other device? same network?)');
       return;
     }
     for (const p of peers) {
-      const paired = p.fp === fp ? 'paired' : 'NOT paired (different token — run anyd pair)';
-      console.log(`@${p.device}  ${p.host}:${p.port}  ${paired}`);
+      const isPaired = p.paired ?? p.fp === fp;
+      const status = isPaired
+        ? 'paired'
+        : `NOT paired — run anyd pair --show here, then anyd pair --set <token> on @${p.device} and restart anyd there`;
+      console.log(`@${p.device}  ${p.host}:${p.port}  ${status}`);
     }
   });
 program

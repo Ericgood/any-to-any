@@ -19,8 +19,10 @@ export function readPid(): number | null {
   }
 }
 
-export function clearPid(): void {
+/** Remove the pid file. With ownPid, only if this process is the recorded owner. */
+export function clearPid(ownPid?: number): void {
   try {
+    if (ownPid !== undefined && readPid() !== ownPid) return;
     rmSync(pidFile());
   } catch {
     /* already gone */

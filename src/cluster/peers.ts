@@ -22,34 +22,62 @@ export interface PeerRegistry {
 
 const SERVICE_TYPE = 'anytoany';
 
+/**
+ * Pick the address a LAN peer is actually reachable on. mDNS advertises every
+ * interface, including proxy TUN fakes (198.18.0.0/15) and link-local junk —
+ * prefer RFC1918 private ranges, never return known-unroutable ranges.
+ */
+export function pickLanAddress(addresses: string[]): string | undefined {
+  const ipv4 = addresses.filter((a) => a.includes('.'));
+  const unroutable = (a: string) =>
+    a.startsWith('127.') ||
+    a.startsWith('169.254.') ||
+    a.startsWith('198.18.') ||
+    a.startsWith('198.19.');
+  const isPrivate = (a: string) =>
+    a.startsWith('192.168.') ||
+    a.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(a);
+  return ipv4.find((a) => isPrivate(a) && !unroutable(a)) ?? ipv4.find((a) => !unroutable(a));
+}
+
 export interface DiscoveryOptions {
   selfDevice: string;
   port: number;
   token: string;
   /** Disable mDNS (tests / --peer only mode). */
   mdns?: boolean;
+  /** Browse without announcing — for passive CLI scans that have no real port. */
+  publish?: boolean;
 }
 
 /** Publish this daemon and track peers via mDNS (`_anytoany._tcp`). */
 export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
   const peers = new Map<string, Peer>();
   const fp = tokenFingerprint(opts.token);
-  let bonjour: Bonjour | null = null;
+  let publisher: Bonjour | null = null;
+  let finder: Bonjour | null = null;
 
   if (opts.mdns !== false) {
-    bonjour = new Bonjour();
-    bonjour.publish({
-      name: `anytoany-${opts.selfDevice}`,
-      type: SERVICE_TYPE,
-      port: opts.port,
-      txt: { device: opts.selfDevice, fp },
-    });
-    const browser = bonjour.find({ type: SERVICE_TYPE });
+    if (opts.publish !== false) {
+      publisher = new Bonjour();
+      publisher.publish({
+        name: `anytoany-${opts.selfDevice}`,
+        type: SERVICE_TYPE,
+        port: opts.port,
+        txt: { device: opts.selfDevice, fp },
+      });
+    }
+    // Separate instance for browsing: sharing a socket with the publisher
+    // starves the browser's own queries — it then only ever overhears
+    // responses triggered by other hosts (verified on macOS).
+    finder = new Bonjour();
+    const browser = finder.find({ type: SERVICE_TYPE });
     const upsert = (service: Service): void => {
       const txt = (service.txt ?? {}) as { device?: string; fp?: string };
       const device = txt.device;
       if (!device || device.toLowerCase() === opts.selfDevice.toLowerCase()) return;
-      const host = service.addresses?.find((a) => a.includes('.')) ?? service.host;
+      const host = pickLanAddress(service.addresses ?? []) ?? service.host;
       if (!host) return;
       peers.set(device.toLowerCase(), {
         device,
@@ -73,7 +101,8 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
       peers.set(device.toLowerCase(), { device, host, port, fp: peerFp, lastSeenAt: Date.now() });
     },
     stop() {
-      bonjour?.destroy();
+      publisher?.destroy();
+      finder?.destroy();
     },
   };
 }

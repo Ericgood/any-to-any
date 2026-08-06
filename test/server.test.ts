@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
+import { tokenFingerprint } from '../src/cluster/token.js';
 import { startConsoleServer, type RunningServer } from '../src/daemon/server.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
@@ -78,6 +79,12 @@ describe('console server', () => {
   it('unknown routes 404', async () => {
     expect((await fetch(base + '/api/nope')).status).toBe(404);
   });
+
+  it('GET /api/peers reports lan disabled when peering is off', async () => {
+    const body = (await (await fetch(base + '/api/peers')).json()) as { lan: boolean; peers: unknown[] };
+    expect(body.lan).toBe(false);
+    expect(body.peers).toEqual([]);
+  });
 });
 
 describe('peer endpoints', () => {
@@ -93,10 +100,31 @@ describe('peer endpoints', () => {
       directory: async () => DIRECTORY,
       port: PEER_PORT,
       changePollMs: 60_000,
-      peering: { selfDevice: 'testbox', token: 'secret-token', localDirectory: async () => DIRECTORY },
+      peering: {
+        selfDevice: 'testbox',
+        token: 'secret-token',
+        localDirectory: async () => DIRECTORY,
+        peers: () => [
+          { device: 'mini', host: '10.0.0.2', port: 7433, fp: tokenFingerprint('secret-token'), lastSeenAt: 1 },
+          { device: 'stranger', host: '10.0.0.9', port: 7433, fp: 'deadbeef', lastSeenAt: 2 },
+        ],
+      },
     });
   });
   afterAll(() => server.close());
+
+  it('GET /api/peers lists live peers with pairing state (loopback console route)', async () => {
+    const body = (await (await fetch(peerBase + '/api/peers')).json()) as {
+      lan: boolean;
+      self: { device: string; fp: string } | null;
+      peers: Array<{ device: string; paired: boolean }>;
+    };
+    expect(body.lan).toBe(true);
+    expect(body.self?.device).toBe('testbox');
+    expect(body.self?.fp).toBe(tokenFingerprint('secret-token'));
+    const byDevice = Object.fromEntries(body.peers.map((p) => [p.device, p.paired]));
+    expect(byDevice).toEqual({ mini: true, stranger: false });
+  });
 
   it('rejects peer requests without the cluster token', async () => {
     expect((await fetch(peerBase + '/api/peer/sessions')).status).toBe(401);
