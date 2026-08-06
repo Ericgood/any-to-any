@@ -93,13 +93,22 @@ export function createCodexAdapter(options = {}) {
                 return []; // codex not installed / no sessions yet
             }
             const index = await loadIndex(indexFile);
-            const sessions = [];
+            // A thread can span several rollout files (new day, app compaction).
+            // `codex exec resume` reads the NEWEST one — so that is the file that
+            // must pass the health check, and each thread must appear only once.
+            const newestRollout = new Map();
             for (const rel of entries) {
                 const name = basename(rel);
                 const m = ROLLOUT_RE.exec(name);
                 if (!m || !m[1])
                     continue;
-                const sessionId = m[1];
+                const prev = newestRollout.get(m[1]);
+                if (!prev || basename(prev.rel).localeCompare(name) < 0) {
+                    newestRollout.set(m[1], { rel, sessionId: m[1] });
+                }
+            }
+            const sessions = [];
+            for (const { rel, sessionId } of newestRollout.values()) {
                 const path = join(sessionsDir, rel);
                 try {
                     const first = await readFirstLine(path);

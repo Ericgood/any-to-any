@@ -56,7 +56,19 @@ describe('codex adapter listSessions', () => {
     const sessions = await adapter.listSessions();
     const orphan = sessions.find((x) => x.sessionId === '44444444-4444-4444-8444-444444444444');
     expect(orphan?.title).toBe('codex-proj-orphan');
-    expect(sessions).toHaveLength(2); // ghost 9999… from index must not appear
+    expect(sessions).toHaveLength(3); // ghost 9999… from index must not appear
+  });
+
+  it('a thread whose NEWEST rollout lacks session metadata is unresumable — excluded (dead-door)', async () => {
+    const sessions = await adapter.listSessions();
+    expect(sessions.find((x) => x.sessionId === '66666666-6666-4666-8666-666666666666')).toBeUndefined();
+  });
+
+  it('multi-rollout threads appear exactly once, keyed off the newest rollout', async () => {
+    const sessions = await adapter.listSessions();
+    const dual = sessions.filter((x) => x.sessionId === '77777777-7777-4777-8777-777777777777');
+    expect(dual).toHaveLength(1);
+    expect(dual[0]?.cwd).toBe('/tmp/codex-proj-dual');
   });
 
   it('excludes multi-agent sub-agent threads (they reject direct input)', async () => {
