@@ -39,6 +39,9 @@ export interface SendInput {
     text: string;
     contextId?: string;
     via?: string;
+    /** Land in this existing conversation instead of deriving one from the
+     *  (from,to) pair — keeps three-party traffic (user + agent pair) in ONE thread. */
+    conversationId?: string;
 }
 export interface InboxQuery {
     toSession?: string;

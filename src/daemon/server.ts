@@ -202,12 +202,20 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       return;
     }
     if (req.method === 'POST' && path === '/api/messages') {
-      const body = (await readBody(req)) as Partial<SendBody>;
+      const body = (await readBody(req)) as Partial<SendBody> & { conversationId?: string };
       if (!isSessionRef(body.from) || !isSessionRef(body.to) || typeof body.text !== 'string' || !body.text.trim()) {
-        json(res, 400, { error: 'expected {from:{agent,sessionId}, to:{agent,sessionId}, text}' });
+        json(res, 400, { error: 'expected {from:{agent,sessionId}, to:{agent,sessionId}, text, conversationId?}' });
         return;
       }
-      const m = opts.mailbox.send({ from: body.from, to: body.to, text: body.text, via: 'webui' });
+      const m = opts.mailbox.send({
+        from: body.from,
+        to: body.to,
+        text: body.text,
+        via: 'webui',
+        ...(typeof body.conversationId === 'string' && body.conversationId
+          ? { conversationId: body.conversationId }
+          : {}),
+      });
       broadcast();
       json(res, 201, { message: m });
       return;

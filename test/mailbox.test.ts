@@ -179,3 +179,27 @@ describe('mailbox', () => {
     });
   });
 });
+
+describe('three-party context — user piggyback on an agent pair thread', () => {
+  const A = { agent: 'codex', sessionId: 'aaaa1111-0000-4000-8000-000000000001' };
+  const B = { agent: 'zcode', sessionId: 'sess_bbbb2222-0000-4000-8000-000000000002', device: 'mini' };
+  const USER = { agent: 'user', sessionId: 'cli' };
+
+  it('explicit conversationId keeps user messages AND their replies in the pair thread', () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const seed = mailbox.send({ from: A, to: B, text: 'kickoff' });
+    const um = mailbox.send({ from: USER, to: B, text: '老板指示', conversationId: seed.conversationId });
+    expect(um.conversationId).toBe(seed.conversationId);
+    const r = mailbox.reply(um.id, 'ok boss');
+    expect(r.conversationId).toBe(seed.conversationId);
+    expect(mailbox.listConversations()).toHaveLength(1);
+    expect(mailbox.listMessages(seed.conversationId)).toHaveLength(3);
+  });
+
+  it('rejects an unknown conversationId instead of silently forking', () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    expect(() =>
+      mailbox.send({ from: USER, to: A, text: 'x', conversationId: 'no-such-conversation' }),
+    ).toThrow(/not found/);
+  });
+});

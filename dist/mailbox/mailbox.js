@@ -66,7 +66,19 @@ export function createMailbox(db, opts = {}) {
         const contextId = input.contextId ?? id;
         if (input.contextId)
             assertLoopSafe(input.contextId, ts);
-        const conversationId = ensureConversation(input.from, input.to, ts);
+        let conversationId;
+        if (input.conversationId) {
+            const exists = db
+                .prepare('SELECT id FROM conversations WHERE id = ?')
+                .get(input.conversationId);
+            if (!exists)
+                throw new Error(`conversation not found: ${input.conversationId}`);
+            db.prepare('UPDATE conversations SET last_message_at = ? WHERE id = ?').run(ts, input.conversationId);
+            conversationId = input.conversationId;
+        }
+        else {
+            conversationId = ensureConversation(input.from, input.to, ts);
+        }
         const part = input.via ? { type: 'text', text: input.text, via: input.via } : { type: 'text', text: input.text };
         db.prepare(`INSERT INTO messages (id, conversation_id, context_id, from_agent, from_session, from_device, to_agent, to_session, to_device, parts, status, attempts, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`).run(id, conversationId, contextId, input.from.agent, input.from.sessionId, input.from.device ?? null, input.to.agent, input.to.sessionId, input.to.device ?? null, JSON.stringify([part]), ts, ts);
@@ -88,6 +100,9 @@ export function createMailbox(db, opts = {}) {
                 to: original.from,
                 text,
                 contextId: original.contextId,
+                // stay in the original thread — replying to a piggybacked user message
+                // must not fork a user↔agent pair conversation
+                conversationId: original.conversationId,
             };
             if (via)
                 input.via = via;
