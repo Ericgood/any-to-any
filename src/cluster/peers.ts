@@ -57,6 +57,7 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
   const fp = tokenFingerprint(opts.token);
   let publisher: Bonjour | null = null;
   let finder: Bonjour | null = null;
+  let requery: NodeJS.Timeout | null = null;
 
   if (opts.mdns !== false) {
     if (opts.publish !== false) {
@@ -66,6 +67,10 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
         type: SERVICE_TYPE,
         port: opts.port,
         txt: { device: opts.selfDevice, fp },
+        // A same-name record on the network can only be our own stale ghost
+        // (a crashed daemon that never sent its mDNS goodbye). Probing would
+        // throw an uncatchable name-conflict — announce and reclaim instead.
+        probe: false,
       });
     }
     // Separate instance for browsing: sharing a socket with the publisher
@@ -92,6 +97,11 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
       const txt = (service.txt ?? {}) as { device?: string };
       if (txt.device) peers.delete(txt.device.toLowerCase());
     });
+    // The browser's initial query can be silently lost (socket races at
+    // startup); it never re-asks on its own and would then only overhear
+    // responses triggered by other hosts. Re-query periodically (verified fix).
+    requery = setInterval(() => browser.update(), 30_000);
+    requery.unref?.();
   }
 
   return {
@@ -101,6 +111,7 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
       peers.set(device.toLowerCase(), { device, host, port, fp: peerFp, lastSeenAt: Date.now() });
     },
     stop() {
+      if (requery) clearInterval(requery);
       publisher?.destroy();
       finder?.destroy();
     },

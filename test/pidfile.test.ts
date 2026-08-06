@@ -13,12 +13,14 @@ afterAll(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-import { clearPid, readPid, writePid } from '../src/daemon/pidfile.js';
+import { clearPid, isAlive, readPid, writePid } from '../src/daemon/pidfile.js';
 
 describe('pid file ownership', () => {
-  it('round-trips a pid', () => {
+  it('round-trips a pid and checks liveness', () => {
     writePid(123);
     expect(readPid()).toBe(123);
+    expect(isAlive(process.pid)).toBe(true);
+    expect(isAlive(999999)).toBe(false);
   });
 
   it("an exiting process must not clobber another daemon's pid file", () => {

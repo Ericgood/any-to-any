@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { publishMock, findMock } = vi.hoisted(() => ({
-  publishMock: vi.fn(),
-  findMock: vi.fn(() => ({ on: vi.fn() })),
-}));
+const { publishMock, findMock, updateMock } = vi.hoisted(() => {
+  const updateMock = vi.fn();
+  return {
+    publishMock: vi.fn(),
+    updateMock,
+    findMock: vi.fn(() => ({ on: vi.fn(), update: updateMock })),
+  };
+});
 
 vi.mock('bonjour-service', () => ({
   Bonjour: vi.fn(() => ({ publish: publishMock, find: findMock, destroy: vi.fn() })),
@@ -25,6 +29,22 @@ describe('peer registry mDNS behaviour', () => {
     const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, token: 't' });
     expect(vi.mocked(Bonjour)).toHaveBeenCalledTimes(2);
     r.stop();
+  });
+
+  it('re-queries periodically — the initial browser query can be silently lost', () => {
+    vi.useFakeTimers();
+    try {
+      updateMock.mockClear();
+      const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, token: 't' });
+      vi.advanceTimersByTime(31_000);
+      expect(updateMock).toHaveBeenCalled();
+      r.stop();
+      updateMock.mockClear();
+      vi.advanceTimersByTime(61_000);
+      expect(updateMock).not.toHaveBeenCalled(); // stop() clears the timer
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('browse-only mode never publishes (CLI passive scan may pass port 0)', () => {

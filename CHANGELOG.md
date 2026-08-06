@@ -2,6 +2,16 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-06 — ZCode adapter（第四家：智谱 Z.ai）+ mDNS 稳定性根治
+
+- **新 adapter：ZCode**（智谱 Z.ai 桌面 ADE，用户称 Z code）——发现读 `~/.zcode/cli/db/db.sqlite`（readonly，App/CLI 同库同 id，三种子代理形态过滤），投递用 App 内置引擎 `zcode.cjs --resume sess_xxx --mode build --prompt`（显式非 yolo，安全底线）；mini 侧零新安装。调研+实测报告见 docs/research/research-zcode.md（含 0.15.2 引擎七条勘误：--max-turns/--settings 未实装、login 端点已 404、ZCODE_MODEL 可用、runtime 不接 shared credentials 等）
+- 投递 auth 待用户侧一次性动作：升级 ZCode App 跑 `zcode login`，或 Z.ai 控制台取 API key 手配 cli/config.json（结构已反编译确认，文档附模板）
+- webui 品牌库 +1：ZCode 官方黑底 Z 图标（App icon 提取），26 家
+- **mDNS 再修两刀（首连排障续）**：publish 加 `probe: false`——同名幽灵记录（异常死亡 daemon 未发 goodbye）会让名字探测抛不可捕获异常炸掉进程，直接宣告接管即可；browser 加 30s 周期 re-query——初始 query 会被静默丢失且永不重发，daemon 此前只能「偷听」他机触发的响应（实测 35s 内自主稳定发现 mini）
+- `anyd stop` 加 pgrep 兜底：pid 文件丢失时按进程名找回 daemon
+- **破案**：三次「pid 文件失踪 → stop 失明」的真凶是 setup.test.ts 里一段直打真实 `~/.anytoany/` 的 pidfile 测试——每跑一次 vitest 就覆盖+删除线上 daemon 的 pid 文件。已删（由隔离 home 的 pidfile.test.ts 替代），教训入 tasks/lessons.md
+- 冒烟坦白：验证 `ZCODE_DATA_BASE_DIR` 隔离时看错信号（目录创建 ≠ db 隔离），2 条空 smoke 会话进入用户真实 ZCode 会话列表（标题 `[anytoany] adapter smoke test`，App 内可删）
+
 ## 2026-08-06 — 局域网首连排障：mDNS 双实例修复 + 设备身份固化
 
 - 修复 `startPeerRegistry` 同一 Bonjour 实例先 publish 后 find 导致 browser 查询失效的问题（daemon 只能「偷听」他机触发的响应，无法自主发现 peer）——publisher 与 finder 拆为独立实例，A/B 对照实验实证
