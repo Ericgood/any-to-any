@@ -96,7 +96,8 @@ describe('codex per-machine sandbox escalation', () => {
 
     const withCfg = createCodexAdapter({ exec, configFile: cfg });
     await withCfg.deliver(session, 'E');
-    expect(calls[0]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', '--sandbox', 'danger-full-access', 'E']);
+    // --sandbox MUST precede the `resume` subcommand (it's an `exec` flag)
+    expect(calls[0]).toEqual(['exec', '--sandbox', 'danger-full-access', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
 
     writeFileSync(cfg, JSON.stringify({ codex: { sandbox: 'sudo-everything' } })); // unknown → no flag
     await withCfg.deliver(session, 'E');
