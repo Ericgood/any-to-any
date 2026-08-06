@@ -19,6 +19,7 @@
 ## 工程约定
 
 - 技术栈：TypeScript + Node 20+（ADR-004）。测试 vitest，TDD：先测后码，覆盖率 ≥80%。
+- **dist/ 随源码入库**：`npm i -g git+https` 安装走零编译路径（用户机器现场编译连踩两坑后定案，2026-08-06）。改动 src 后提交前必须 `npm run build` 并把 dist 一起 add；prepare 脚本见 package.json（dist 存在即跳过构建）。
 - 语言：docs/ 内部文档中文为主；README 双语；代码、代码注释、CLI 输出用英文（开源面向国际社区）。
 - CLI 命令名 `anyd`；用户侧配置与数据在 `~/.anytoany/`。
 - 消息模型字段语义对齐 A2A（contextId / role / parts，ADR-006）；不要与 Zed ACP、IBM ACP 混淆。
