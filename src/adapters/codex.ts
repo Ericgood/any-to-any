@@ -1,8 +1,11 @@
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
+
+const CODEX_SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 
 const ROLLOUT_RE =
   /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
@@ -15,6 +18,8 @@ interface CodexAdapterOptions {
   indexFile?: string;
   exec?: ExecFn;
   deliverTimeoutMs?: number;
+  /** anytoany machine config (~/.anytoany/config.json) — sandbox opt-in. */
+  configFile?: string;
 }
 
 interface IndexEntry {
@@ -75,6 +80,7 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
   const indexFile = options.indexFile ?? join(homedir(), '.codex', 'session_index.jsonl');
   const exec = options.exec ?? realExec;
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
+  const configFile = options.configFile ?? defaultConfigFile();
 
   return {
     agent: 'codex',
@@ -82,9 +88,15 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
     // Verified 2026-08-05: exec resume carries full history, is cwd-independent,
     // and tolerates concurrent resumes of the same thread (spec §9 R2).
     async deliver(session: SessionInfo, envelope: string): Promise<DeliveryResult> {
+      // Sandbox stays on codex's own default unless the MACHINE OWNER opted
+      // into a specific policy (never the sending agent). We never use the
+      // --dangerously-bypass-* flag; danger-full-access is a sandbox tier the
+      // owner may pick for their own cluster.
+      const sandbox = readMachineConfig(configFile).codex?.sandbox;
+      const sandboxArgs = sandbox && CODEX_SANDBOX_MODES.has(sandbox) ? ['--sandbox', sandbox] : [];
       const { stdout, stderr, code } = await exec(
         'codex',
-        ['exec', 'resume', session.sessionId, '--skip-git-repo-check', envelope],
+        ['exec', 'resume', session.sessionId, '--skip-git-repo-check', ...sandboxArgs, envelope],
         session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
       );
       if (code !== 0) {

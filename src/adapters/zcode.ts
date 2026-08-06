@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
-import { anytoanyHome } from '../home.js';
+import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
@@ -30,16 +30,8 @@ const ZCODE_MODES = new Set(['plan', 'edit', 'build', 'yolo']);
  * delivery so edits apply without a daemon restart.
  */
 function loadDeliverMode(configFile: string): string {
-  try {
-    const raw = JSON.parse(readFileSync(configFile, 'utf8')) as {
-      zcode?: { deliverMode?: string };
-    };
-    const mode = raw.zcode?.deliverMode;
-    if (mode && ZCODE_MODES.has(mode)) return mode;
-  } catch {
-    /* no config or unreadable — stay on the safe default */
-  }
-  return 'build';
+  const mode = readMachineConfig(configFile).zcode?.deliverMode;
+  return mode && ZCODE_MODES.has(mode) ? mode : 'build';
 }
 
 /** Loosely-typed row: survive schema drift across ZCode versions. */
@@ -72,7 +64,7 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
   const dbFile = options.dbFile ?? defaultDbFile();
   const exec = options.exec ?? realExec;
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
-  const configFile = options.configFile ?? join(anytoanyHome(), '.anytoany', 'config.json');
+  const configFile = options.configFile ?? defaultConfigFile();
 
   return {
     agent: 'zcode',
