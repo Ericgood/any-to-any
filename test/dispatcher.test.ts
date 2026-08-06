@@ -166,3 +166,24 @@ describe('dispatchOnce', () => {
     expect(mailbox.inbox({})).toHaveLength(0);
   });
 });
+
+describe('virtual user recipient', () => {
+  it('replies addressed to the human land as delivered — the mailbox is the inbox', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const m = mailbox.send({
+      from: { agent: 'zcode', sessionId: 'sess_x' },
+      to: { agent: 'user', sessionId: 'cli' },
+      text: 'reply for the human',
+    });
+    const events: string[] = [];
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => [],
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+    expect(events).toEqual(['delivered']);
+  });
+});
