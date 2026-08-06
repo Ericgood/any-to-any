@@ -58,6 +58,24 @@ describe('peer registry mDNS behaviour', () => {
   });
 });
 
+describe('peer rename dedup', () => {
+  it('drops a stale alias when the same host:port reappears under a new name', () => {
+    const onMock = vi.fn();
+    findMock.mockReturnValueOnce({ on: onMock, update: updateMock });
+    const r = startPeerRegistry({ selfDevice: 'macbook', port: 0, token: 't', publish: false });
+    const up = onMock.mock.calls.find((c) => c[0] === 'up')?.[1] as (s: unknown) => void;
+    const svc = (device: string) => ({
+      txt: { device, fp: 'aa' },
+      addresses: ['192.168.1.97'],
+      port: 7433,
+    });
+    up(svc('gongzhendemac-mini-3'));
+    up(svc('mini'));
+    expect(r.list().map((p) => p.device)).toEqual(['mini']);
+    r.stop();
+  });
+});
+
 describe('pickLanAddress', () => {
   it('prefers RFC1918 over proxy TUN fakes regardless of order (real mini advert)', () => {
     expect(
