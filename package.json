@@ -21,7 +21,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npx -y tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
