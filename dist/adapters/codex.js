@@ -77,7 +77,10 @@ export function createCodexAdapter(options = {}) {
             // owner may pick for their own cluster.
             const sandbox = readMachineConfig(configFile).codex?.sandbox;
             const sandboxArgs = sandbox && CODEX_SANDBOX_MODES.has(sandbox) ? ['--sandbox', sandbox] : [];
-            const { stdout, stderr, code } = await exec('codex', ['exec', 'resume', session.sessionId, '--skip-git-repo-check', ...sandboxArgs, envelope], session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
+            // --sandbox is an `exec` option, NOT a `resume` one — it must sit between
+            // `exec` and the `resume` subcommand, or the CLI rejects it (exit 2,
+            // "unexpected argument '--sandbox'") and every delivery fails.
+            const { stdout, stderr, code } = await exec('codex', ['exec', ...sandboxArgs, 'resume', session.sessionId, '--skip-git-repo-check', envelope], session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
             if (code !== 0) {
                 // the actual error is at the END of stderr (after the banner + prompt echo)
                 return { ok: false, error: `codex exec resume exited ${code}: …${stderr.slice(-500)}` };
