@@ -24,7 +24,7 @@ function mockExec(result: { stdout?: string; stderr?: string; code?: number }) {
 describe('codex deliver contract', () => {
   it('spawns codex exec resume with argv-passed envelope (no shell)', async () => {
     const { exec, calls } = mockExec({ stdout: 'BRAVO' });
-    const adapter = createCodexAdapter({ exec });
+    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({}), 'ENVELOPE "quoted; $(rm -rf)"');
     expect(r).toEqual({ ok: true, output: 'BRAVO' });
     expect(calls[0]?.cmd).toBe('codex');
@@ -39,7 +39,7 @@ describe('codex deliver contract', () => {
 
   it('reports non-zero exit as failure with stderr', async () => {
     const { exec } = mockExec({ code: 2, stderr: 'thread not found' });
-    const adapter = createCodexAdapter({ exec });
+    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({}), 'x');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('thread not found');
@@ -75,5 +75,35 @@ describe('claude deliver contract', () => {
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/not logged in/i);
+  });
+});
+
+describe('codex per-machine sandbox escalation', () => {
+  it('adds --sandbox only when the machine owner opted in via config.json', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'anytoany-codexcfg-'));
+    const cfg = join(dir, 'config.json');
+    writeFileSync(cfg, JSON.stringify({ codex: { sandbox: 'danger-full-access' } }));
+
+    const calls: string[][] = [];
+    const exec = async (_c: string, args: string[]) => {
+      calls.push(args);
+      return { stdout: 'ok', stderr: '', code: 0 };
+    };
+    const session = { agent: 'codex', sessionId: 'x-1', title: 't', cwd: '/w', lastActiveAt: 0 };
+
+    const withCfg = createCodexAdapter({ exec, configFile: cfg });
+    await withCfg.deliver(session, 'E');
+    expect(calls[0]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', '--sandbox', 'danger-full-access', 'E']);
+
+    writeFileSync(cfg, JSON.stringify({ codex: { sandbox: 'sudo-everything' } })); // unknown → no flag
+    await withCfg.deliver(session, 'E');
+    expect(calls[1]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
+
+    const noCfg = createCodexAdapter({ exec, configFile: join(dir, 'none.json') });
+    await noCfg.deliver(session, 'E');
+    expect(calls[2]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
   });
 });

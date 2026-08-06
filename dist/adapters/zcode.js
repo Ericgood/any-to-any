@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
-import { anytoanyHome } from '../home.js';
+import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
 const TITLE_MAX = 80;
 /** The desktop app bundles the full CLI engine — no separate install needed. */
@@ -17,16 +17,8 @@ const ZCODE_MODES = new Set(['plan', 'edit', 'build', 'yolo']);
  * delivery so edits apply without a daemon restart.
  */
 function loadDeliverMode(configFile) {
-    try {
-        const raw = JSON.parse(readFileSync(configFile, 'utf8'));
-        const mode = raw.zcode?.deliverMode;
-        if (mode && ZCODE_MODES.has(mode))
-            return mode;
-    }
-    catch {
-        /* no config or unreadable — stay on the safe default */
-    }
-    return 'build';
+    const mode = readMachineConfig(configFile).zcode?.deliverMode;
+    return mode && ZCODE_MODES.has(mode) ? mode : 'build';
 }
 function defaultDbFile() {
     // Fixed path on purpose: ZCODE_DATA_BASE_DIR in engine 0.15.2 only relocates
@@ -49,7 +41,7 @@ export function createZcodeAdapter(options = {}) {
     const dbFile = options.dbFile ?? defaultDbFile();
     const exec = options.exec ?? realExec;
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
-    const configFile = options.configFile ?? join(anytoanyHome(), '.anytoany', 'config.json');
+    const configFile = options.configFile ?? defaultConfigFile();
     return {
         agent: 'zcode',
         async deliver(session, envelope) {
