@@ -12,7 +12,11 @@ export function getDeviceName(home: string = anytoanyHome()): string {
     const name = readFileSync(path, 'utf8').trim();
     if (name) return name;
   }
-  return (hostname().split('.')[0] ?? 'device').toLowerCase();
+  // Persist the first derivation: macOS hostnames drift (LAN name-conflict
+  // suffixes), and the device name is the cluster routing identity.
+  const derived = (hostname().split('.')[0] ?? 'device').toLowerCase();
+  setDeviceName(derived, home);
+  return derived;
 }
 
 export function setDeviceName(name: string, home: string = anytoanyHome()): void {

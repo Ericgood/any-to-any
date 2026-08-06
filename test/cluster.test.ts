@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
+import { getDeviceName, setDeviceName } from '../src/cluster/device.js';
 import { loadOrCreateToken, tokenFingerprint } from '../src/cluster/token.js';
 import { resolveTarget } from '../src/directory/resolve.js';
 import { createDb } from '../src/mailbox/db.js';
@@ -19,6 +20,31 @@ describe('cluster token', () => {
     expect(t1).toBe(t2);
     expect(t1.length).toBeGreaterThanOrEqual(32);
     expect(tokenFingerprint(t1)).toHaveLength(8);
+  });
+});
+
+describe('device name stability', () => {
+  it('persists the first hostname derivation — LAN routing identity must not drift', () => {
+    const h = mkdtempSync(join(tmpdir(), 'anytoany-device-'));
+    try {
+      const first = getDeviceName(h);
+      const file = join(h, '.anytoany', 'device-name');
+      expect(existsSync(file)).toBe(true);
+      expect(readFileSync(file, 'utf8').trim()).toBe(first);
+      expect(getDeviceName(h)).toBe(first);
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+    }
+  });
+
+  it('explicit setDeviceName wins over derivation', () => {
+    const h = mkdtempSync(join(tmpdir(), 'anytoany-device-'));
+    try {
+      setDeviceName('macbook', h);
+      expect(getDeviceName(h)).toBe('macbook');
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+    }
   });
 });
 

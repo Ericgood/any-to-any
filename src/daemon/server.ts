@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { SessionInfo } from '../adapters/types.js';
+import type { Peer } from '../cluster/peers.js';
+import { tokenFingerprint } from '../cluster/token.js';
 import type { Mailbox, SessionRef } from '../mailbox/mailbox.js';
 
 const require = createRequire(import.meta.url);
@@ -19,6 +21,8 @@ export interface ConsoleServerOptions {
     token: string;
     /** Local-only directory (no peer aggregation) served to peers. */
     localDirectory: () => Promise<SessionInfo[]>;
+    /** Live LAN peer list — served to the local CLI/webui at /api/peers. */
+    peers?: () => Peer[];
   };
 }
 
@@ -154,6 +158,16 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       json(res, 200, { sessions: await opts.directory() });
       return;
     }
+    if (req.method === 'GET' && path === '/api/peers') {
+      if (!opts.peering) {
+        json(res, 200, { lan: false, self: null, peers: [] });
+        return;
+      }
+      const selfFp = tokenFingerprint(opts.peering.token);
+      const peers = (opts.peering.peers?.() ?? []).map((p) => ({ ...p, paired: p.fp === selfFp }));
+      json(res, 200, { lan: true, self: { device: opts.peering.selfDevice, fp: selfFp }, peers });
+      return;
+    }
     if (req.method === 'GET' && path === '/api/conversations') {
       json(res, 200, { conversations: opts.mailbox.listConversations() });
       return;
@@ -219,6 +233,11 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
     json(res, 404, { error: 'not found' });
   }
 
+  server.on('error', (e: NodeJS.ErrnoException) => {
+    const hint = e.code === 'EADDRINUSE' ? ` — port ${port} already in use (another anyd running?)` : '';
+    console.error(`console server error: ${e.message}${hint}`);
+    process.exit(1);
+  });
   server.listen(port, opts.peering ? '0.0.0.0' : '127.0.0.1');
   return {
     port,

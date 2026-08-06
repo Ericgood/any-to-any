@@ -2,6 +2,15 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-06 — 局域网首连排障：mDNS 双实例修复 + 设备身份固化
+
+- 修复 `startPeerRegistry` 同一 Bonjour 实例先 publish 后 find 导致 browser 查询失效的问题（daemon 只能「偷听」他机触发的响应，无法自主发现 peer）——publisher 与 finder 拆为独立实例，A/B 对照实验实证
+- 新增 `pickLanAddress` 地址优选：优先 RFC1918 私网段，排除代理 TUN 假地址（198.18.0.0/15）、link-local、loopback——此前「取第一个 IPv4」在开代理的机器上会把 relay 路由进黑洞
+- 设备名首次派生即落盘（`~/.anytoany/device-name`）：macOS hostname 会因局域网重名自动加后缀漂移，而设备名是跨机路由身份，漂移即断路（实测同机漂出三个名字）
+- `anyd peers` 重写：优先查询运行中 daemon 的权威 peer 表（新增 loopback 端点 `GET /api/peers`，含配对状态与自身指纹），daemon 不在时降级为只浏览不发布的被动扫描（修复 port 0 发布崩溃）
+- pid 文件归属校验：exit 清理只删自己写入的记录；`anyd start` 绑定端口前先探测占用——此前因端口冲突死亡的 starter 会覆盖并删除正主 daemon 的 pid 文件，导致 `anyd stop` 失明
+- 全部 TDD：净增 13 个测试，124/124 通过
+
 ## 2026-08-05 — ADR-013 修订：实时通道双模（共享 app-server 为主，tmux 为兜底）
 
 - 子代理调研报告完整落盘（research-codex-live-inject.md，26+ 来源）：发现协议级正路——`codex app-server --listen` 共享 daemon + 官方参数 `codex --remote` 挂载 TUI + 外部 turn/start/steer（kcosr/codex-threads 已验证此架构）
