@@ -63,7 +63,7 @@ describe('zcode delivery', () => {
 
   it('resumes via node with explicit non-yolo mode and the exact session id', async () => {
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec });
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
     const r = await a.deliver(SESS, 'ENVELOPE TEXT');
     expect(r).toEqual({ ok: true, output: 'reply text' });
     expect(exec).toHaveBeenCalledWith(
@@ -77,7 +77,7 @@ describe('zcode delivery', () => {
 
   it('runs a native binary directly and omits --cwd when unknown', async () => {
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/usr/local/bin/zcode', exec });
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/usr/local/bin/zcode', exec, configFile: join(dir, 'no-config.json') });
     await a.deliver({ ...SESS, cwd: '' }, 'E');
     expect(exec).toHaveBeenCalledWith(
       '/usr/local/bin/zcode',
@@ -88,7 +88,7 @@ describe('zcode delivery', () => {
 
   it('surfaces the tail of stderr on failure', async () => {
     const exec: ExecFn = async () => ({ stdout: '', stderr: `${'x'.repeat(600)}REAL ERROR AT END`, code: 1 });
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec });
+    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
     const r = await a.deliver(SESS, 'E');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('REAL ERROR AT END');
