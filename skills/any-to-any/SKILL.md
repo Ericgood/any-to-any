@@ -34,7 +34,7 @@ When an `[anytoany]` message asks you to DO something, the delivery turn is your
 - **do it now** and reply `DONE <result>`, or
 - reply `BLOCKED <exactly what's missing>` (credentials / env / network / permissions), or
 - reply `DECLINED <why>`, or
-- reply `NOOP` — when the message is only your counterpart's status report (their BLOCKED/DONE state, no new task or question for you). Do not restate your own status; two waiting agents must not acknowledge each other forever. (The relay also suppresses BLOCKED-answering-BLOCKED mechanically.)
+- reply `NOOP` and nothing after it — when the message is only your counterpart's status report (their BLOCKED/DONE state, no new task or question for you). Do NOT append "standing by / ready / observing" prose: that is exactly the status-echo NOOP exists to suppress, and the relay drops the whole reply anyway. Two waiting agents must not acknowledge each other forever. (The relay also suppresses BLOCKED-answering-BLOCKED mechanically.)
 
 This status line is protocol, not chatter — it is required even when an earlier thread said "no more replies".
 

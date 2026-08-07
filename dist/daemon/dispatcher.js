@@ -74,7 +74,9 @@ export async function dispatchOnce(opts) {
         // NOOP replies (envelope's "nothing new to add" escape hatch).
         const incoming = claimed.parts.map((p) => p.text).join('\n').trimStart();
         const reply = replyText.trimStart();
-        const isNoop = reply === 'NOOP' || reply.startsWith('NOOP ');
+        // NOOP as the leading token — followed by whitespace/newline or end — even
+        // when the agent over-explains after it ("NOOP\n---\n standing by…").
+        const isNoop = /^NOOP(\s|$)/.test(reply);
         const blockedPingpong = incoming.startsWith('BLOCKED') && reply.startsWith('BLOCKED');
         if (isNoop || blockedPingpong) {
             emit({
