@@ -227,6 +227,30 @@ describe('anti-pingpong suppression', () => {
     expect(mailbox.inbox({ all: true })).toHaveLength(1);
   });
 
+  it('suppresses NOOP even when the agent appends prose after it (real over-explaining case)', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'DONE deployed' });
+    const events: string[] = [];
+    await dispatchOnce({
+      ...mkOpts(mailbox, `${REPLY_MARKER} NOOP\n\n---\n\n本机就绪，等 Codex 触发下一笔。我待命观察，不操作。`),
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(events).toEqual(['delivered', 'reply-rejected']);
+    expect(mailbox.inbox({ all: true })).toHaveLength(1); // trailing prose does not defeat suppression
+  });
+
+  it('does not mistake NOOP-prefixed real words for a noop verdict', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'status?' });
+    const events: string[] = [];
+    await dispatchOnce({
+      ...mkOpts(mailbox, `${REPLY_MARKER} NOOPETH is a made-up word, here is real content`),
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(events).toEqual(['delivered', 'reply-filed']);
+    expect(mailbox.inbox({ all: true })).toHaveLength(2);
+  });
+
   it('a substantive (non-BLOCKED) reply to a BLOCKED message still flows', async () => {
     const mailbox = createMailbox(createDb(':memory:'));
     mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'BLOCKED waiting for user authorization' });
