@@ -1,18 +1,37 @@
 name: CI
 
+# Cost policy (ADR-015): per-push CI runs on Ubuntu only. GitHub bills macOS
+# runners at 10x — and this suite is platform-agnostic (mocked exec, in-memory
+# sqlite), so macOS adds ~no signal per push while costing ~90% of the minutes.
+# macOS coverage lives in ci-macos.yml (weekly + manual). Account Actions minutes
+# are shared across all your private repos, so keep this lean.
+
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'tasks/**'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'tasks/**'
+
+# A newer push to the same ref cancels the older in-flight run — during rapid
+# iteration this alone saved a large share of the wasted minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: node ${{ matrix.node }} / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: node ${{ matrix.node }} / ubuntu
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
         node: [20, 22]
     steps:
       - uses: actions/checkout@v4

@@ -15,6 +15,7 @@
 4. **时间戳**：每份 docs 文档头部带 `> 创建：YYYY-MM-DD · 最后更新：YYYY-MM-DD`，改动时更新后者。
 5. **每轮工作收尾必须 commit + push 到 GitHub**——保证换设备、换 agent 都能从仓库完整跟进进度。commit 信息用 conventional commits（中文描述可）。
 6. **多 agent 共享工作区纪律**：提交前先 `git status`；只 add 自己本轮改动的文件（精确路径），**禁用 `git add -A` / `git add .`**；工作区里非自己的改动是另一个 agent 的施工现场，不提交、不修改、不回退。
+7. **GitHub Actions 额度纪律**：常规 PR/main CI 只使用 Ubuntu Node 20/22；macOS 只允许每周/人工 smoke。纯文档变更不触发 CI；同一逻辑变更先在本地 build/test，完成后再集中 push，禁止把连续微小中间状态逐个推到 `main`。新增 runner、matrix 轴或定时 workflow 前必须在 PR/Docs 写出预计月度分钟影响，并保持 `concurrency.cancel-in-progress=true`。
 
 ## 工程约定
 

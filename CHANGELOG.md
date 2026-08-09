@@ -2,6 +2,16 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-09 — CI 成本止血：每次推送只跑 Ubuntu，macOS 降为每周（ADR-015，额度耗尽自审）
+
+- 事故：本月 GitHub Actions 2000 分钟额度耗尽（往常用不完）。自审真实数据定位根因三条：**① macOS runner 按 10 倍计费**，矩阵每次推送跑 2 个 macOS job，占 anytoany CI 消耗 **92%**；② 无并发取消，三天狂推 36 次每次都全量叠加；③ 文档-only 提交也触发全量 CI
+- 修：`ci.yml` 每次推送/PR 只跑 Ubuntu（node 20+22，1x）+ `concurrency: cancel-in-progress` + push/PR 双侧 `paths-ignore` 跳过纯文档提交；新增 `ci-macos.yml` 手动+每周一定时单 job 保留 macOS 覆盖
+- 效果：每次推送计费 ~23min → ~2min（省 ~90%），文档提交 0min；macOS 每周 ~10–50min/月
+- 诚实纠错：初判误用 wall-clock（含排队）算出 2719min 是错的——GitHub 只按执行时间计费、排队不计费；额度为账号级跨仓库共享，anytoany 是可修大头但非全部
+- 账户级审计同时定位 Suno Gateway 的 PR 四镜像重复构建；两仓合计预计避免 1,100+ 分钟/月。完整证据、官方计费口径与防复发方案见 `docs/research/github-actions-usage-audit-2026-08-09.md`
+- 新增 `test/ci-policy.test.ts` 锁定 Linux 常规 CI、macOS 手动/周检、并发取消与 docs-only 双事件过滤；本地 `npm run build`、18 files / 147 tests、`git diff --check` 全绿
+
+
 ## 2026-08-07 — 修复 codex --sandbox 旗标位置回归（Codex 收不到回信的真凶）
 
 - 回归根因：机主提权的 `--sandbox` 拼在 `resume` 子命令之后 → codex CLI 报 unexpected argument (exit 2)，开启 codex 提权的机器上所有投进本机 Codex 的消息（含 mini ZCode 的回信）全部失败，用户现象「Codex 永远等不到回复」
