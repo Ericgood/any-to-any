@@ -127,3 +127,20 @@ Codex 侧不分层（exec resume 已全验证）。
 - UI：`user:cli` 统一显示「我（用户）」；user 消息气泡标注去向；composer 三态（代 A / 代 B / 以我发给双方，后者仅 agent↔agent 对话显示）。
 
 **决策（长期，P3 头号架构演进）**：conversation 从 (A,B) 无序对升级为成员集合 room（user + 任意多 agent）：一条消息多接收方 per-recipient 投递态、room 级 context 与回环预算、信封告知参与者名单、跨机 room id 同步。与任务生命周期语义（反乒乓根治）同属「从信件模型走向协作模型」的一揽子演进。
+
+## ADR-015 CI 成本定案：每次推送只跑 Ubuntu，macOS 降为每周/手动（2026-08-07，额度耗尽事故）
+
+**背景**：用户本月 GitHub Actions 2000 分钟额度被耗尽（往常用不完）。自审真实数据定位：
+- CI 矩阵 `os:[macos-latest, ubuntu-latest] × node:[20,22]` = 每次推送 4 个 job，含 **2 个 macOS**。
+- **GitHub 对 macOS runner 按 10 倍计费**（Linux 1x / Windows 2x / macOS 10x）。macOS job 真实执行 ~1 分钟，×10 = 平均 10 计费分钟/个；ubuntu 才 1 分钟/个。
+- **macOS 占 anytoany CI 消耗的 92%**（每次完整运行 ~23 计费分钟里 22 分钟是 macOS）。本月 08-05~08-07 三天狂推 **36 次**（≥821 计费分钟，早期缓存未命中现场编译 better-sqlite3 的运行更贵）。
+- 额度是**账号级共享**（跨所有私有仓库：suno-gateway / shandianshuo / wechot…），anytoany 是可修的大头但未必是全部。
+- 注：wall-clock 里单 macOS job 曾达 17 分钟，但其中 ~16 分钟是排队等 macOS runner，**排队不计费**，计费只认执行时间——初判误用 wall-clock 得出的 2719 分钟是错的，已纠正。
+
+**决策**：
+1. **每次推送/PR 只跑 Ubuntu**（node 20+22，1x）。本套件平台无关（exec 全 mock、sqlite 用内存库），macOS 每次推送几乎不增信号却吃 ~90% 额度。
+2. **macOS 覆盖降为 `ci-macos.yml`**：仅 `workflow_dispatch`（手动）+ 每周一 03:00 UTC 定时，单 job（macos + node22）。macOS 特有回归（路径处理、原生模块编译）仍能被抓，但不再每次推送收 10 倍税。
+3. **并发取消**：`concurrency: cancel-in-progress`——同 ref 新推送取消在飞的旧运行（狂推期这一条就省掉大量白跑）。
+4. **文档-only 提交跳过**：push 加 `paths-ignore: ['**/*.md','docs/**','tasks/**']`——纯文档提交不触发 CI（混提代码仍跑）。
+
+**预期**：每次推送计费从 ~23 分钟降到 ~2 分钟（省 ~90%）；文档提交 0 分钟；狂推被并发取消进一步压。macOS 每周 1 次 ≈ 10–50 分钟/月。
