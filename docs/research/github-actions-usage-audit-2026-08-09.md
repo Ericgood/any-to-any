@@ -130,4 +130,6 @@ macOS 兼容性：
 - `test/ci-policy.test.ts` 先在缺少 PR docs filter 时失败，补齐后转绿。
 - 本地 `npm run build`、完整 `npm test`（18 files / 147 tests）与 `git diff --check` 通过。
 - Gateway 已以独立分支增加 release pipeline 静态契约和 PR image-build guard；未混入千机业务代码。
-- 因账户额度已经耗尽，本次没有为“验证节流”主动重跑旧 workflow。合并后需在额度恢复时观察一次真实 Ubuntu PR run、一次周检 macOS run 和一次 Gateway main image run。
+- PR [#1](https://github.com/Ericgood/any-to-any/pull/1) 合并为 `main@e66990e`。PR 与 main 的真实 Actions 均只启动 Ubuntu Node 20/22；main run [`31297385396`](https://github.com/Ericgood/any-to-any/actions/runs/31297385396) 全绿，两个 job 分别约 1.6 分钟和 0.3 分钟，没有启动 macOS job，现场验证单次折算成本从约 23 分钟降到约 2 分钟。
+- Gateway PR [#118](https://github.com/Ericgood/suno-gateway/pull/118) 的真实 PR run 只执行 quality，并将 4-target image job 标记为 skipped；合并为 `main@96b6c4e` 后，main run [`31297385637`](https://github.com/Ericgood/suno-gateway/actions/runs/31297385637) 才构建并发布四个镜像，验证“PR 不重复构建、main 保持发布能力”。
+- 每周 macOS smoke 尚未到首次定时窗口；该项由下一次周一 schedule 自然验证，不为验收主动消耗 macOS 额度。

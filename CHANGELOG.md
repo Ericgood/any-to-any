@@ -10,6 +10,7 @@
 - 诚实纠错：初判误用 wall-clock（含排队）算出 2719min 是错的——GitHub 只按执行时间计费、排队不计费；额度为账号级跨仓库共享，anytoany 是可修大头但非全部
 - 账户级审计同时定位 Suno Gateway 的 PR 四镜像重复构建；两仓合计预计避免 1,100+ 分钟/月。完整证据、官方计费口径与防复发方案见 `docs/research/github-actions-usage-audit-2026-08-09.md`
 - 新增 `test/ci-policy.test.ts` 锁定 Linux 常规 CI、macOS 手动/周检、并发取消与 docs-only 双事件过滤；本地 `npm run build`、18 files / 147 tests、`git diff --check` 全绿
+- PR [#1](https://github.com/Ericgood/any-to-any/pull/1) 已合并为 `main@e66990e`；真实 main run [`31297385396`](https://github.com/Ericgood/any-to-any/actions/runs/31297385396) 仅运行 Ubuntu Node 20/22 并全绿，合计约 2 个 Linux 分钟、0 个 macOS job。Gateway PR #118 也已验证 PR 镜像矩阵 skipped、main 四镜像正常发布
 
 
 ## 2026-08-07 — 修复 codex --sandbox 旗标位置回归（Codex 收不到回信的真凶）
