@@ -37,14 +37,9 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     return true;
   };
 
-  // Replies addressed to the human (webui/CLI sender) have no session to
-  // resume — landing in the mailbox IS the delivery (read in the console).
-  if (claimed.to.agent === 'user') {
-    const delivered = opts.mailbox.markDelivered(claimed.id);
-    emit({ kind: 'delivered', message: delivered, detail: 'user-inbox' });
-    return true;
-  }
-
+  // Route FIRST — even a reply to the human may be on another device (kimi on
+  // mini replying to the user on macbook must relay home, not sit in mini's
+  // local inbox). Only a LOCAL user reply is a mailbox-is-the-inbox delivery.
   const route = routeForMessage(claimed, opts.selfDevice ?? '');
   if (route.kind === 'relay') {
     if (!opts.relay) return fail(`target device "${route.device}" requires LAN relay (not configured)`);
@@ -57,6 +52,14 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     if (!relayed.ok) return fail(relayed.error ?? `relay to ${route.device} failed`);
     const delivered = opts.mailbox.markDelivered(claimed.id);
     emit({ kind: 'delivered', message: delivered, detail: `relayed-to:${route.device}` });
+    return true;
+  }
+
+  // Local delivery. A reply addressed to the human has no session to resume —
+  // landing in this machine's mailbox IS the delivery (read in the console).
+  if (claimed.to.agent === 'user') {
+    const delivered = opts.mailbox.markDelivered(claimed.id);
+    emit({ kind: 'delivered', message: delivered, detail: 'user-inbox' });
     return true;
   }
 

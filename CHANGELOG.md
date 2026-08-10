@@ -1,6 +1,14 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-08-10 — 修复跨设备「回信给 user」被本机截留（Kimi 连通性验证暴露）
+
+- 真实暴露：MacBook 以 `@user:cli` 身份向 mini/kimi 发探针，kimi 正常收到并回报 cwd `/Users/gongzhen`（mini Codex 确认回信内容），但回信没回到 MacBook——卡在 mini
+- 根因：dispatcher 的「回信给 user 即本机收件箱 delivered」捷径放在 relay 路由**之前**，没考虑 user 在另一台设备；mini 把 `user@macbook` 回信当本机收件箱标 delivered，未 relay 回 MacBook
+- 修复：路由优先——先判 relay（跨设备回 user 也 relay 回家），仅本机 user 回信才走「驿站即收件箱」；TDD +2 测试，155 全绿
+- 影响澄清：只影响「user 作为发起方」的跨机回信（console「以我的身份发给双方」广播到远端）；**Codex↔Kimi 主用例不受影响**（回信是 kimi→codex 非 kimi→user，一直正常 relay）
+- 附：mini kimi 为 0.34.0（本机 0.32.0），adapter 跨版本正常
+
 
 ## 2026-08-10 — Kimi Code adapter（第五家：Moonshot 月之暗面）
 

@@ -186,6 +186,53 @@ describe('virtual user recipient', () => {
     expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
     expect(events).toEqual(['delivered']);
   });
+
+  it('a reply to the user on ANOTHER device relays home, not local-inbox (cross-machine bug)', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    // On mini: kimi replies to the human who lives on macbook. Must relay back.
+    const m = mailbox.send({
+      from: { agent: 'kimi', sessionId: 'session_x' },
+      to: { agent: 'user', sessionId: 'cli', device: 'macbook' },
+      text: '/Users/gongzhen',
+    });
+    const relayed: Array<{ device: string; id: string }> = [];
+    const events: string[] = [];
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => [],
+      selfDevice: 'mini',
+      relay: async (device, msg) => {
+        relayed.push({ device, id: msg.id });
+        return { ok: true };
+      },
+      onEvent: (e) => events.push(e.kind),
+    });
+    expect(ok).toBe(true);
+    expect(relayed).toEqual([{ device: 'macbook', id: m.id }]); // relayed home
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+
+  it('a reply to the LOCAL user (self device) still lands in the local inbox', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const m = mailbox.send({
+      from: { agent: 'kimi', sessionId: 'session_x' },
+      to: { agent: 'user', sessionId: 'cli', device: 'macbook' },
+      text: 'local reply',
+    });
+    const events: Array<{ kind: string; detail?: string }> = [];
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => [],
+      selfDevice: 'macbook', // the user IS on this machine
+      relay: async () => ({ ok: false, error: 'should not be called' }),
+      onEvent: (e) => events.push({ kind: e.kind, detail: e.detail }),
+    });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+    expect(events).toEqual([{ kind: 'delivered', detail: 'user-inbox' }]);
+  });
 });
 
 describe('anti-pingpong suppression', () => {
