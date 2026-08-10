@@ -2,6 +2,16 @@
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
 
+## 2026-08-10 — Kimi Code adapter（第五家：Moonshot 月之暗面）
+
+- 用户需求：MacBook Codex ↔ Mac mini 终端 Kimi 协作。Kimi Code 本机已装（`~/.kimi-code/bin/kimi`，v0.32.0），有专门调研 research-kimi-zcode-qcode.md
+- 发现：读 `~/.kimi-code/session_index.jsonl`（仅 sessionId/sessionDir/workDir，无标题无时间戳 → 标题取 workDir basename、活跃度取 sessionDir mtime）；kimi 子代理不进索引，无需过滤
+- 投递：`kimi -S <id> -p <envelope> --output-format stream-json`；**实测两坑**：① `-p` 不能与 `-y`/`--auto`/`--plan` 组合（CLI 报错，adapter 绝不传）；② 默认 `-p` 已自动执行工具、非只读（与 ZCode 相反，无需机主提权）
+- 回信解析：stream-json 只取 assistant 非空 content，排除 tool 结果与尾部 meta resume_hint（否则「To resume this session」污染 marker 回信）
+- TDD 6 测试全绿（153 总）；**真机端到端通过**：发现 7 会话 + 向 scratch 探针会话真实投递 + kimi 执行 + marker 回信干净解析（不碰用户真实会话）
+- webui 品牌库已含 kimi（#7C3AED），无需新增；docs/specs/phase3-kimi-adapter.md
+
+
 ## 2026-08-09 — CI 成本止血：每次推送只跑 Ubuntu，macOS 降为每周（ADR-015，额度耗尽自审）
 
 - 事故：本月 GitHub Actions 2000 分钟额度耗尽（往常用不完）。自审真实数据定位根因三条：**① macOS runner 按 10 倍计费**，矩阵每次推送跑 2 个 macOS job，占 anytoany CI 消耗 **92%**；② 无并发取消，三天狂推 36 次每次都全量叠加；③ 文档-only 提交也触发全量 CI

@@ -171,3 +171,15 @@
 | **Server / SDK 模式** | ✅✅ `kimi acp`（ACP/stdio）+ `kimi web`（REST+WS，含发消息/steer/审批端点，实测）+ Go/Node/Python SDK | ❌ 无 server/SDK/ACP；仅飞书/微信 Bot Channel（云端封闭通道） | ❌ 无（ACP 在继任者 `kiro-cli acp` 上） |
 | **Agent 间通信** | ⚠️ subagents 单向（无互通）；server 有 children-session 端点 | ⚠️ 多人经 Bot Channel 共推同一任务（云端） | ❌ 无 |
 | **外部系统收发消息综合评级** | **优**（四条通道：headless / REST+WS / ACP / SDK） | **差**（仅官方 IM Bot 通道） | **中**（headless+hooks 可拼；产品日落中，建议面向 Kiro CLI） |
+
+---
+
+## 附：接入实测勘误（2026-08-10，kimi 0.32.0，建 adapter 时验证）
+
+对照 A 节调研，本机实装再验，修正/补强三点：
+
+1. **`-p` 与 `-y`/`--auto`/`--plan` 互斥已确证**：`kimi -y -p …` 报 `error: Cannot combine --prompt with --yolo`，`--auto` 同样报错。A4 当时标「未核实」的审批默认行为现已明确——**默认 `-p` 直接自动执行工具**（实测创建文件成功），无需也无法用旗标提权（与 ZCode「build 只读需机主提 yolo」正相反）。
+2. **session_index.jsonl 字段极简**：仅 `sessionId`/`sessionDir`/`workDir`，**无标题无时间戳**——adapter 标题取 `basename(workDir)`、活跃度取 `stat(sessionDir).mtime`。
+3. **stream-json 回信解析**：终态 `role:assistant` 行含 marker，其后紧跟 `role:meta` 的 `session.resume_hint`（"To resume this session…"）——必须只取 assistant 非空 content 拼接，排除 tool 与 meta，否则污染回信。text 模式另有 `• ` 前缀，故 adapter 统一用 stream-json。
+
+实现见 [phase3-kimi-adapter.md](../specs/phase3-kimi-adapter.md)。真机端到端通过（发现 7 会话 + 探针投递 + marker 回信干净解析）。

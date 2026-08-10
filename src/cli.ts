@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
+import { createKimiAdapter } from './adapters/kimi.js';
 import { createZcodeAdapter } from './adapters/zcode.js';
 import { resolveTarget } from './directory/resolve.js';
 import { listAllSessions } from './directory/scanner.js';
@@ -13,7 +14,12 @@ import { createMailbox, type Message, type SessionRef } from './mailbox/mailbox.
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
 
-const defaultAdapters = () => [createClaudeAdapter(), createCodexAdapter(), createZcodeAdapter()];
+const defaultAdapters = () => [
+  createClaudeAdapter(),
+  createCodexAdapter(),
+  createZcodeAdapter(),
+  createKimiAdapter(),
+];
 const openMailbox = () => createMailbox(createDb());
 
 /** Resolve an @-target into a concrete session, printing candidates on failure. */
