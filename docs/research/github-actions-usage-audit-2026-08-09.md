@@ -7,7 +7,7 @@
 本月 2,000 分钟额度被提前耗尽，不是单次异常重跑造成，而是两项 CI 设计叠加：
 
 1. **千机（`Ericgood/any-to-any`）每次推送同时运行 2 个 macOS job 和 2 个 Linux job。** 2026-08-05 至 2026-08-07 有 36 次 `push` workflow；macOS 在私有仓库中的分钟折算约为 Linux 的 10 倍，是本次额度耗尽的首要原因。
-2. **Suno Gateway（`Ericgood/suno-gateway`）在每个 PR 上先构建 4 个大型 Docker image，合并到 `main` 后再构建并发布同样 4 个 image。** 质量检查需要保留，但 PR 阶段的 4-image 重复构建没有发布产物，属于可消除消耗。
+2. **Suno Gateway（`Ericgood/api-gateway`）在每个 PR 上先构建 4 个大型 Docker image，合并到 `main` 后再构建并发布同样 4 个 image。** 质量检查需要保留，但 PR 阶段的 4-image 重复构建没有发布产物，属于可消除消耗。
 
 这不是业务流量导致，也不是 Vercel/生产服务器消耗；是私有仓库的 GitHub-hosted runner 设计过重，加上短时间大量小提交触发 CI。
 
@@ -35,9 +35,9 @@ GitHub 官方规则：
 | 仓库 | workflow runs | 原始 runner wall time | 估算额度影响 | 主要原因 |
 | --- | ---: | ---: | ---: | --- |
 | `any-to-any` | 36 | wall-clock 约 223 分钟 | **至少约 821 分钟** | 2 macOS + 2 Linux 的每-push matrix；macOS 10x 放大 |
-| `suno-gateway` | 87 | wall-clock 约 390 分钟 | **约 940 Linux 分钟（上界估算）** | PR 和 main 都构建 4 个 image；高频小 PR 重复构建 |
-| `sunoprompt-new` | 12 | 约 19 分钟 | 约 27 分钟 | repository dispatch，非主因 |
-| `sunoprompt-db-backups` | 8 | 约 16 分钟 | 约 20 分钟 | 定时备份，非主因 |
+| `api-gateway` | 87 | wall-clock 约 390 分钟 | **约 940 Linux 分钟（上界估算）** | PR 和 main 都构建 4 个 image；高频小 PR 重复构建 |
+| `webapp-new` | 12 | 约 19 分钟 | 约 27 分钟 | repository dispatch，非主因 |
+| `webapp-db-backups` | 8 | 约 16 分钟 | 约 20 分钟 | 定时备份，非主因 |
 
 额度耗尽后，后续 workflow 虽然仍显示 run/failed，但许多 job 没有真正分配 runner，不能简单把 run 数乘平均时长。上述估算按实际启动的 job 计算。
 
@@ -131,5 +131,5 @@ macOS 兼容性：
 - 本地 `npm run build`、完整 `npm test`（18 files / 147 tests）与 `git diff --check` 通过。
 - Gateway 已以独立分支增加 release pipeline 静态契约和 PR image-build guard；未混入千机业务代码。
 - PR [#1](https://github.com/Ericgood/any-to-any/pull/1) 合并为 `main@e66990e`。PR 与 main 的真实 Actions 均只启动 Ubuntu Node 20/22；main run [`31297385396`](https://github.com/Ericgood/any-to-any/actions/runs/31297385396) 全绿，两个 job 分别约 1.6 分钟和 0.3 分钟，没有启动 macOS job，现场验证单次折算成本从约 23 分钟降到约 2 分钟。
-- Gateway PR [#118](https://github.com/Ericgood/suno-gateway/pull/118) 的真实 PR run 只执行 quality，并将 4-target image job 标记为 skipped；合并为 `main@96b6c4e` 后，main run [`31297385637`](https://github.com/Ericgood/suno-gateway/actions/runs/31297385637) 才构建并发布四个镜像，验证“PR 不重复构建、main 保持发布能力”。
+- Gateway PR [#118](https://github.com/Ericgood/api-gateway/pull/118) 的真实 PR run 只执行 quality，并将 4-target image job 标记为 skipped；合并为 `main@96b6c4e` 后，main run [`31297385637`](https://github.com/Ericgood/api-gateway/actions/runs/31297385637) 才构建并发布四个镜像，验证“PR 不重复构建、main 保持发布能力”。
 - 每周 macOS smoke 尚未到首次定时窗口；该项由下一次周一 schedule 自然验证，不为验收主动消耗 macOS 额度。

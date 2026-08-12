@@ -16,11 +16,11 @@
 - 修复：装 `~/Library/LaunchAgents/dev.anytoany.daemon.plist`——RunAtLoad 登录即起 + KeepAlive 死了自动拉起（实测 kill 后 18569→18736 自动复活）
 - 关键坑：launchd 默认 PATH 极简，daemon 投递要 spawn codex/kimi/claude/zcode，必须把各家二进制目录全烤进 plist 的 PATH，否则投递「command not found」
 - 可复现：`scripts/install-daemon-launchd.sh`（按 command -v 自动解析本机路径，幂等，任意 Mac 一条命令）；移除用 `launchctl unload`；docs/specs/phase3-daemon-persistence.md
-- 证据：用户滞留的真实消息（sunoprompt Claude→codex sunogate 建 Vercel 项目）在 daemon 恢复后 recoverStale 重投 delivered
+- 证据：用户滞留的真实消息（webapp Claude→codex api-gateway 建 Vercel 项目）在 daemon 恢复后 recoverStale 重投 delivered
 
 ## 2026-08-10 — 修复跨设备「回信给 user」被本机截留（Kimi 连通性验证暴露）
 
-- 真实暴露：MacBook 以 `@user:cli` 身份向 mini/kimi 发探针，kimi 正常收到并回报 cwd `/Users/gongzhen`（mini Codex 确认回信内容），但回信没回到 MacBook——卡在 mini
+- 真实暴露：MacBook 以 `@user:cli` 身份向 mini/kimi 发探针，kimi 正常收到并回报 cwd `/Users/you`（mini Codex 确认回信内容），但回信没回到 MacBook——卡在 mini
 - 根因：dispatcher 的「回信给 user 即本机收件箱 delivered」捷径放在 relay 路由**之前**，没考虑 user 在另一台设备；mini 把 `user@macbook` 回信当本机收件箱标 delivered，未 relay 回 MacBook
 - 修复：路由优先——先判 relay（跨设备回 user 也 relay 回家），仅本机 user 回信才走「驿站即收件箱」；TDD +2 测试，155 全绿
 - 影响澄清：只影响「user 作为发起方」的跨机回信（console「以我的身份发给双方」广播到远端）；**Codex↔Kimi 主用例不受影响**（回信是 kimi→codex 非 kimi→user，一直正常 relay）
@@ -77,12 +77,12 @@
 
 ## 2026-08-06 — 🎉 跨设备双机链路端到端全通（MacBook ↔ Mac mini，含 ZCode）
 
-- **P2 跨设备目标真机达成**：MacBook `@macbook` ↔ Mac mini `@mini` 配对（同 token fp）、mDNS 互发现、目录聚合（本机 4045 + mini 38 会话）、跨机投递与回信回流全链路实测通过——探针消息 MacBook → mini 的 ZCode「sunogate开发」会话，ZCode 真实执行并回报正确工作目录，回信跨机回流 MacBook 驿站
+- **P2 跨设备目标真机达成**：MacBook `@macbook` ↔ Mac mini `@mini` 配对（同 token fp）、mDNS 互发现、目录聚合（本机 4045 + mini 38 会话）、跨机投递与回信回流全链路实测通过——探针消息 MacBook → mini 的 ZCode「api-gateway开发」会话，ZCode 真实执行并回报正确工作目录，回信跨机回流 MacBook 驿站
 - **ZCode auth 打通**：CLI OAuth 服务端未上线（全路径探测 404，最新引擎同），定案走 Coding Plan API key（官方文档背书：key 为 ZCode 官方连接方式、与 App 同订阅配额池、`api.z.ai/api/anthropic` 端点）；`~/.zcode/cli/config.json` 结构自反编译确认并双机配置，本机 headless PONG 冒烟 + 真实投递均通过
 - **分发定案：dist 构建产物随仓库入库，git 安装零编译**——mini 真机连踩两坑（npm git-dep 构建环境 `tsc not found`；`npx -y tsc` 误拉 npm 上同名废包）后拍板；prepare 改为 dist 缺失才构建；CLAUDE.md 增约定「改 src 提交前必须 build 并连 dist 一起提交」
 - mini 部署模式验证：任务说明贴给 mini 的 Codex，由对端 agent 自主安装+验收——「贴给任何 agent 就能装」的分发理念首次真机闭环
 - peer 目录按 host:port 去重（设备改名/幽灵广播不再让同一台机器聚合两次）；虚拟 user 收件人的回信直接标记 delivered（驿站即收件箱，console 不再误报红色 failed）
-- @any 跨机物化生效：`any-mini-zcode-sunogate` 等 mini 会话自动出现在 MacBook 的 Claude `@` 补全
+- @any 跨机物化生效：`any-mini-zcode-api-gateway` 等 mini 会话自动出现在 MacBook 的 Claude `@` 补全
 
 ## 2026-08-06 — ZCode adapter（第四家：智谱 Z.ai）+ mDNS 稳定性根治
 

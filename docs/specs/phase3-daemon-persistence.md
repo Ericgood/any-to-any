@@ -29,7 +29,7 @@
 
 1. `launchctl list | grep anytoany` 显示已注册、exit code 0；`anyd status` 为 running。
 2. **复活实测**：`kill -9 <pid>` 后等 ≤ ThrottleInterval，`pgrep` 出现**新 pid**（实测 18569→18736 自动复活）。
-3. 端到端：滞留队列的真实消息在 daemon 恢复后由 `recoverStale` 重投成功（实测用户 sunoprompt→codex 消息 delivered）。
+3. 端到端：滞留队列的真实消息在 daemon 恢复后由 `recoverStale` 重投成功（实测用户 webapp→codex 消息 delivered）。
 
 ## 5. 待办（跨平台）
 

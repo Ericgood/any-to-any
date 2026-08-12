@@ -14,7 +14,7 @@ Claude Code 的 `@` 补全会列出 `~/.claude/agents/` 下的全部 agent。因
 daemon 每次目录刷新后执行 `syncMentionAgents`：
 
 - **候选集**：非 claude 的本机+远端活跃会话（codex/kimi/gemini…），按 lastActiveAt 取 TOP 8/agent 类型；加上已连接对话（conversations）的全部对端（不论排名）。claude↔claude 暂不物化（客户端有原生 send_message；避免 4000+ 会话污染补全）。
-- **命名**：`any-[<device>-]<agent>-<cwd 目录名或标题的 ascii 化>`，冲突追加 id 前 4 位；全小写 kebab。例：`any-codex-shandianshuo-ios`、`any-mini-codex-frontend`。
+- **命名**：`any-[<device>-]<agent>-<cwd 目录名或标题的 ascii 化>`，冲突追加 id 前 4 位；全小写 kebab。例：`any-codex-mobile-app-ios`、`any-mini-codex-frontend`。
 - **文件内容**：frontmatter（name、description 含标题/目录/活跃时间、tools: Bash、model: haiku——投递代理用最便宜模型）+ 投递代理 prompt（精确 target、自我定位发起方、verbatim 转发、失败如实报告、不做任何其他事）。
 - **卫生纪律**：只创建/更新/删除 `any-` 前缀文件；内容不变不写盘；消失的会话对应文件删除；绝不触碰用户自己的 agents。
 

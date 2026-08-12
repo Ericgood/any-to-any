@@ -52,7 +52,7 @@ CLI 命令（agent 与人共用同一套）：
 | 命令 | 行为 | 输出 |
 |---|---|---|
 | `anyd start [--daemon]` / `stop` / `status` | 管理 daemon | 状态与投递统计 |
-| `anyd list [--json]` | 列出可寻址 session | `@codex:资金面盯盘 (2m ago, ~/suno-gateway)` 每行一个 |
+| `anyd list [--json]` | 列出可寻址 session | `@codex:资金面盯盘 (2m ago, ~/api-gateway)` 每行一个 |
 | `anyd send <target> <message> [--from <self>]` | 入邮箱并触发投递 | `messageId` + 投递结果 |
 | `anyd inbox [--session <id>] [--all] [--json]` | 查收件箱 | 未读消息列表 |
 | `anyd reply <messageId> <message>` | 线程内回复（复用 send 管道） | 同 send |

@@ -24,7 +24,7 @@
 | 字段 | 格式/样例 |
 |---|---|
 | `id` | `sess_<uuid4>`；子代理 `sess_subagent_agent_<uuid>` |
-| `project_id` | `proj_users-gongzhen-suno-gateway`（路径小写连字符化） |
+| `project_id` | `proj_users-you-api-gateway`（路径小写连字符化） |
 | `directory` | cwd 绝对路径 |
 | `title` | 首条输入生成（`title_source` 注明来源） |
 | `time_created`/`time_updated` | epoch **毫秒** |
