@@ -1,6 +1,14 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-08-12 — daemon 持久化（launchd）：根治「daemon 离线 → 本机通信通不了」
+
+- 真实事故：用户本机发消息给同机 codex，回执「排队完成，daemon 目前离线」——消息进队列但无 daemon 投递。查明 MacBook daemon 已死（只 nohup 手启，生命周期系于 shell，被干掉后不复活；mini 早有 launchd 所以稳）
+- 修复：装 `~/Library/LaunchAgents/dev.anytoany.daemon.plist`——RunAtLoad 登录即起 + KeepAlive 死了自动拉起（实测 kill 后 18569→18736 自动复活）
+- 关键坑：launchd 默认 PATH 极简，daemon 投递要 spawn codex/kimi/claude/zcode，必须把各家二进制目录全烤进 plist 的 PATH，否则投递「command not found」
+- 可复现：`scripts/install-daemon-launchd.sh`（按 command -v 自动解析本机路径，幂等，任意 Mac 一条命令）；移除用 `launchctl unload`；docs/specs/phase3-daemon-persistence.md
+- 证据：用户滞留的真实消息（sunoprompt Claude→codex sunogate 建 Vercel 项目）在 daemon 恢复后 recoverStale 重投 delivered
+
 ## 2026-08-10 — 修复跨设备「回信给 user」被本机截留（Kimi 连通性验证暴露）
 
 - 真实暴露：MacBook 以 `@user:cli` 身份向 mini/kimi 发探针，kimi 正常收到并回报 cwd `/Users/gongzhen`（mini Codex 确认回信内容），但回信没回到 MacBook——卡在 mini
