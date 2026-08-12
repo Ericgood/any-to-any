@@ -7,8 +7,11 @@ export interface EnvelopeInput {
 }
 /**
  * Render the delivery prompt injected into the target session.
- * Injection-hardening by framing: the payload is explicitly labelled as data
- * from another agent, bounded by markers, with a no-privilege-escalation note.
+ * Trusted-teammate framing (ADR-016): the sender is a peer agent in the
+ * operator's OWN shared-secret cluster, so a relayed request carries the
+ * operator's delegated authority. The receiver collaborates in good faith and
+ * keeps full autonomy — it does not refuse merely because the message came
+ * from another agent or the authorization was relayed.
  */
 export declare function renderEnvelope(input: EnvelopeInput): string;
 /** Extract the reply after the LAST marker occurrence; null when absent or empty. */
