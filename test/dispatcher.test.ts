@@ -11,8 +11,8 @@ const CODEX_B = { agent: 'codex', sessionId: 'bbbb2222-0000-4000-8000-0000000000
 const KIMI_C = { agent: 'kimi', sessionId: 'cccc3333-0000-4000-8000-000000000003' };
 
 const DIRECTORY: SessionInfo[] = [
-  { agent: 'claude', sessionId: CLAUDE_A.sessionId, title: '后端重构', cwd: '/w/backend', lastActiveAt: 1 },
-  { agent: 'codex', sessionId: CODEX_B.sessionId, title: '前端重构', cwd: '/w/frontend', lastActiveAt: 2 },
+  { agent: 'claude', sessionId: CLAUDE_A.sessionId, title: 'backend refactor', cwd: '/w/backend', lastActiveAt: 1 },
+  { agent: 'codex', sessionId: CODEX_B.sessionId, title: 'frontend refactor', cwd: '/w/frontend', lastActiveAt: 2 },
   { agent: 'kimi', sessionId: KIMI_C.sessionId, title: 'k session', cwd: '/w/k', lastActiveAt: 3 },
 ];
 
@@ -56,7 +56,7 @@ describe('dispatchOnce', () => {
     expect(adapter.calls).toHaveLength(1);
     expect(adapter.calls[0]?.session.sessionId).toBe(CODEX_B.sessionId);
     expect(adapter.calls[0]?.envelope).toContain('run the tests');
-    expect(adapter.calls[0]?.envelope).toContain('@claude:后端重构'); // sender labelled by title
+    expect(adapter.calls[0]?.envelope).toContain('@claude:backend refactor'); // sender labelled by title
     expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
   });
 
@@ -193,7 +193,7 @@ describe('virtual user recipient', () => {
     const m = mailbox.send({
       from: { agent: 'kimi', sessionId: 'session_x' },
       to: { agent: 'user', sessionId: 'cli', device: 'macbook' },
-      text: '/Users/gongzhen',
+      text: '/Users/alex/projects/api-service',
     });
     const relayed: Array<{ device: string; id: string }> = [];
     const events: string[] = [];
@@ -279,7 +279,7 @@ describe('anti-pingpong suppression', () => {
     mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'DONE deployed' });
     const events: string[] = [];
     await dispatchOnce({
-      ...mkOpts(mailbox, `${REPLY_MARKER} NOOP\n\n---\n\n本机就绪，等 Codex 触发下一笔。我待命观察，不操作。`),
+      ...mkOpts(mailbox, `${REPLY_MARKER} NOOP\n\n---\n\nready here, waiting for Codex to trigger the next task. Standing by, not acting.`),
       onEvent: (e) => events.push(e.kind),
     });
     expect(events).toEqual(['delivered', 'reply-rejected']);
@@ -303,7 +303,7 @@ describe('anti-pingpong suppression', () => {
     mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'BLOCKED waiting for user authorization' });
     const events: string[] = [];
     await dispatchOnce({
-      ...mkOpts(mailbox, `${REPLY_MARKER} 换方案B：不等授权，先用模拟数据把流程跑通`),
+      ...mkOpts(mailbox, `${REPLY_MARKER} switch to plan B: skip waiting for auth, use mock data to get the flow working`),
       onEvent: (e) => events.push(e.kind),
     });
     expect(events).toEqual(['delivered', 'reply-filed']);

@@ -12,9 +12,9 @@ const s = (over: Partial<SessionInfo>): SessionInfo => ({
 });
 
 const SESSIONS: SessionInfo[] = [
-  s({ agent: 'claude', sessionId: 'abc11111-0000-4000-8000-000000000001', title: '后端重构', cwd: '/w/backend', lastActiveAt: 3000 }),
-  s({ agent: 'claude', sessionId: 'def22222-0000-4000-8000-000000000002', title: 'SEO 页面批量生成', cwd: '/w/soundwise', lastActiveAt: 5000 }),
-  s({ agent: 'codex', sessionId: 'abc33333-0000-4000-8000-000000000003', title: '前端重构', cwd: '/w/frontend', lastActiveAt: 4000 }),
+  s({ agent: 'claude', sessionId: 'abc11111-0000-4000-8000-000000000001', title: 'backend refactor', cwd: '/w/backend', lastActiveAt: 3000 }),
+  s({ agent: 'claude', sessionId: 'def22222-0000-4000-8000-000000000002', title: 'SEO batch page generation', cwd: '/w/soundwise', lastActiveAt: 5000 }),
+  s({ agent: 'codex', sessionId: 'abc33333-0000-4000-8000-000000000003', title: 'frontend refactor', cwd: '/w/frontend', lastActiveAt: 4000 }),
   s({ agent: 'codex', sessionId: 'fff44444-0000-4000-8000-000000000004', title: 'abc pipeline debug', cwd: '/w/pipeline', lastActiveAt: 2000 }),
 ];
 
@@ -23,7 +23,7 @@ describe('parseTarget', () => {
     expect(parseTarget('@codex')).toEqual({ agent: 'codex' });
   });
   it('parses @agent:fragment', () => {
-    expect(parseTarget('@codex:前端')).toEqual({ agent: 'codex', fragment: '前端' });
+    expect(parseTarget('@codex:frontend')).toEqual({ agent: 'codex', fragment: 'frontend' });
   });
   it('parses @device/agent:fragment', () => {
     expect(parseTarget('@mini/codex:x')).toEqual({ device: 'mini', agent: 'codex', fragment: 'x' });
@@ -58,7 +58,7 @@ describe('resolveTarget', () => {
 
   it('matches by title substring, case-insensitive', () => {
     const r = resolveTarget('@claude:seo', SESSIONS);
-    expect(r.ok && r.session.title).toBe('SEO 页面批量生成');
+    expect(r.ok && r.session.title).toBe('SEO batch page generation');
   });
 
   it('matches by cwd basename substring', () => {
@@ -67,9 +67,9 @@ describe('resolveTarget', () => {
   });
 
   it('ambiguous → candidates sorted by recency', () => {
-    const r = resolveTarget('@claude:重构', [
+    const r = resolveTarget('@claude:refactor', [
       ...SESSIONS,
-      s({ agent: 'claude', sessionId: 'eee55555-0000-4000-8000-000000000005', title: '数据库重构', lastActiveAt: 9000 }),
+      s({ agent: 'claude', sessionId: 'eee55555-0000-4000-8000-000000000005', title: 'database refactor', lastActiveAt: 9000 }),
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -87,7 +87,7 @@ describe('resolveTarget', () => {
     if (!r.ok) {
       expect(r.reason).toBe('not_found');
       expect(r.candidates).toHaveLength(2);
-      expect(r.candidates[0]?.title).toBe('前端重构'); // most recent codex first
+      expect(r.candidates[0]?.title).toBe('frontend refactor'); // most recent codex first
     }
   });
 

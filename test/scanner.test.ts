@@ -22,7 +22,7 @@ describe('claude adapter listSessions', () => {
   it('uses the LAST custom-title as title', async () => {
     const sessions = await adapter.listSessions();
     const a = sessions.find((x) => x.sessionId === '11111111-1111-4111-8111-111111111111');
-    expect(a?.title).toBe('后端重构');
+    expect(a?.title).toBe('backend refactor');
   });
 
   it('falls back to first user text when no custom-title, string content form', async () => {
@@ -48,7 +48,7 @@ describe('codex adapter listSessions', () => {
     const a = sessions.find((x) => x.sessionId === '33333333-3333-4333-8333-333333333333');
     expect(a).toBeDefined();
     expect(a?.cwd).toBe('/tmp/codex-proj-frontend');
-    expect(a?.title).toBe('前端重构');
+    expect(a?.title).toBe('frontend refactor');
     expect(a?.agent).toBe('codex');
   });
 

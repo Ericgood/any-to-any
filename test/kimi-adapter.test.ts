@@ -11,8 +11,8 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const SESS = {
   agent: 'kimi',
   sessionId: 'session_11111111-1111-4111-8111-111111111111',
-  title: 'suno-gateway',
-  cwd: '/Users/gongzhen/suno-gateway',
+  title: 'api-service',
+  cwd: '/Users/alex/projects/api-service',
   lastActiveAt: 0,
 };
 
@@ -33,14 +33,14 @@ function makeIndex(name: string, rows: Array<{ id: string; workDir: string; mtim
 describe('kimi session discovery', () => {
   it('maps sessionId/workDir, titles from workDir basename, sorts by dir mtime desc', async () => {
     const idx = makeIndex('idx1', [
-      { id: 'session_aaaa', workDir: '/Users/gongzhen/suno-gateway', mtime: 5000 },
-      { id: 'session_bbbb', workDir: '/Users/gongzhen/wechot', mtime: 9000 },
+      { id: 'session_aaaa', workDir: '/Users/alex/projects/api-service', mtime: 5000 },
+      { id: 'session_bbbb', workDir: '/Users/alex/projects/web-app', mtime: 9000 },
     ]);
     const a = createKimiAdapter({ indexFile: idx, kimiBin: '/x/kimi' });
     const s = await a.listSessions();
     expect(s.map((x) => x.sessionId)).toEqual(['session_bbbb', 'session_aaaa']); // newest first
     const g = s.find((x) => x.sessionId === 'session_aaaa');
-    expect(g).toMatchObject({ agent: 'kimi', title: 'suno-gateway', cwd: '/Users/gongzhen/suno-gateway', lastActiveAt: 5000 });
+    expect(g).toMatchObject({ agent: 'kimi', title: 'api-service', cwd: '/Users/alex/projects/api-service', lastActiveAt: 5000 });
   });
 
   it('returns [] when the index does not exist (machine without kimi)', async () => {

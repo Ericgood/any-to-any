@@ -12,8 +12,8 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const SESS = {
   agent: 'zcode',
   sessionId: 'sess_11111111-2222-4333-8444-555555555555',
-  title: 'suno gateway 巡检',
-  cwd: '/w/suno-gateway',
+  title: 'api service audit',
+  cwd: '/w/api-service',
   lastActiveAt: 5000,
 };
 

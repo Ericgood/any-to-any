@@ -188,7 +188,7 @@ describe('three-party context — user piggyback on an agent pair thread', () =>
   it('explicit conversationId keeps user messages AND their replies in the pair thread', () => {
     const mailbox = createMailbox(createDb(':memory:'));
     const seed = mailbox.send({ from: A, to: B, text: 'kickoff' });
-    const um = mailbox.send({ from: USER, to: B, text: '老板指示', conversationId: seed.conversationId });
+    const um = mailbox.send({ from: USER, to: B, text: 'boss instruction', conversationId: seed.conversationId });
     expect(um.conversationId).toBe(seed.conversationId);
     const r = mailbox.reply(um.id, 'ok boss');
     expect(r.conversationId).toBe(seed.conversationId);

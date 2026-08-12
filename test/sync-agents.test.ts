@@ -8,8 +8,8 @@ import { syncMentionAgents } from '../src/cluster/sync-agents.js';
 const s = (over: Partial<SessionInfo>): SessionInfo => ({
   agent: 'codex',
   sessionId: '019f4823-74af-7510-8daa-bb7cb0450a77',
-  title: '闪电说IOS 开发',
-  cwd: '/Users/x/shandianshuo-iOS',
+  title: 'mobile app dev',
+  cwd: '/Users/alex/projects/mobile-app',
   lastActiveAt: 1000,
   ...over,
 });
@@ -31,9 +31,9 @@ describe('syncMentionAgents', () => {
     );
     expect(written).toHaveLength(1); // claude sessions are not materialized
     const files = readdirSync(agentsDir);
-    expect(files).toEqual(['any-codex-shandianshuo-ios.md']);
+    expect(files).toEqual(['any-codex-mobile-app.md']);
     const body = readFileSync(join(agentsDir, files[0]!), 'utf8');
-    expect(body).toContain('name: any-codex-shandianshuo-ios');
+    expect(body).toContain('name: any-codex-mobile-app');
     expect(body).toContain('@codex:019f4823-74af-7510-8daa-bb7cb0450a77'); // pre-bound exact id
     expect(body).toContain('tools: Bash');
     expect(body).toContain('model: haiku');
@@ -51,14 +51,14 @@ describe('syncMentionAgents', () => {
       { agentsDir },
     );
     expect(written).toHaveLength(1);
-    expect(readdirSync(agentsDir)).toEqual(['any-codex-shandianshuo-ios.md']);
+    expect(readdirSync(agentsDir)).toEqual(['any-codex-mobile-app.md']);
   });
 
   it('includes device prefix for remote sessions', async () => {
     const agentsDir = setup();
     await syncMentionAgents([s({ device: 'mini', sessionId: '019f0000-0000-7000-8000-000000000001' })], [], { agentsDir });
     const files = readdirSync(agentsDir);
-    expect(files).toEqual(['any-mini-codex-shandianshuo-ios.md']);
+    expect(files).toEqual(['any-mini-codex-mobile-app.md']);
     expect(readFileSync(join(agentsDir, files[0]!), 'utf8')).toContain('@mini/codex:019f0000');
   });
 

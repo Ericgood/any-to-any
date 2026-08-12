@@ -4,12 +4,12 @@ import { extractReply, renderEnvelope, REPLY_MARKER } from '../src/envelope.js';
 describe('renderEnvelope', () => {
   const env = renderEnvelope({
     messageId: 'msg-1234',
-    fromLabel: '@claude:后端重构',
-    text: 'worker.js 的重定向我改成 301 了，帮我跑下路由测试',
+    fromLabel: '@claude:backend refactor',
+    text: 'changed the worker.js redirect to 301, please run the routing tests',
   });
 
   it('identifies the source and message id', () => {
-    expect(env).toContain('@claude:后端重构');
+    expect(env).toContain('@claude:backend refactor');
     expect(env).toContain('msg-1234');
   });
 

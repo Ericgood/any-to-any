@@ -9,8 +9,8 @@ const CLAUDE_A = { agent: 'claude', sessionId: 'aaaa1111-0000-4000-8000-00000000
 const CODEX_B = { agent: 'codex', sessionId: 'bbbb2222-0000-4000-8000-000000000002' };
 
 const DIRECTORY: SessionInfo[] = [
-  { agent: 'claude', sessionId: CLAUDE_A.sessionId, title: '后端', cwd: '/w/a', lastActiveAt: 1 },
-  { agent: 'codex', sessionId: CODEX_B.sessionId, title: '前端', cwd: '/w/b', lastActiveAt: 2 },
+  { agent: 'claude', sessionId: CLAUDE_A.sessionId, title: 'backend', cwd: '/w/a', lastActiveAt: 1 },
+  { agent: 'codex', sessionId: CODEX_B.sessionId, title: 'frontend', cwd: '/w/b', lastActiveAt: 2 },
 ];
 
 const PORT = 17433;

@@ -19,7 +19,7 @@ function renderAgentFile(name, s) {
     const where = s.device ? `device "${s.device}", ` : '';
     return `---
 name: ${name}
-description: 发消息给 ${s.agent} 会话「${s.title}」（${where}${s.cwd}，${formatRelativeTime(s.lastActiveAt)} 活跃）。Deliver a message to that exact ${s.agent} session via anytoany. Use when the user @-mentions this agent with a message to relay.
+description: Message the ${s.agent} session "${s.title}" (${where}${s.cwd}). Delivers to that exact ${s.agent} session via anytoany; use when the user @-mentions this agent to relay a message. Active ${formatRelativeTime(s.lastActiveAt)}.
 tools: Bash
 model: haiku
 ---
@@ -84,7 +84,7 @@ export async function syncMentionAgents(sessions, conversations, options = {}) {
         const content = renderAgentFile(name, session);
         const existing = existsSync(path) ? readFileSync(path, 'utf8') : null;
         // strip the volatile relative-time phrase before comparing to stay idempotent
-        const stable = (t) => t.replace(/[^（(]*活跃）/g, '');
+        const stable = (t) => t.replace(/Active [^.]*\./g, '');
         if (existing === null || stable(existing) !== stable(content)) {
             writeFileSync(path, content, 'utf8');
             written.push(file);

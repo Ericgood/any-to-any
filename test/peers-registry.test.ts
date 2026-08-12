@@ -69,7 +69,7 @@ describe('peer rename dedup', () => {
       addresses: ['192.168.1.97'],
       port: 7433,
     });
-    up(svc('gongzhendemac-mini-3'));
+    up(svc('desktop-7f3a'));
     up(svc('mini'));
     expect(r.list().map((p) => p.device)).toEqual(['mini']);
     r.stop();

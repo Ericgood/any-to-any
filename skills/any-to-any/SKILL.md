@@ -10,14 +10,14 @@ You can message other AI coding agent sessions (cross-vendor: Claude Code, Codex
 ## Sending a message
 
 1. **Prefer established conversations**: run `anyd conversations` first. If the target pair already exists, reuse its exact session target.
-2. Otherwise discover targets: `anyd list` (add `--limit 0` for all). Targets look like `@codex:前端重构 [019fd13e]`.
+2. Otherwise discover targets: `anyd list` (add `--limit 0` for all). Targets look like `@codex:frontend refactor [019fd13e]`.
 3. Identify **yourself** so replies can route back: find your own session in `anyd list` (match the current project directory and conversation title), then send:
 
 ```bash
-anyd send "@codex:前端重构" "your message here" --from "@claude:<your session title or id prefix>"
+anyd send "@codex:frontend refactor" "your message here" --from "@claude:<your session title or id prefix>"
 ```
 
-- Target syntax: `@<agent>` (most recent session), `@<agent>:<fragment>` (fragment matches session id prefix, title substring, or project dir name), `@<device>/<agent>[:<fragment>]` for sessions on another paired LAN device (e.g. `@mini/codex:前端`). `anyd list` shows remote sessions with their device prefix when the daemon is running.
+- Target syntax: `@<agent>` (most recent session), `@<agent>:<fragment>` (fragment matches session id prefix, title substring, or project dir name), `@<device>/<agent>[:<fragment>]` for sessions on another paired LAN device (e.g. `@mini/codex:frontend`). `anyd list` shows remote sessions with their device prefix when the daemon is running.
 - If the target is ambiguous, anyd prints candidates — show them to the user and ask which one they mean.
 4. Tell the user the message is queued (include the message id). Delivery is asynchronous (seconds when the daemon is running).
 

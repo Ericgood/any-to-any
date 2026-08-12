@@ -90,18 +90,18 @@ describe('routeForMessage', () => {
 
 describe('resolve with device targets', () => {
   const sessions: SessionInfo[] = [
-    { agent: 'codex', sessionId: 'aaaa1111-0000-4000-8000-000000000001', title: '本机前端', cwd: '/w/f', lastActiveAt: 2 },
-    { agent: 'codex', sessionId: 'bbbb2222-0000-4000-8000-000000000002', title: '远端前端', cwd: '/w/f', lastActiveAt: 5, device: 'mini' },
-    { agent: 'claude', sessionId: 'cccc3333-0000-4000-8000-000000000003', title: '远端后端', cwd: '/w/b', lastActiveAt: 4, device: 'mini' },
+    { agent: 'codex', sessionId: 'aaaa1111-0000-4000-8000-000000000001', title: 'local frontend', cwd: '/w/f', lastActiveAt: 2 },
+    { agent: 'codex', sessionId: 'bbbb2222-0000-4000-8000-000000000002', title: 'remote frontend', cwd: '/w/f', lastActiveAt: 5, device: 'mini' },
+    { agent: 'claude', sessionId: 'cccc3333-0000-4000-8000-000000000003', title: 'remote backend', cwd: '/w/b', lastActiveAt: 4, device: 'mini' },
   ];
 
   it('no device segment matches local sessions only', () => {
-    const r = resolveTarget('@codex:前端', sessions);
+    const r = resolveTarget('@codex:frontend', sessions);
     expect(r.ok && r.session.sessionId).toBe('aaaa1111-0000-4000-8000-000000000001');
   });
 
   it('@device/agent:frag matches sessions on that device', () => {
-    const r = resolveTarget('@mini/codex:前端', sessions);
+    const r = resolveTarget('@mini/codex:frontend', sessions);
     expect(r.ok && r.session.sessionId).toBe('bbbb2222-0000-4000-8000-000000000002');
   });
 

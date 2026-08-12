@@ -31,10 +31,10 @@ export function createNotifier(opts: { enabled: boolean; now?: () => number } = 
       const last = lastPerSession.get(sessionId) ?? 0;
       if (ts - last < THROTTLE_MS) return;
       lastPerSession.set(sessionId, ts);
-      const verb = direction === 'received' ? '收到新消息' : '发出了回复';
+      const verb = direction === 'received' ? 'received a new message' : 'sent a reply';
       postNotification(
         'anytoany',
-        `@${agent}:${sessionTitle} ${verb} — 重新打开该会话可见（或看控制台 127.0.0.1:7433）`,
+        `@${agent}:${sessionTitle} ${verb} — reopen the session to see it (or the console at 127.0.0.1:7433)`,
       );
     },
   };

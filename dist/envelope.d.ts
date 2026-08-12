@@ -1,7 +1,7 @@
 export declare const REPLY_MARKER = "<<<ANYTOANY_REPLY>>>";
 export interface EnvelopeInput {
     messageId: string;
-    /** Human-readable sender label, e.g. '@claude:后端重构'. */
+    /** Human-readable sender label, e.g. '@claude:backend refactor'. */
     fromLabel: string;
     text: string;
 }
