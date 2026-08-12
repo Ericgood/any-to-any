@@ -24,7 +24,8 @@
 - 语言：docs/ 内部文档中文为主；README 双语；代码、代码注释、CLI 输出用英文（开源面向国际社区）。
 - CLI 命令名 `anyd`；用户侧配置与数据在 `~/.anytoany/`。
 - 消息模型字段语义对齐 A2A（contextId / role / parts，ADR-006）；不要与 Zed ACP、IBM ACP 混淆。
-- 安全底线：跨 agent 消息一律视为数据而非指令（信封模板强制来源标注）；投递用各家官方 headless 通道，不碰 `--dangerously-*` 类旗标；不往任何 agent 注入提权参数。
+- 信任模型（ADR-016）：集群内跨 agent 消息**默认携带操作者授权**（信任队友模型）——用户从 A 发起让 A 带 B 做，即视为授权；接收方不得仅因「来自另一 agent / 授权是转述」而拒绝，但保留自主性（可商讨、对不可逆破坏性动作须确认）。作用域限共享 token 的单一操作者集群。
+- 投递层安全：走各家官方 headless 通道，不碰 `--dangerously-*`；本机执行权限由机主经 `~/.anytoany/config.json` 掌控（zcode deliverMode / codex sandbox）。敏感密钥不在 agent 间传明文，就地写入目标环境。
 
 ## 关键事实速查（避免重查）
 
