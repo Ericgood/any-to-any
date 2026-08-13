@@ -194,3 +194,15 @@ Codex 侧不分层（exec resume 已全验证）。
 **边界诚实**：#1 是硬机制（daemon 保证文档存在），#2 是软提示（靠 agent 遵循技能，同「主动 pull」性质）——因为「写目标/分工」本就得 agent 动脑，daemon 替不了。二者配合：连接即有壳（硬保证）+ lead 开局填肉（软驱动）。
 
 细化见 [specs/phase4-collab-doc.md](specs/phase4-collab-doc.md) §7、§11。
+
+## ADR-019 投递新增「monitor 实时在会话内接收」模式（借鉴 agmsg），与 headless resume 并存（2026-08-13，竞品调研 + 用户拍板）
+
+**背景**：发布前调研发现直接同类 [agmsg](https://github.com/fujibee/agmsg)（1.4k star、PH 当日第 5、连 7 家、纯 bash+SQLite 无 daemon）。它比我们强的一点、且正好治我们几天的痛点:**它不用 headless resume**——靠 SessionStart hook 拉起一个阻塞进程,agent **在自己的活会话里跑一个阻塞工具调用**盯 SQLite,新消息作为工具返回值出现在当前回合里,所以**天然显示在实时界面**,没有 Codex #28259「投递了但看不见」的病。我们一直用 `codex exec resume`（headless、隐形）+ 手动 `anyd pull` 补看,体验差。用户原话:「确实那个体验对我更重要,我希望 agent 之间协作更好,而不是让我点一下再干一下。」
+
+**决策**：新增 `anyd monitor`——**活会话主动阻塞接收**,与现有 headless resume **并存**(按会话选路,不是替换):
+1. **`anyd monitor`**:阻塞轮询邮箱,有发给本会话的消息就**在本回合打印出来**(可见)、然后退出,让 agent 干活+回信,再 monitor。同机 monitor↔monitor **不需要 daemon**(直读邮箱)——拿到 agmsg 的极简。
+2. **心跳协调**:monitor 期间写 `~/.anytoany/monitors/<sess>` 心跳;dispatcher 的 `claimNextPending(skip)` **跳过被监听的本地会话**,把消息留 pending 给 monitor 拉——**杜绝双投递和隐形回合**。心跳 10s 过期,monitor 挂了 daemon 自动回退 resume 投递(failover)。
+3. **并存而非取代**:跨设备、或没在 monitor 的会话,仍走 daemon resume 投递。monitor 是「活会话在场时的更优路径」。
+4. **诚实**:仍靠 agent 遵循技能去跑 `anyd monitor`(软),但一旦跑上,可见性是硬的(它自己在收)。~5s 级延迟(轮询),非真流式——跨厂商可接受。
+
+**与 agmsg 的取舍**:我们保留 daemon(为**跨设备**——agmsg 架构上做不到)+ ack/重试/死信 + 反乒乓 + 协作层;借它的 monitor 补上「同机实时可见」这块短板。定位从「跨厂商消息」(硬碰 agmsg)转向「**跨设备 + 真协作,同机也不输**」。

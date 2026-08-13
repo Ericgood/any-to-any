@@ -60,7 +60,12 @@ export interface Mailbox {
     /** Stable conversationId for a session pair (order-independent); creates the
      *  row if absent WITHOUT bumping last_message_at. Used to key a collab doc. */
     getOrCreateConversation(from: SessionRef, to: SessionRef): string;
-    claimNextPending(): Message | null;
+    /** Claim the next deliverable message, marking it 'delivering'. `skip` lets the
+     *  dispatcher pass over messages whose local target is being live-monitored
+     *  (they stay pending for `anyd monitor` to pull instead of a headless resume). */
+    claimNextPending(opts?: {
+        skip?: (toSession: string, toDevice: string | null) => boolean;
+    }): Message | null;
     markDelivered(id: string): Message;
     markFailed(id: string, error: string, opts?: {
         terminal?: boolean;

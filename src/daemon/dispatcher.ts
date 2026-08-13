@@ -28,6 +28,10 @@ export interface DispatcherOptions {
     exists(conversationId: string): boolean;
     ensure?(input: { conversationId: string; lead: string; body?: string }): Promise<unknown>;
   };
+  /** A local session actively running `anyd monitor` receives messages live in its
+   *  own turn; the dispatcher must NOT resume-deliver to it (which would create an
+   *  invisible headless turn). Such messages stay pending for the monitor to pull. */
+  isMonitored?: (sessionId: string) => boolean;
 }
 
 const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: string): string =>
@@ -35,7 +39,12 @@ const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: st
 
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
-  const claimed = opts.mailbox.claimNextPending();
+  // skip local targets that are live-monitoring — they pull messages themselves
+  const claimed = opts.mailbox.claimNextPending(
+    opts.isMonitored
+      ? { skip: (toSession, toDevice) => !toDevice && opts.isMonitored!(toSession) }
+      : undefined,
+  );
   if (!claimed) return false;
   const emit = (event: DispatchEvent) => opts.onEvent?.(event);
 

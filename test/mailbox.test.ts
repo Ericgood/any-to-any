@@ -103,6 +103,26 @@ describe('mailbox', () => {
       const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
       expect(() => mailbox.markDelivered(m.id)).toThrow(/pending -> delivered/i); // must claim first
     });
+
+    it('claimNextPending skips a live-monitored local target and claims the next instead', () => {
+      const m1 = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'to monitored codex' });
+      nowMs += 1000;
+      const m2 = mailbox.send({ from: CODEX_B, to: CLAUDE_A, text: 'to claude' });
+      const claimed = mailbox.claimNextPending({ skip: (toSession) => toSession === CODEX_B.sessionId });
+      expect(claimed?.id).toBe(m2.id); // m1 skipped (codex is monitoring), m2 claimed
+      expect(mailbox.getMessage(m1.id)?.status).toBe('pending'); // left for the monitor to pull
+    });
+
+    it('claimNextPending returns null when the only claimable message is skipped', () => {
+      mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'x' });
+      expect(mailbox.claimNextPending({ skip: (s) => s === CODEX_B.sessionId })).toBeNull();
+    });
+
+    it('skip sees the device, so remote targets are never treated as locally monitored', () => {
+      const m = mailbox.send({ from: CLAUDE_A, to: { ...CODEX_B, device: 'mini' }, text: 'remote' });
+      const claimed = mailbox.claimNextPending({ skip: (s, d) => !d && s === CODEX_B.sessionId });
+      expect(claimed?.id).toBe(m.id); // remote relayed as usual
+    });
   });
 
   describe('inbox', () => {

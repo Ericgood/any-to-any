@@ -198,14 +198,17 @@ export function createMailbox(db, opts = {}) {
                 .all(sessionId, sessionId, sinceMs, limit);
             return rows.map(rowToMessage);
         },
-        claimNextPending() {
+        claimNextPending(opts2 = {}) {
             const claim = db.transaction(() => {
-                const row = db
+                // fetch a small window of claimable messages (oldest first) so we can pass
+                // over live-monitored targets without stalling the rest of the queue
+                const rows = db
                     .prepare(`SELECT * FROM messages
              WHERE status = 'pending'
                 OR (status = 'failed' AND attempts < ? AND updated_at <= ?)
-             ORDER BY created_at ASC LIMIT 1`)
-                    .get(MAX_ATTEMPTS, now() - RETRY_BACKOFF_MS);
+             ORDER BY created_at ASC LIMIT 25`)
+                    .all(MAX_ATTEMPTS, now() - RETRY_BACKOFF_MS);
+                const row = rows.find((r) => !opts2.skip || !opts2.skip(r.to_session, r.to_device));
                 if (!row)
                     return null;
                 db.prepare(`UPDATE messages SET status = 'delivering', updated_at = ? WHERE id = ?`).run(now(), row.id);

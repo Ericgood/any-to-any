@@ -69,7 +69,10 @@ export interface Mailbox {
   /** Stable conversationId for a session pair (order-independent); creates the
    *  row if absent WITHOUT bumping last_message_at. Used to key a collab doc. */
   getOrCreateConversation(from: SessionRef, to: SessionRef): string;
-  claimNextPending(): Message | null;
+  /** Claim the next deliverable message, marking it 'delivering'. `skip` lets the
+   *  dispatcher pass over messages whose local target is being live-monitored
+   *  (they stay pending for `anyd monitor` to pull instead of a headless resume). */
+  claimNextPending(opts?: { skip?: (toSession: string, toDevice: string | null) => boolean }): Message | null;
   markDelivered(id: string): Message;
   markFailed(id: string, error: string, opts?: { terminal?: boolean }): Message;
   retry(id: string): Message;
@@ -344,16 +347,19 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
       return rows.map(rowToMessage);
     },
 
-    claimNextPending(): Message | null {
+    claimNextPending(opts2: { skip?: (toSession: string, toDevice: string | null) => boolean } = {}): Message | null {
       const claim = db.transaction((): Message | null => {
-        const row = db
+        // fetch a small window of claimable messages (oldest first) so we can pass
+        // over live-monitored targets without stalling the rest of the queue
+        const rows = db
           .prepare(
             `SELECT * FROM messages
              WHERE status = 'pending'
                 OR (status = 'failed' AND attempts < ? AND updated_at <= ?)
-             ORDER BY created_at ASC LIMIT 1`,
+             ORDER BY created_at ASC LIMIT 25`,
           )
-          .get(MAX_ATTEMPTS, now() - RETRY_BACKOFF_MS) as MessageRow | undefined;
+          .all(MAX_ATTEMPTS, now() - RETRY_BACKOFF_MS) as MessageRow[];
+        const row = rows.find((r) => !opts2.skip || !opts2.skip(r.to_session, r.to_device));
         if (!row) return null;
         db.prepare(`UPDATE messages SET status = 'delivering', updated_at = ? WHERE id = ?`).run(now(), row.id);
         return getMessage(row.id);

@@ -389,6 +389,37 @@ describe('collab auto-create on connection (ADR-018)', () => {
   });
 });
 
+describe('live-monitor coordination', () => {
+  it('does NOT resume-deliver to a live-monitored session — leaves it pending for `anyd monitor`', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi codex' });
+    const did = await dispatchOnce({
+      mailbox,
+      adapters: new Map([[adapter.agent, adapter]]),
+      directory: async () => DIRECTORY,
+      isMonitored: (sid) => sid === CODEX_B.sessionId,
+    });
+    expect(did).toBe(false); // nothing to deliver via resume
+    expect(adapter.calls).toHaveLength(0); // codex was NOT headlessly resumed
+    expect(mailbox.getMessage(m.id)?.status).toBe('pending'); // the monitor will pull it live
+  });
+
+  it('still resume-delivers to a session that is not monitoring', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi codex' });
+    await dispatchOnce({
+      mailbox,
+      adapters: new Map([[adapter.agent, adapter]]),
+      directory: async () => DIRECTORY,
+      isMonitored: () => false,
+    });
+    expect(adapter.calls).toHaveLength(1);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+});
+
 describe('non-retryable delivery failures', () => {
   it('a result with retry:false goes straight to dead (no wasteful re-run of a turn that already ran)', async () => {
     const mailbox = createMailbox(createDb(':memory:'));

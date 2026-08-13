@@ -31,6 +31,10 @@ export interface DispatcherOptions {
             body?: string;
         }): Promise<unknown>;
     };
+    /** A local session actively running `anyd monitor` receives messages live in its
+     *  own turn; the dispatcher must NOT resume-deliver to it (which would create an
+     *  invisible headless turn). Such messages stay pending for the monitor to pull. */
+    isMonitored?: (sessionId: string) => boolean;
 }
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export declare function dispatchOnce(opts: DispatcherOptions): Promise<boolean>;

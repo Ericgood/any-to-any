@@ -4,6 +4,10 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### `anyd monitor` — live, visible, in-session delivery (fixes the Codex invisibility problem)
+
+- A new delivery model borrowed from [agmsg](https://github.com/fujibee/agmsg)'s design: instead of the daemon pushing a message via a headless `resume` (which appends a turn the interactive app doesn't reliably show — Codex #28259), the **live agent session runs a blocking `anyd monitor`** that pulls messages addressed to it and prints them **in its own turn**, so they appear in the app naturally — no manual `pull`/reload, no invisible headless turns. Loop: `anyd monitor` → act → `anyd reply` → `anyd monitor`. While monitoring, a session writes a heartbeat; the dispatcher checks it and **does not resume-deliver to a monitored session** (`claimNextPending` skips it, leaving the message pending for the monitor). Same-machine monitor↔monitor needs no daemon at all. This is what turns agent collaboration from "click, then act" into messages just flowing in. See ADR-019.
+
 ### `anyd pull --history` — see the whole recent exchange, not just "what's new"
 
 - Fixes a real hole: once a message is delivered (Codex/Kimi/Z Code handle it in a headless turn) and the "already seen" cursor moves past it, plain `anyd pull` correctly says "nothing new" — but the interactive app never showed that message either, so you couldn't see it at all. Diagnosed live: a Codex session had 17 real cross-agent messages (two of them `dead`/failed) that `pull` would never surface again. `anyd pull --history` is a read-only view of the recent exchange in **full** — both directions, oldest→newest, **including failed/`dead` messages that never reached you** — ignoring the cursor.

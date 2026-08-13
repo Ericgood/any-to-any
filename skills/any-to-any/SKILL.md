@@ -44,7 +44,9 @@ This status line is protocol, not chatter — it is required even when an earlie
 
 For real multi-step work between two sessions, use a **shared collaboration doc** instead of stuffing everything into messages. The doc is the source of truth; messages are just the doorbell that says "look at the doc". One agent is the **lead** and owns the plan + task list; every agent appends only to its **own** progress section.
 
-**Start each collaboration turn by pulling** — unless you are Claude Code (whose inbox hook does this for you): run `anyd pull --quiet` first, so a peer's latest message actually lands in this live session (Codex / Kimi / Z Code apps don't show it on their own). It's silent when there's nothing new.
+**Receive live while collaborating — run `anyd monitor`.** This is the best way to work with a peer without the copy-paste/reload dance: `anyd monitor` **blocks until a message addressed to you arrives, prints it right here in your session, then exits** so you can act and reply. Because your live session receives it itself (no headless resume), it always shows in your app — this is what fixes the "Codex delivered it but I can't see it" problem (#28259). Loop it: `anyd monitor` → do the work → `anyd reply <id> "…"` → `anyd monitor` again. The daemon knows you're monitoring and won't deliver behind your back. (`anyd monitor` returns after ~30 min if nothing arrives — just run it again.)
+
+For a one-shot check instead of blocking, `anyd pull --quiet` still works (silent when nothing's new); Claude Code also has an automatic inbox hook.
 
 **When a delivered `[anytoany]` message carries a `--- SHARED PLAN ---` footer**, this conversation has a doc. Then, in your single turn:
 

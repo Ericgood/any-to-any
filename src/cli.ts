@@ -239,12 +239,14 @@ program
     }
 
     const { startDispatcher } = await import('./daemon/dispatcher.js');
+    const { isMonitored } = await import('./daemon/monitor.js');
     const running = startDispatcher(
       {
         mailbox,
         adapters: new Map(adapters.map((a) => [a.agent, a])),
         directory,
         collab,
+        isMonitored: (sid) => isMonitored(sid),
         ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
         onEvent: (e) => {
           const m = e.message;
@@ -627,6 +629,68 @@ program
     }
     if (!any && !opts.quiet) {
       console.log('no new anytoany messages — run `anyd pull --history` to see the recent exchange (delivered ones included).');
+    }
+  });
+program
+  .command('monitor')
+  .description('Receive messages LIVE in this session — blocks until one arrives, prints it here (no headless resume, no manual reload)')
+  .option('--session <target>', 'monitor a specific session instead of auto-detecting by directory')
+  .option('--cwd <dir>', 'directory used to identify your session (default: current directory)')
+  .option('--timeout <s>', 'stop waiting after this many seconds (then just run monitor again)', '1800')
+  .option('--poll <ms>', 'poll interval', '1500')
+  .action(async (opts: { session?: string; cwd?: string; timeout?: string; poll?: string }) => {
+    const mailbox = openMailbox();
+    const { collectInbox } = await import('./hooks/prompt-hook.js');
+    const { heartbeat, clearMonitor } = await import('./daemon/monitor.js');
+    let targets: Array<{ id: string; label: string }> = [];
+    if (opts.session) {
+      const s = await resolveOrExit(opts.session);
+      targets = [{ id: s.sessionId, label: `@${s.agent}:${s.title}` }];
+    } else {
+      const cwd = opts.cwd ?? process.cwd();
+      const { sessions } = await listAllSessions(defaultAdapters());
+      const matches = sessions.filter((s) => s.cwd === cwd);
+      if (matches.length === 0) {
+        console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
+        return;
+      }
+      targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
+    }
+    const timeoutMs = (Number.parseInt(opts.timeout ?? '1800', 10) || 1800) * 1000;
+    const pollMs = Number.parseInt(opts.poll ?? '1500', 10) || 1500;
+    const deadline = Date.now() + timeoutMs;
+    const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+    // clear heartbeats on ANY exit path (normal return, Ctrl-C, kill) so the
+    // daemon resumes normal delivery promptly instead of waiting for staleness
+    const cleanup = (): void => {
+      for (const t of targets) clearMonitor(t.id);
+    };
+    process.once('exit', cleanup);
+    process.once('SIGINT', () => process.exit(130));
+    process.once('SIGTERM', () => process.exit(143));
+    console.log(`monitoring ${targets.map((t) => t.label).join(', ')} — waiting for messages…`);
+    for (;;) {
+      for (const t of targets) heartbeat(t.id); // tell the daemon: don't resume-deliver to me
+      let got = false;
+      for (const t of targets) {
+        const text = collectInbox(mailbox, t.id);
+        if (text) {
+          console.log(`===== ${t.label} =====`);
+          console.log(text);
+          console.log('');
+          got = true;
+        }
+      }
+      if (got) {
+        cleanup();
+        return; // a message arrived — hand control back so the agent acts + replies, then monitors again
+      }
+      if (Date.now() >= deadline) {
+        cleanup();
+        console.log('monitor: nothing arrived in the window — run `anyd monitor` again to keep waiting.');
+        return;
+      }
+      await sleep(pollMs);
     }
   });
 program

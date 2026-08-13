@@ -3,7 +3,10 @@ import { renderEnvelope, extractReply } from '../envelope.js';
 const label = (s, fallbackAgent, fallbackId) => s ? `@${s.agent}:${s.title}` : `@${fallbackAgent}:${fallbackId.slice(0, 8)}`;
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts) {
-    const claimed = opts.mailbox.claimNextPending();
+    // skip local targets that are live-monitoring — they pull messages themselves
+    const claimed = opts.mailbox.claimNextPending(opts.isMonitored
+        ? { skip: (toSession, toDevice) => !toDevice && opts.isMonitored(toSession) }
+        : undefined);
     if (!claimed)
         return false;
     const emit = (event) => opts.onEvent?.(event);
