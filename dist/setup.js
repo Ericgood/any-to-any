@@ -5,21 +5,22 @@ import { dirname, join } from 'node:path';
 const require = createRequire(import.meta.url);
 const HOOK_COMMAND = 'anyd hook claude-prompt-submit';
 const CODEX_HOOK_COMMAND = 'anyd hook codex-prompt-submit';
-/** Skill install targets: per-agent dirs plus the shared Agent Skills dir. */
-function skillTargets(home) {
-    return [
-        join(home, '.claude', 'skills', 'any-to-any'),
-        join(home, '.codex', 'skills', 'any-to-any'),
-        join(home, '.agents', 'skills', 'any-to-any'),
-    ];
+/** Skills shipped by anytoany; each is copied into every agent's skills dir. */
+const SKILLS = ['any-to-any', 'reload'];
+/** Per-agent skill roots plus the shared Agent Skills dir (Kimi / Z Code read the shared one). */
+function skillRoots(home) {
+    return [join(home, '.claude', 'skills'), join(home, '.codex', 'skills'), join(home, '.agents', 'skills')];
 }
 function installSkill(home) {
-    const source = join(dirname(require.resolve('../package.json')), 'skills', 'any-to-any', 'SKILL.md');
+    const skillsDir = join(dirname(require.resolve('../package.json')), 'skills');
     const installed = [];
-    for (const dir of skillTargets(home)) {
-        mkdirSync(dir, { recursive: true });
-        copyFileSync(source, join(dir, 'SKILL.md'));
-        installed.push(dir);
+    for (const root of skillRoots(home)) {
+        for (const name of SKILLS) {
+            const dir = join(root, name);
+            mkdirSync(dir, { recursive: true });
+            copyFileSync(join(skillsDir, name, 'SKILL.md'), join(dir, 'SKILL.md'));
+            installed.push(dir);
+        }
     }
     return installed;
 }

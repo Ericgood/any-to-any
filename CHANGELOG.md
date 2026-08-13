@@ -4,6 +4,10 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### `anyd pull` — manual reload for interactive apps
+
+- New `anyd pull` command + a `reload` skill (say "/reload"). Interactive agent apps (Codex, Kimi, Z Code) cache the session in memory and don't live-refresh from disk, so a cross-agent message delivered as a headless turn can sit unseen until you restart. `anyd pull` reads the mailbox on disk for the current session (auto-detected by working directory, or `--session`/`--cwd`), injecting anything pending and showing an FYI digest of already-handled traffic — the manual counterpart to Claude Code's automatic inbox hook, which is why only non-Claude apps needed it. Works with the daemon down. The delivered-message injection also got the ADR-016 trusted-teammate framing (was still the stale "external data" wording). The `reload` skill is installed alongside `any-to-any` by `anyd setup`.
+
 ### Collaboration layer (Phase 4) — M4: semi-automatic progression
 
 - The console now has a **▶ Continue** button on every open task. One click nudges that task's owner to do the next chunk — it resolves the owner label to a live session and sends an in-thread message ("continue task X, read the shared plan, do the next chunk, log progress"), pinned to the collab conversation so the delivery carries the shared-plan footer. It is operator-triggered by design, so it cannot self-loop. Endpoint `POST /api/collab/:id/advance`. A fully-automatic scheduler (wake the worker for the next chunk without a click) is deliberately deferred until "when to stop" is settled.

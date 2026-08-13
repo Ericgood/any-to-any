@@ -9,12 +9,15 @@ const home = mkdtempSync(join(tmpdir(), 'anytoany-setup-'));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 describe('runSetup', () => {
-  it('installs the skill into all three agent skill dirs', async () => {
+  it('installs the any-to-any and reload skills into all three agent skill dirs', async () => {
     await runSetup({ withHook: false, home });
     for (const dir of ['.claude', '.codex', '.agents']) {
-      const p = join(home, dir, 'skills', 'any-to-any', 'SKILL.md');
-      expect(existsSync(p), p).toBe(true);
-      expect(readFileSync(p, 'utf8')).toContain('name: any-to-any');
+      const a2a = join(home, dir, 'skills', 'any-to-any', 'SKILL.md');
+      expect(existsSync(a2a), a2a).toBe(true);
+      expect(readFileSync(a2a, 'utf8')).toContain('name: any-to-any');
+      const reload = join(home, dir, 'skills', 'reload', 'SKILL.md');
+      expect(existsSync(reload), reload).toBe(true);
+      expect(readFileSync(reload, 'utf8')).toContain('name: reload');
     }
   });
 

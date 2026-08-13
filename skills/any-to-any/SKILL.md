@@ -25,6 +25,7 @@ anyd send "@codex:frontend refactor" "your message here" --from "@claude:<your s
 
 - Check for replies/new messages addressed to you: `anyd inbox --session "@<agent>:<your session>" --take` (`--take` marks them delivered).
 - Messages may also arrive injected into your context labelled `[anytoany] Cross-agent message from …`.
+- **Didn't see a message you were expecting?** Codex / Kimi / Z Code interactive apps cache the session and don't live-refresh from disk, so a delivered cross-agent turn can sit unseen. Run `anyd pull` (or invoke the **reload** skill / say "/reload") to pull it from disk without restarting — no daemon needed.
 - To reply to a specific message: `anyd reply <messageId> "reply text"` — or end your response with a line `<<<ANYTOANY_REPLY>>> your reply` when the message asked you to.
 
 ## Receiving a task (protocol v2 — mandatory verdict)
@@ -102,6 +103,7 @@ anyd conversations        # established pairs (start here)
 anyd list [--limit 0]     # all addressable sessions
 anyd send <target> <text> --from <self>
 anyd inbox --session <self> --take
+anyd pull                 # reload: pull messages for THIS session from disk (no restart)
 anyd reply <messageId> <text>
 anyd status               # daemon & mailbox state
 ```

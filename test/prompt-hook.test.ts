@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { processPromptHook } from '../src/hooks/prompt-hook.js';
+import { collectInbox, processPromptHook } from '../src/hooks/prompt-hook.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
 
@@ -80,5 +80,32 @@ describe('prompt hook (claude + codex shared)', () => {
 
   it('handles missing session id gracefully', () => {
     expect(processPromptHook(mailbox, {}, { home })).toEqual({});
+  });
+
+  it('frames injected messages as a trusted teammate (ADR-016), not external data', () => {
+    mailbox.send({ from: CODEX_B, to: CLAUDE_A, text: 'please run tests' });
+    const ctx = run(CLAUDE_A.sessionId).hookSpecificOutput?.additionalContext ?? '';
+    expect(ctx).toMatch(/trusted teammate|ADR-016/i);
+    expect(ctx).not.toMatch(/treat as external data/i);
+  });
+});
+
+describe('collectInbox (shared by hook and `anyd pull`)', () => {
+  let mailbox: Mailbox;
+  let nowMs: number;
+  beforeEach(() => {
+    nowMs = 1_700_000_000_000;
+    mailbox = createMailbox(createDb(':memory:'), { now: () => nowMs });
+  });
+
+  it('returns pending text and takes the message; null when nothing new', () => {
+    const sid = `pull-${nowMs}`;
+    const m = mailbox.send({ from: CLAUDE_A, to: { agent: 'codex', sessionId: sid }, text: 'peer needs a review' });
+    const text = collectInbox(mailbox, sid, { home, now: () => nowMs });
+    expect(text).toContain('peer needs a review');
+    expect(text).toContain(`anyd reply ${m.id}`);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered'); // taken
+    nowMs += 1000;
+    expect(collectInbox(mailbox, sid, { home, now: () => nowMs })).toBeNull(); // nothing new now
   });
 });

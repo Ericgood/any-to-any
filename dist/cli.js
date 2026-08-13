@@ -535,6 +535,42 @@ program
         printMessage(m);
 });
 program
+    .command('pull')
+    .description('Pull new anytoany messages for THIS session from disk — manual reload, no restart needed')
+    .option('--session <target>', 'pull for a specific session instead of auto-detecting by directory')
+    .option('--cwd <dir>', 'directory used to identify your session (default: current directory)')
+    .action(async (opts) => {
+    const mailbox = openMailbox();
+    const { collectInbox } = await import('./hooks/prompt-hook.js');
+    let targets = [];
+    if (opts.session) {
+        const s = await resolveOrExit(opts.session);
+        targets = [{ id: s.sessionId, label: `@${s.agent}:${s.title}` }];
+    }
+    else {
+        const cwd = opts.cwd ?? process.cwd();
+        const { sessions } = await listAllSessions(defaultAdapters());
+        const matches = sessions.filter((s) => s.cwd === cwd);
+        if (matches.length === 0) {
+            console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
+            return;
+        }
+        targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
+    }
+    let any = false;
+    for (const t of targets) {
+        const text = collectInbox(mailbox, t.id);
+        if (text) {
+            console.log(`===== ${t.label} =====`);
+            console.log(text);
+            console.log('');
+            any = true;
+        }
+    }
+    if (!any)
+        console.log('no new anytoany messages — you are up to date.');
+});
+program
     .command('reply')
     .description('Reply to a message thread')
     .argument('<messageId>', 'message id (or unique prefix) to reply to')
