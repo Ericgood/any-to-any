@@ -123,10 +123,20 @@ anyd list                  # all addressable sessions (Claude + Codex, local + L
 anyd conversations         # established session pairs
 anyd send "@codex:front" "message" --from "@claude:backend"
 anyd inbox --take          # pull & ack waiting messages
+anyd pull                  # reload THIS session's messages from disk (Codex / Kimi / ZCode)
 anyd peers                 # LAN devices and pairing state
 anyd doctor                # environment self-check
 anyd status / stop         # daemon state / stop
 ```
+
+## Seeing incoming messages (Codex / Kimi / Z Code)
+
+**Claude Code shows incoming cross-agent messages on its own** — an inbox hook fires on every prompt and injects whatever arrived. **Codex, Kimi and Z Code interactive apps keep the session in memory and don't live-refresh from disk**, so a message delivered mid-session can sit on disk unseen until you'd otherwise close and reopen the session. It's a real limitation of those apps, and we've done our best to paper over it *without* a restart:
+
+- The **`reload` skill** (installed automatically by `anyd setup`) lets you pull messages in on demand — say **`/reload`** ("刷新" / "check messages") and the agent reads them straight off disk.
+- Agents also pull **proactively** during an active collaboration (at the start of a turn, right after messaging a peer, or when you ask about another agent), so you usually don't have to ask.
+
+Both are just `anyd pull` under the hood — it reads your session's mailbox on disk and works even with the daemon down. A truly idle session still needs *some* input to take a turn, but any message you send now triggers the catch-up automatically.
 
 <details>
 <summary>Manual setup (without the installer) / from source</summary>
@@ -134,7 +144,7 @@ anyd status / stop         # daemon state / stop
 ```bash
 git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
 npm install && npm run build && npm link
-anyd setup                 # skill + hooks
+anyd setup                 # skills (any-to-any + reload) + inbox hooks
 # manual pairing, if you prefer not to use `anyd pair --invite`:
 anyd pair --show           # machine one: print the token
 anyd pair --set <token>    # machine two: join
@@ -166,15 +176,17 @@ See [SECURITY.md](SECURITY.md) for the reporting process and what's in scope.
 
 ## Status & roadmap
 
-Same-machine and **LAN cross-device** messaging are **implemented and verified end-to-end** — 157 tests, real-delivery smoke suites, and daily dogfooding across a MacBook + Mac mini (Codex ↔ Claude ↔ Kimi ↔ ZCode). Five agents ship today:
+Same-machine and **LAN cross-device** messaging are **implemented and verified end-to-end** — 224 tests, real-delivery smoke suites, and daily dogfooding across a MacBook + Mac mini (Codex ↔ Claude ↔ Kimi ↔ ZCode). Five agents ship today:
 
 | Agent | Discover | Deliver | Notes |
 |---|---|---|---|
-| Claude Code | ✅ | ✅ | scans `~/.claude/projects`; hook-based inbox + full-auto via CLI login |
-| Codex | ✅ | ✅ | rollout scan; fully automatic (file-based auth) |
-| Kimi Code | ✅ | ✅ | `session_index.jsonl`; headless `-S … -p` (default already executes) |
-| ZCode (Z.ai / Zhipu) | ✅ | ✅ | reads the app's SQLite session db; delivers via its bundled engine |
+| Claude Code | ✅ | ✅ | scans `~/.claude/projects`; **auto inbox hook** (messages appear live) + full-auto via CLI login |
+| Codex | ✅ | ✅ | rollout scan; fully automatic (file-based auth); `/reload` to see messages live † |
+| Kimi Code | ✅ | ✅ | `session_index.jsonl`; headless `-S … -p`; `/reload` to see messages live † |
+| ZCode (Z.ai / Zhipu) | ✅ | ✅ | reads the app's SQLite session db; bundled-engine delivery; `/reload` to see messages live † |
 | Gemini CLI | 🔜 | 🔜 | discovery next |
+
+† These interactive apps don't live-refresh from disk. The `reload` skill / `anyd pull` pulls delivered messages into the live session without a restart — see [Seeing incoming messages](#seeing-incoming-messages-codex--kimi--z-code).
 
 **Next**: real-time injection when vendors open a channel (Claude Channels / Codex app-server / `kimi web`), a group-room model (many agents + you in one thread), task-lifecycle semantics (working / blocked / done state), an [A2A](https://github.com/a2aproject/A2A) compatibility bridge, **humans as addressable peers** (`@you` from iMessage/WhatsApp/Telegram via an [OpenClaw](https://github.com/openclaw/openclaw) bridge), and npm / `npx skills add` distribution.
 

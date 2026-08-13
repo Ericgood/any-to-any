@@ -28,7 +28,7 @@ node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)
 say "Installing anytoany (this builds from source, ~30s)…"
 npm install -g "$REPO"
 
-say "Configuring agents (skill + Claude inbox hook)…"
+say "Configuring agents (skills: any-to-any + reload; inbox hooks)…"
 anyd setup
 
 if [[ -n "$JOIN" ]]; then

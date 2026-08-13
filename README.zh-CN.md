@@ -81,10 +81,20 @@ anyd list                  # 全部可寻址会话（Claude + Codex，本机 + �
 anyd conversations         # 已建立的会话配对
 anyd send "@codex:前端" "消息" --from "@claude:后端"
 anyd inbox --take          # 查收并回执
+anyd pull                  # 从磁盘拉本会话的消息（Codex / Kimi / ZCode 免重启）
 anyd peers                 # 局域网设备与配对状态
 anyd doctor                # 环境自检
 anyd status / stop         # daemon 状态 / 停止
 ```
+
+## 收消息（Codex / Kimi / Z Code）
+
+**Claude Code 会自动显示收到的跨 agent 消息**——它每次提交都会触发收件 hook，把新消息注入进来。**Codex、Kimi、Z Code 的交互式 App 把会话缓存在内存里、不实时读磁盘**,所以会话进行中投递来的消息可能先落在磁盘上、你却看不到,得关掉重开才刷出来。这是这几家 App 的真实限制,我们已尽量**免重启**把它补上:
+
+- **`reload` 技能**(`anyd setup` 自动装):按需拉——说一句 **`/reload`**（「刷新」「有没有新消息」）,agent 就直接从磁盘把消息读进来。
+- agent 还会在协作进行中**主动拉**(回合开头、刚给对方发完消息、你问「对方回了吗」时),多数时候不用你开口。
+
+两者底层都是 `anyd pull`——读本会话在磁盘上的驿站,**daemon 不开也能用**。完全空闲、你一个字不打的会话仍需一点输入才会开回合,但你随便发句什么,补消息就自动触发了。
 
 <details>
 <summary>手动安装（不用一键脚本）/ 源码方式</summary>
@@ -92,7 +102,7 @@ anyd status / stop         # daemon 状态 / 停止
 ```bash
 git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
 npm install && npm run build && npm link
-anyd setup                 # skill + hook
+anyd setup                 # 技能（any-to-any + reload）+ 收件 hook
 # 手动配对（不用 anyd pair --invite 的话）：
 anyd pair --show           # 第一台：打印 token
 anyd pair --set <token>    # 第二台：加入
@@ -124,15 +134,17 @@ anytoany 完全跑在**你自己的机器、你自己的局域网**上——无�
 
 ## 状态与路线图
 
-同机与**局域网跨设备**消息互通**已实现并端到端实证**——157 个测试、真实投递冒烟套件，以及一台 MacBook + 一台 Mac mini 上的日常自用（Codex ↔ Claude ↔ Kimi ↔ ZCode）。今天已上线五家 adapter：
+同机与**局域网跨设备**消息互通**已实现并端到端实证**——224 个测试、真实投递冒烟套件，以及一台 MacBook + 一台 Mac mini 上的日常自用（Codex ↔ Claude ↔ Kimi ↔ ZCode）。今天已上线五家 adapter：
 
 | Agent | 发现 | 投递 | 备注 |
 |---|---|---|---|
-| Claude Code | ✅ | ✅ | 扫 `~/.claude/projects`；hook 收件 + CLI 登录后全自动 |
-| Codex | ✅ | ✅ | rollout 扫描；文件型 auth，全自动 |
-| Kimi Code | ✅ | ✅ | `session_index.jsonl`；headless `-S … -p`（默认即执行） |
-| ZCode（智谱 Z.ai） | ✅ | ✅ | 读 App 的 SQLite 会话库；经 App 内置引擎投递 |
+| Claude Code | ✅ | ✅ | 扫 `~/.claude/projects`；**自动收件 hook**（消息实时可见）+ CLI 登录后全自动 |
+| Codex | ✅ | ✅ | rollout 扫描；文件型 auth 全自动；`/reload` 免重启看消息 † |
+| Kimi Code | ✅ | ✅ | `session_index.jsonl`；headless `-S … -p`；`/reload` 免重启看消息 † |
+| ZCode（智谱 Z.ai） | ✅ | ✅ | 读 App 的 SQLite 会话库；App 内置引擎投递；`/reload` 免重启看消息 † |
 | Gemini CLI | 🔜 | 🔜 | 发现层待接 |
+
+† 这几家交互式 App 不实时读磁盘。`reload` 技能 / `anyd pull` 免重启把已投递消息拉进实时会话——见上文[收消息](#收消息codex--kimi--z-code)。
 
 **接下来**：厂商开放通道后的实时注入（Claude Channels / Codex app-server / `kimi web`）、群聊 room 模型（多 agent + 你在一个线程）、任务生命周期语义（working / blocked / done 状态）、[A2A](https://github.com/a2aproject/A2A) 兼容桥、**人也是可寻址成员**（经 [OpenClaw](https://github.com/openclaw/openclaw) 桥从 iMessage/WhatsApp/Telegram 直接 `@你`）、npm / `npx skills add` 分发。
 
