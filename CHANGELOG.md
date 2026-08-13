@@ -4,6 +4,10 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Collaboration layer (Phase 4) — M4: semi-automatic progression
+
+- The console now has a **▶ Continue** button on every open task. One click nudges that task's owner to do the next chunk — it resolves the owner label to a live session and sends an in-thread message ("continue task X, read the shared plan, do the next chunk, log progress"), pinned to the collab conversation so the delivery carries the shared-plan footer. It is operator-triggered by design, so it cannot self-loop. Endpoint `POST /api/collab/:id/advance`. A fully-automatic scheduler (wake the worker for the next chunk without a click) is deliberately deferred until "when to stop" is settled.
+
 ### Collaboration layer (Phase 4) — M3: cross-device doc sync
 
 - A collaboration doc now **syncs across paired devices**, keyed by the same `conversationId` on both. Sync is an explicit push (`anyd collab sync <id> --to @<device>`) — like `git push` — and the merge is **convergent**: the lead-owned region (plan + tasks) is last-writer-wins, and each agent's append-only progress section is unioned by taking the fuller copy, with deterministic tie-breaks so both machines reach byte-identical state after exchanging docs. New `src/collab/merge.ts`, a token-gated `POST /api/peer/collab` receive endpoint, `pushCollabDoc` transport, and `store.merge()`. Proven by two daemons converging over real HTTP in the test suite; a two-Mac verify script is in `scripts/verify-m3-crossdevice.sh`.

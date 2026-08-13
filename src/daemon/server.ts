@@ -236,6 +236,57 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       }
       return;
     }
+    // Phase 4 / M4: semi-automatic advance — nudge a task's owner to do the next
+    // chunk. Operator-triggered (a console click), so it cannot self-loop.
+    const advanceMatch = /^\/api\/collab\/([0-9a-f-]+)\/advance$/.exec(path);
+    if (req.method === 'POST' && advanceMatch && advanceMatch[1]) {
+      const conversationId = advanceMatch[1];
+      if (!opts.collab) {
+        json(res, 404, { error: 'collab not enabled on this device' });
+        return;
+      }
+      const doc = opts.collab.load(conversationId);
+      if (!doc) {
+        json(res, 404, { error: `no collab doc for "${conversationId}"` });
+        return;
+      }
+      const body = (await readBody(req)) as { taskId?: string; note?: string };
+      const task = doc.tasks.find((t) => t.id === body.taskId);
+      if (!task) {
+        json(res, 422, { error: `task "${body.taskId ?? ''}" not found in this doc` });
+        return;
+      }
+      const { resolveTarget } = await import('../directory/resolve.js');
+      const r = resolveTarget(task.owner, await opts.directory());
+      if (!r.ok) {
+        json(res, 422, {
+          error: `cannot resolve task owner "${task.owner}" (${r.reason})`,
+          candidates: r.candidates.slice(0, 8),
+        });
+        return;
+      }
+      const to: SessionRef = { agent: r.session.agent, sessionId: r.session.sessionId };
+      if (r.session.device) to.device = r.session.device;
+      const nudge = [
+        `Continue task ${task.id}${task.step ? ` (${task.step})` : ''} on the shared plan.`,
+        `Read it: anyd collab show ${conversationId}. Do the next chunk you can finish this turn,`,
+        `then log it: anyd collab progress ${conversationId} --as "${task.owner}" "<what you did + next>".`,
+        body.note ?? '',
+      ].join(' ').trim();
+      // pin to the collab conversation when it's a real mailbox thread, so the
+      // delivery envelope carries the shared-plan footer
+      const known = opts.mailbox.listConversations().some((c) => c.id === conversationId);
+      const m = opts.mailbox.send({
+        from: { agent: 'user', sessionId: 'cli' },
+        to,
+        text: nudge,
+        via: 'advance',
+        ...(known ? { conversationId } : {}),
+      });
+      broadcast();
+      json(res, 201, { message: m, to: r.session });
+      return;
+    }
     if (req.method === 'POST' && path === '/api/send') {
       const body = (await readBody(req)) as { target?: string; from?: SessionRef; text?: string };
       if (typeof body.target !== 'string' || typeof body.text !== 'string' || !body.text.trim()) {

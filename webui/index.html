@@ -72,6 +72,8 @@
   #collab .tasks { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
   #collab .task { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .tbadge { border-radius: 6px; font-size: 10px; padding: 1px 7px; color: #fff; white-space: nowrap; }
+  #collab .task .advance { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 6px; line-height: 1.4; }
+  #collab .task .advance:hover { border-color: var(--accent); color: var(--accent); }
   #collab .plan { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; line-height: 1.5; }
   #collab .prog { margin-top: 4px; }
   #collab .prog .who { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
@@ -201,7 +203,9 @@ function collabPanelHTML() {
   if (state.collabCollapsed) return `<div id="collab">${head}</div>`;
   const tasks = doc.tasks.length ? `<div class="tasks">${doc.tasks.map((t) => {
     const label = t.step ? `${t.state} ${t.step}` : t.state;
-    return `<div class="task"><span class="tbadge" style="background:${TASK_BADGE[t.state] || '#6b7280'}">${esc(label)}</span><b>${esc(t.id)}</b> ${esc(t.owner)}${t.note ? ` — <span style="color:var(--muted)">${esc(t.note)}</span>` : ''}</div>`;
+    const open = t.state !== 'done' && t.state !== 'failed';
+    const btn = open ? `<button class="advance" data-conv="${esc(doc.conversationId)}" data-task="${esc(t.id)}" title="Nudge ${esc(t.owner)} to do the next chunk">▶ Continue</button>` : '';
+    return `<div class="task"><span class="tbadge" style="background:${TASK_BADGE[t.state] || '#6b7280'}">${esc(label)}</span><b>${esc(t.id)}</b> ${esc(t.owner)}${t.note ? ` — <span style="color:var(--muted)">${esc(t.note)}</span>` : ''}${btn}</div>`;
   }).join('')}</div>` : '';
   const plan = doc.body ? `<div class="plan">${esc(doc.body)}</div>` : '';
   const prog = doc.progress.map((p) =>
@@ -254,6 +258,14 @@ function renderThread(keepScroll) {
 
   const chead = thread.querySelector('#collab .chead');
   if (chead) chead.addEventListener('click', () => { state.collabCollapsed = !state.collabCollapsed; renderThread(true); });
+  thread.querySelectorAll('#collab .advance').forEach((n) => n.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    n.disabled = true;
+    try {
+      await api(`/api/collab/${n.dataset.conv}/advance`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: n.dataset.task }) });
+      await refreshAll();
+    } catch (err) { n.disabled = false; $('#status-line').textContent = `advance failed: ${err.message}`; }
+  }));
 
   $('#compose-as').value = state.composeAs;
   $('#compose-as').addEventListener('change', (e) => { state.composeAs = e.target.value; });

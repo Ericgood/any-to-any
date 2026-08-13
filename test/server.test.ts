@@ -141,6 +141,51 @@ describe('console server — collab endpoints (Phase 4)', () => {
     const { doc } = (await (await fetch(base2 + '/api/collab/ffffffff-0000-4000-8000-000000000000')).json()) as { doc: unknown };
     expect(doc).toBeNull();
   });
+
+  it('POST advance nudges the task owner with an in-context message', async () => {
+    // t1 is owned by @codex:y, which is in the directory as CODEX_B (title "frontend")
+    const cdir2 = mkdtempSync(join(tmpdir(), 'anytoany-advance-'));
+    const collab = createCollabStore({ dir: cdir2 });
+    const CONV = 'dddddddd-0000-4000-8000-000000000001';
+    await collab.ensure({ conversationId: CONV, lead: '@claude:backend' });
+    await collab.upsertTask(CONV, '@claude:backend', { id: 't1', owner: '@codex:frontend', state: 'working', step: '1/3', updated: '' });
+    const mailbox = createMailbox(createDb(':memory:'));
+    const PORT3 = 17437;
+    const srv = startConsoleServer({ mailbox, directory: async () => DIRECTORY, collab, port: PORT3, changePollMs: 60_000 });
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT3}/api/collab/${CONV}/advance`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 't1' }),
+      });
+      expect(r.status).toBe(201);
+      const { message, to } = (await r.json()) as { message: { to: { agent: string }; parts: Array<{ text: string; via?: string }> }; to: { agent: string } };
+      expect(to.agent).toBe('codex');
+      expect(message.to.agent).toBe('codex');
+      expect(message.parts[0]?.via).toBe('advance');
+      expect(message.parts[0]?.text).toContain('Continue task t1 (1/3)');
+      expect(message.parts[0]?.text).toContain(`anyd collab show ${CONV}`);
+    } finally {
+      srv.close();
+      rmSync(cdir2, { recursive: true, force: true });
+    }
+  });
+
+  it('POST advance 422s when the task id is unknown', async () => {
+    const cdir3 = mkdtempSync(join(tmpdir(), 'anytoany-advance2-'));
+    const collab = createCollabStore({ dir: cdir3 });
+    const CONV = 'eeeeeeee-0000-4000-8000-000000000001';
+    await collab.ensure({ conversationId: CONV, lead: '@claude:backend' });
+    const PORT4 = 17438;
+    const srv = startConsoleServer({ mailbox: createMailbox(createDb(':memory:')), directory: async () => DIRECTORY, collab, port: PORT4, changePollMs: 60_000 });
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT4}/api/collab/${CONV}/advance`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'nope' }),
+      });
+      expect(r.status).toBe(422);
+    } finally {
+      srv.close();
+      rmSync(cdir3, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('peer endpoints', () => {
