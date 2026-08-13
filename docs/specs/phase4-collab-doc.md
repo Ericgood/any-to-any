@@ -1,7 +1,7 @@
 # Phase 4 规格 — 协作层：共享上下文文档 + 任务生命周期（跨厂商弱一致版）
 
 > 创建：2026-08-13 · 最后更新：2026-08-13
-> 状态：**M1 已落地**（同机协作文档 + CLI，48 测试绿 + 真机冒烟，2026-08-13）；M2–M4 规划中。母决策：[ADR-017](../decisions.md) · 相关：ADR-014（room）、ADR-016（信任）
+> 状态：**M1 + M2 已落地**（同机协作文档 + CLI + 控制台面板，2026-08-13：209 全仓测试绿 + CLI/浏览器双冒烟）；M3–M4 规划中。母决策：[ADR-017](../decisions.md) · 相关：ADR-014（room）、ADR-016（信任）
 > 一句话：把「消息即一切」升级为「**共享文档为状态、消息为事件、一个 lead 主导、跨机同步**」，让两个（乃至多个）agent 能像两个人一样先对齐、再分工、边干边汇报、把活干完。
 
 ## 0. 为什么现在做
@@ -130,7 +130,7 @@ assigned ──> working(n/m) ──> done
 ## 11. 分期里程碑（MVP 优先，每步可独立验收）
 
 - **M1 · 同机协作文档** ✅（2026-08-13）：`src/collab/{doc,lock,store}.ts`（纯模型 + O_EXCL 文件锁 + 原子写）；lead 单写正文 + worker append 进度段 + 单写者强制；`anyd collab init/show/list/plan/task/progress/lead`；投递信封在有文档时追加 SHARED PLAN footer（指针式，不内联全文）；skill 增回合制协议。48 测试绿 + 真机 CLI 冒烟全过。**范围决策**：创建走显式 `collab init`（非每条消息自动建），auto-create-on-first-message 挪 M2。**未碰跨设备。**
-- **M2 · 任务生命周期 + 控制台**：front-matter 状态机；控制台加「协作文档」面板（渲染 MD + 任务徽章）；`anyd collab`。
+- **M2 · 任务生命周期 + 控制台** ✅（2026-08-13）：控制台加「Shared plan」面板（任务徽章按状态染色 / plan / 逐 agent 进度 / 可折叠）+ 对话列表 📋 标记；`GET /api/collab`、`GET /api/collab/:id`；SSE 轮询纳入文档 `updated`（CLI 改文档→控制台自动刷新）。任务状态机模型 + `anyd collab` 在 M1 已落地。**建档保持显式 `collab init`**（用户拍板不做自动建）。
 - **M3 · 跨设备文档同步**：文档随消息 relay（diff），双机一致——本阶段的技术核心与独有价值。
 - **M4 · 推进调度**（最难）：worker「干完一块该谁唤醒它干下一块」——lead 主动 resume？一个轻调度器？还是操作者一键「继续」？先做**半自动**（控制台一键推进），全自动留待验证。
 

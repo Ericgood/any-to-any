@@ -4,6 +4,10 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Collaboration layer (Phase 4) — M2: the shared doc in the web console
+
+- The web console now renders a conversation's **shared plan** inline: a collapsible panel with colour-coded task badges (assigned / working `n/m` / blocked / needs-decision / done / failed), the lead's plan, and each agent's progress. Conversations that have a doc get a 📋 marker in the list. New read-only endpoints `GET /api/collab` and `GET /api/collab/:id`; the change-poller now also watches doc timestamps, so a progress line appended from the CLI shows up in the console within a poll cycle — no manual refresh. Verified in-browser end-to-end.
+
 ### Collaboration layer (Phase 4) — M1: same-machine shared doc
 
 - **Shared collaboration document** per conversation at `~/.anytoany/collab/<conversationId>.md`. The doc is the durable coordination state (plan + task list + everyone's progress); messages become lightweight events that point into it. One **lead** owns the plan and task list (single-writer, enforced — a non-lead edit is refused); every agent appends only to its **own** `## Progress — <agent>` section, so there are no write conflicts.

@@ -1,10 +1,13 @@
 import type { SessionInfo } from '../adapters/types.js';
+import type { CollabStore } from '../collab/store.js';
 import type { Peer } from '../cluster/peers.js';
 import type { Mailbox } from '../mailbox/mailbox.js';
 export interface ConsoleServerOptions {
     mailbox: Mailbox;
     directory: () => Promise<SessionInfo[]>;
     port?: number;
+    /** Collaboration-doc store (Phase 4) — surfaced read-only in the console. */
+    collab?: CollabStore;
     /** Poll interval for external mailbox writers (CLI in another process). */
     changePollMs?: number;
     /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */

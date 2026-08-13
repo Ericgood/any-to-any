@@ -65,6 +65,19 @@
   .combo .empty-hint { padding: 10px 12px; color: var(--muted); font-size: 12px; }
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
   #status-line { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); }
+  #collab { background: #fbfcfe; border-bottom: 1px solid var(--line); flex: none; }
+  #collab .chead { padding: 8px 18px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+  #collab .chead b { color: var(--text); }
+  #collab .cbody { padding: 2px 18px 12px; max-height: 40vh; overflow-y: auto; }
+  #collab .tasks { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+  #collab .task { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tbadge { border-radius: 6px; font-size: 10px; padding: 1px 7px; color: #fff; white-space: nowrap; }
+  #collab .plan { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; line-height: 1.5; }
+  #collab .prog { margin-top: 4px; }
+  #collab .prog .who { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+  #collab .prog ul { margin: 0 0 8px 18px; padding: 0; }
+  #collab .prog li { font-size: 12px; color: #374151; margin: 1px 0; }
+  .convo .plan-mark { font-size: 11px; }
 </style>
 </head>
 <body>
@@ -100,7 +113,10 @@
 <script>
 const AGENT_COLORS = { claude: 'var(--claude)', codex: 'var(--codex)', kimi: 'var(--kimi)', gemini: 'var(--gemini)', user: 'var(--user)', cursor: '#111', windsurf: '#0EA5A5', cline: '#2E7CEE', warp: '#01A4FF', qwen: '#615CED', jetbrains: '#111', copilot: '#111', opencode: '#111', trae: '#EF2D48', imessage: '#34C759', ollama: '#111', openclaw: '#D97706', aider: '#16A34A', zed: '#084CCF', goose: '#111', roocode: '#374151', grok: '#111', devin: '#2563EB', qoder: '#6E56CF', codebuddy: '#0052D9', kiro: '#7C3AED', zcode: '#111' };
 const STATUS_ICON = { pending: '⏳', delivering: '⏫', delivered: '✓', failed: '⚠️', dead: '💀' };
-const state = { sessions: [], conversations: [], activeId: null, messages: [], composeAs: 'a' };
+const TASK_BADGE = { assigned: '#6b7280', working: '#2563eb', done: '#16a34a', blocked: '#d97706', 'needs-decision': '#7C3AED', failed: '#dc2626' };
+const state = { sessions: [], conversations: [], activeId: null, messages: [], composeAs: 'a', collab: null, collabCollapsed: false, collabIds: new Set() };
+// agent name out of a "@agent:title" collab label, for the colour dot
+const agentOf = (label) => (label && label[0] === '@') ? label.slice(1).split(':')[0] : label;
 
 const $ = (sel) => document.querySelector(sel);
 const api = async (path, opts) => {
@@ -134,9 +150,14 @@ const rel = (ms) => {
 };
 
 async function refreshAll() {
-  const [s, c] = await Promise.all([api('/api/sessions'), api('/api/conversations')]);
+  const [s, c, cl] = await Promise.all([
+    api('/api/sessions'),
+    api('/api/conversations'),
+    api('/api/collab').catch(() => ({ docs: [] })),
+  ]);
   state.sessions = s.sessions;
   state.conversations = c.conversations;
+  state.collabIds = new Set((cl.docs || []).map((d) => d.conversationId));
   renderConvos();
   if (state.activeId) await loadMessages(state.activeId, { keepScroll: false });
 }
@@ -149,7 +170,7 @@ function renderConvos() {
     return `<div class="convo ${c.id === state.activeId ? 'active' : ''}" data-id="${c.id}" role="button" tabindex="0">
       <div class="pair">${dot(c.a.agent)}${esc(refLabel(c.a))} ↔ ${dot(c.b.agent)}${esc(refLabel(c.b))}</div>
       <div class="preview">${preview}</div>
-      <div class="meta"><span>${c.messageCount} msgs</span><span>${rel(c.lastMessageAt)}</span>${failed ? '<span class="badge">delivery failed</span>' : ''}</div>
+      <div class="meta"><span>${c.messageCount} msgs</span><span>${rel(c.lastMessageAt)}</span>${state.collabIds.has(c.id) ? '<span class="plan-mark" title="has a shared plan">📋</span>' : ''}${failed ? '<span class="badge">delivery failed</span>' : ''}</div>
     </div>`;
   }).join('') || '<div style="padding:20px;color:var(--muted)">No conversations yet — create one from the top right</div>';
   el.querySelectorAll('.convo').forEach((n) => n.addEventListener('click', () => selectConvo(n.dataset.id)));
@@ -162,9 +183,31 @@ async function selectConvo(id) {
 }
 
 async function loadMessages(id, { keepScroll }) {
-  const { messages } = await api(`/api/conversations/${id}/messages`);
-  state.messages = messages;
+  const [msgs, collabRes] = await Promise.all([
+    api(`/api/conversations/${id}/messages`),
+    api(`/api/collab/${id}`).catch(() => ({ doc: null })),
+  ]);
+  state.messages = msgs.messages;
+  state.collab = collabRes.doc;
   renderThread(keepScroll);
+}
+
+// Shared-plan panel (Phase 4): task badges, the lead's plan, per-agent progress.
+function collabPanelHTML() {
+  const doc = state.collab;
+  if (!doc) return '';
+  const openN = doc.tasks.filter((t) => t.state !== 'done' && t.state !== 'failed').length;
+  const head = `<div class="chead">📋 <b>Shared plan</b> · lead ${esc(doc.lead)} · ${doc.tasks.length} tasks (${openN} open)<span style="margin-left:auto">${state.collabCollapsed ? '▸' : '▾'}</span></div>`;
+  if (state.collabCollapsed) return `<div id="collab">${head}</div>`;
+  const tasks = doc.tasks.length ? `<div class="tasks">${doc.tasks.map((t) => {
+    const label = t.step ? `${t.state} ${t.step}` : t.state;
+    return `<div class="task"><span class="tbadge" style="background:${TASK_BADGE[t.state] || '#6b7280'}">${esc(label)}</span><b>${esc(t.id)}</b> ${esc(t.owner)}${t.note ? ` — <span style="color:var(--muted)">${esc(t.note)}</span>` : ''}</div>`;
+  }).join('')}</div>` : '';
+  const plan = doc.body ? `<div class="plan">${esc(doc.body)}</div>` : '';
+  const prog = doc.progress.map((p) =>
+    `<div class="prog"><div class="who">${dot(agentOf(p.agent))}${esc(p.agent)}</div><ul>${p.entries.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`,
+  ).join('');
+  return `<div id="collab">${head}<div class="cbody">${tasks}${plan}${prog}</div></div>`;
 }
 
 function renderThread(keepScroll) {
@@ -176,6 +219,7 @@ function renderThread(keepScroll) {
 
   thread.innerHTML = `
     <div id="thread-head">${dot(convo.a.agent)} ${esc(refLabel(convo.a))} ↔ ${dot(convo.b.agent)} ${esc(refLabel(convo.b))}</div>
+    ${collabPanelHTML()}
     <div id="messages">${state.messages.map((m, i) => {
       const retriable = m.status === 'failed' || m.status === 'dead';
       const via = m.parts.some((p) => p.via === 'webui') ? ' · from console' : m.parts.some((p) => p.via === 'auto') ? ' · auto-reply' : '';
@@ -207,6 +251,9 @@ function renderThread(keepScroll) {
       <input id="compose-text" placeholder="Type a message, Enter to send">
       <button id="compose-send" class="primary">Send</button>
     </div>`;
+
+  const chead = thread.querySelector('#collab .chead');
+  if (chead) chead.addEventListener('click', () => { state.collabCollapsed = !state.collabCollapsed; renderThread(true); });
 
   $('#compose-as').value = state.composeAs;
   $('#compose-as').addEventListener('change', (e) => { state.composeAs = e.target.value; });

@@ -193,12 +193,14 @@ program
     console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
+    const collab = createCollabStore();
     let web = null;
     if (opts.web || lan) {
         const { startConsoleServer } = await import('./daemon/server.js');
         web = startConsoleServer({
             mailbox,
             directory,
+            collab,
             port,
             ...(lan
                 ? {
@@ -214,7 +216,6 @@ program
         console.log(`web console: http://127.0.0.1:${web.port}`);
     }
     const { startDispatcher } = await import('./daemon/dispatcher.js');
-    const collab = createCollabStore();
     const running = startDispatcher({
         mailbox,
         adapters: new Map(adapters.map((a) => [a.agent, a])),

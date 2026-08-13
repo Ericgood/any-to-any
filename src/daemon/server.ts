@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { SessionInfo } from '../adapters/types.js';
+import type { CollabStore } from '../collab/store.js';
 import type { Peer } from '../cluster/peers.js';
 import { tokenFingerprint } from '../cluster/token.js';
 import type { Mailbox, SessionRef } from '../mailbox/mailbox.js';
@@ -13,6 +14,8 @@ export interface ConsoleServerOptions {
   mailbox: Mailbox;
   directory: () => Promise<SessionInfo[]>;
   port?: number;
+  /** Collaboration-doc store (Phase 4) — surfaced read-only in the console. */
+  collab?: CollabStore;
   /** Poll interval for external mailbox writers (CLI in another process). */
   changePollMs?: number;
   /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
@@ -70,7 +73,9 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
     for (const res of sseClients) res.write(`data: {"kind":"changed"}\n\n`);
   };
 
-  // catch writes from other processes (anyd send in a shell, hooks, agents)
+  // catch writes from other processes (anyd send in a shell, hooks, agents) —
+  // including collab-doc edits (an agent appending progress via the CLI), so the
+  // console's shared-plan panel stays live without a manual refresh.
   let lastStamp = '';
   const pollTimer = setInterval(() => {
     try {
@@ -78,7 +83,10 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       const last = msgs[msgs.length - 1];
       const stamp = `${msgs.length}:${last ? `${last.id}:${last.updatedAt}:${last.status}` : ''}`;
       const changedSince = msgs.reduce((acc, m) => Math.max(acc, m.updatedAt), 0);
-      const full = `${stamp}:${changedSince}`;
+      const collabStamp = opts.collab
+        ? opts.collab.list().map((d) => `${d.conversationId}@${d.updated}`).join(',')
+        : '';
+      const full = `${stamp}:${changedSince}:${collabStamp}`;
       if (lastStamp && full !== lastStamp) broadcast();
       lastStamp = full;
     } catch {
@@ -175,6 +183,33 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
     const msgsMatch = /^\/api\/conversations\/([0-9a-f-]+)\/messages$/.exec(path);
     if (req.method === 'GET' && msgsMatch && msgsMatch[1]) {
       json(res, 200, { messages: opts.mailbox.listMessages(msgsMatch[1]) });
+      return;
+    }
+    // Phase 4: collab-doc list (for the conversation-list marker)
+    if (req.method === 'GET' && path === '/api/collab') {
+      const docs = (opts.collab?.list() ?? []).map((d) => ({
+        conversationId: d.conversationId,
+        lead: d.lead,
+        updated: d.updated,
+        tasks: d.tasks.length,
+        open: d.tasks.filter((t) => t.state !== 'done' && t.state !== 'failed').length,
+      }));
+      json(res, 200, { docs });
+      return;
+    }
+    // Phase 4: one collab doc — always 200; {doc:null} when absent (the console
+    // asks for every selected conversation, most of which have no doc).
+    const collabMatch = /^\/api\/collab\/([0-9a-f-]+)$/.exec(path);
+    if (req.method === 'GET' && collabMatch && collabMatch[1]) {
+      if (!opts.collab) {
+        json(res, 200, { doc: null });
+        return;
+      }
+      try {
+        json(res, 200, { doc: opts.collab.load(collabMatch[1]) });
+      } catch (e) {
+        json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
       return;
     }
     if (req.method === 'POST' && path === '/api/send') {

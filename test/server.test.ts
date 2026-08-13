@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
+import { createCollabStore } from '../src/collab/store.js';
 import { tokenFingerprint } from '../src/cluster/token.js';
 import { startConsoleServer, type RunningServer } from '../src/daemon/server.js';
 import { createDb } from '../src/mailbox/db.js';
@@ -84,6 +88,58 @@ describe('console server', () => {
     const body = (await (await fetch(base + '/api/peers')).json()) as { lan: boolean; peers: unknown[] };
     expect(body.lan).toBe(false);
     expect(body.peers).toEqual([]);
+  });
+
+  it('collab endpoints return empty/null when no store is configured', async () => {
+    const list = (await (await fetch(base + '/api/collab')).json()) as { docs: unknown[] };
+    expect(list.docs).toEqual([]);
+    const one = (await (await fetch(base + '/api/collab/deadbeef-0000-4000-8000-000000000000')).json()) as { doc: unknown };
+    expect(one.doc).toBeNull();
+  });
+});
+
+describe('console server — collab endpoints (Phase 4)', () => {
+  const PORT2 = 17435;
+  const base2 = `http://127.0.0.1:${PORT2}`;
+  let dir: string;
+  let server: RunningServer;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'anytoany-srv-collab-'));
+    const collab = createCollabStore({ dir });
+    await collab.ensure({ conversationId: 'cccccccc-0000-4000-8000-000000000001', lead: '@claude:x', body: 'the plan' });
+    await collab.upsertTask('cccccccc-0000-4000-8000-000000000001', '@claude:x', { id: 't1', owner: '@codex:y', state: 'working', step: '1/2', updated: '' });
+    await collab.appendProgress('cccccccc-0000-4000-8000-000000000001', '@codex:y', 'started');
+    server = startConsoleServer({ mailbox: createMailbox(createDb(':memory:')), directory: async () => DIRECTORY, collab, port: PORT2, changePollMs: 60_000 });
+  });
+  afterAll(() => {
+    server.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('GET /api/collab lists doc summaries with open-task counts', async () => {
+    const { docs } = (await (await fetch(base2 + '/api/collab')).json()) as {
+      docs: Array<{ conversationId: string; lead: string; tasks: number; open: number }>;
+    };
+    expect(docs).toHaveLength(1);
+    expect(docs[0]?.lead).toBe('@claude:x');
+    expect(docs[0]?.tasks).toBe(1);
+    expect(docs[0]?.open).toBe(1);
+  });
+
+  it('GET /api/collab/:id returns the full doc', async () => {
+    const { doc } = (await (await fetch(base2 + '/api/collab/cccccccc-0000-4000-8000-000000000001')).json()) as {
+      doc: { lead: string; body: string; tasks: unknown[]; progress: Array<{ agent: string; entries: string[] }> };
+    };
+    expect(doc.lead).toBe('@claude:x');
+    expect(doc.body).toBe('the plan');
+    expect(doc.progress[0]?.agent).toBe('@codex:y');
+    expect(doc.progress[0]?.entries).toEqual(['started']);
+  });
+
+  it('GET /api/collab/:id returns {doc:null} for an unknown conversation', async () => {
+    const { doc } = (await (await fetch(base2 + '/api/collab/ffffffff-0000-4000-8000-000000000000')).json()) as { doc: unknown };
+    expect(doc).toBeNull();
   });
 });
 

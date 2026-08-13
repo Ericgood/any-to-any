@@ -215,12 +215,14 @@ program
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
 
+    const collab = createCollabStore();
     let web: { notifyChange(): void; close(): void; port: number } | null = null;
     if (opts.web || lan) {
       const { startConsoleServer } = await import('./daemon/server.js');
       web = startConsoleServer({
         mailbox,
         directory,
+        collab,
         port,
         ...(lan
           ? {
@@ -237,7 +239,6 @@ program
     }
 
     const { startDispatcher } = await import('./daemon/dispatcher.js');
-    const collab = createCollabStore();
     const running = startDispatcher(
       {
         mailbox,
