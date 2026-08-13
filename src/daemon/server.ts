@@ -236,6 +236,50 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       }
       return;
     }
+    // Phase 4: create a shared plan for a conversation from the console (the
+    // operator picks the lead). Idempotent — never clobbers an existing doc.
+    const createMatch = /^\/api\/collab\/([0-9a-f-]+)\/create$/.exec(path);
+    if (req.method === 'POST' && createMatch && createMatch[1]) {
+      if (!opts.collab) {
+        json(res, 404, { error: 'collab not enabled on this device' });
+        return;
+      }
+      const body = (await readBody(req)) as { lead?: string; body?: string };
+      if (typeof body.lead !== 'string' || !body.lead.trim()) {
+        json(res, 400, { error: 'expected {lead: "@agent:title", body?}' });
+        return;
+      }
+      const doc = await opts.collab.ensure({
+        conversationId: createMatch[1],
+        lead: body.lead,
+        ...(typeof body.body === 'string' && body.body ? { body: body.body } : {}),
+      });
+      broadcast();
+      json(res, 201, { doc });
+      return;
+    }
+    // Phase 4: edit the plan body from the console (the operator writes as the lead).
+    const planMatch = /^\/api\/collab\/([0-9a-f-]+)\/plan$/.exec(path);
+    if (req.method === 'POST' && planMatch && planMatch[1]) {
+      if (!opts.collab) {
+        json(res, 404, { error: 'collab not enabled on this device' });
+        return;
+      }
+      const doc = opts.collab.load(planMatch[1]);
+      if (!doc) {
+        json(res, 404, { error: `no collab doc for "${planMatch[1]}"` });
+        return;
+      }
+      const body = (await readBody(req)) as { body?: string };
+      if (typeof body.body !== 'string') {
+        json(res, 400, { error: 'expected {body: "<plan markdown>"}' });
+        return;
+      }
+      const updated = await opts.collab.setBody(planMatch[1], doc.lead, body.body);
+      broadcast();
+      json(res, 200, { doc: updated });
+      return;
+    }
     // Phase 4 / M4: semi-automatic advance — nudge a task's owner to do the next
     // chunk. Operator-triggered (a console click), so it cannot self-loop.
     const advanceMatch = /^\/api\/collab\/([0-9a-f-]+)\/advance$/.exec(path);

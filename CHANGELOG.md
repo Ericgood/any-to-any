@@ -4,6 +4,12 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Web console — create/edit the shared plan, clearer status, per-recipient compose
+
+- **Create & edit a shared plan from the console.** A conversation with no doc shows a **➕ Shared plan** button (pick who leads + write the plan); once it exists, an **Edit plan** button on the panel lets the operator revise it. New endpoints `POST /api/collab/:id/create` and `POST /api/collab/:id/plan`. No more dropping to the CLI just to start a doc.
+- **Live indicator** now shows a coloured dot — green "Live — receiving updates" when the SSE stream is connected, red when reconnecting — instead of an easy-to-miss grey bullet.
+- **Compose "as you" now targets one agent.** The old "As you — send to both" option is replaced by **As you → @A** and **As you → @B** (still in your own voice, pinned to the thread), since broadcasting the same message to both sides wasn't useful.
+
 ### `anyd pull` — manual reload for interactive apps
 
 - New `anyd pull` command + a `reload` skill (say "/reload"). Interactive agent apps (Codex, Kimi, Z Code) cache the session in memory and don't live-refresh from disk, so a cross-agent message delivered as a headless turn can sit unseen until you restart. `anyd pull` reads the mailbox on disk for the current session (auto-detected by working directory, or `--session`/`--cwd`), injecting anything pending and showing an FYI digest of already-handled traffic — the manual counterpart to Claude Code's automatic inbox hook, which is why only non-Claude apps needed it. Works with the daemon down. The delivered-message injection also got the ADR-016 trusted-teammate framing (was still the stale "external data" wording). The `reload` skill is installed alongside `any-to-any` by `anyd setup`.

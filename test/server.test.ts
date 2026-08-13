@@ -142,6 +142,29 @@ describe('console server — collab endpoints (Phase 4)', () => {
     expect(doc).toBeNull();
   });
 
+  it('POST create makes a doc with the chosen lead; POST plan edits it', async () => {
+    const CONV = 'abcabcab-0000-4000-8000-000000000009';
+    const create = await fetch(`${base2}/api/collab/${CONV}/create`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lead: '@claude:x', body: 'first plan' }),
+    });
+    expect(create.status).toBe(201);
+    expect(((await create.json()) as { doc: { lead: string; body: string } }).doc.lead).toBe('@claude:x');
+
+    const plan = await fetch(`${base2}/api/collab/${CONV}/plan`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: 'revised plan' }),
+    });
+    expect(plan.status).toBe(200);
+    const { doc } = (await (await fetch(`${base2}/api/collab/${CONV}`)).json()) as { doc: { body: string } };
+    expect(doc.body).toBe('revised plan');
+  });
+
+  it('POST create requires a lead', async () => {
+    const r = await fetch(`${base2}/api/collab/dddddddd-0000-4000-8000-000000000009/create`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+    });
+    expect(r.status).toBe(400);
+  });
+
   it('POST advance nudges the task owner with an in-context message', async () => {
     // t1 is owned by @codex:y, which is in the directory as CODEX_B (title "frontend")
     const cdir2 = mkdtempSync(join(tmpdir(), 'anytoany-advance-'));

@@ -30,7 +30,12 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
   .badge { background: #dc2626; color: #fff; border-radius: 8px; font-size: 10px; padding: 0 6px; }
   #thread { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #thread-head { padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; }
+  #thread-head { padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .hbtn { margin-left: auto; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 7px; }
+  .hbtn:hover { border-color: var(--accent); color: var(--accent); }
+  #collab .chead .collab-edit { font-size: 11px; padding: 1px 8px; border-radius: 6px; }
+  #collab-lead-choices { display: flex; flex-direction: column; gap: 6px; }
+  #collab-lead-choices label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); cursor: pointer; }
   #messages { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 18px; }
   .msg { display: flex; gap: 10px; align-items: flex-start; }
   .avatar { width: 34px; height: 34px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; }
@@ -64,7 +69,10 @@
   .combo .opt .sub { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
   .combo .empty-hint { padding: 10px 12px; color: var(--muted); font-size: 12px; }
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
-  #status-line { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); }
+  #status-line { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 6px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex: none; }
+  .live-dot.on { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.18); }
+  .live-dot.off { background: #dc2626; }
   #collab { background: #fbfcfe; border-bottom: 1px solid var(--line); flex: none; }
   #collab .chead { padding: 8px 18px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
   #collab .chead b { color: var(--text); }
@@ -109,6 +117,16 @@
   <div class="actions">
     <button id="new-cancel">Cancel</button>
     <button id="new-send" class="primary">Send</button>
+  </div>
+</dialog>
+
+<dialog id="collab-dialog">
+  <h2 id="collab-dialog-title">Shared plan</h2>
+  <div class="row" id="collab-lead-row"><label>Who leads (owns the plan &amp; tasks)</label><div id="collab-lead-choices"></div></div>
+  <div class="row"><label>Plan / shared context (goals, division of labour)</label><textarea id="collab-body" rows="6" placeholder="e.g. Goal: wire the /auth refresh flow.&#10;Division: @codex → backend endpoint, @claude → frontend interceptor."></textarea></div>
+  <div class="actions">
+    <button id="collab-cancel">Cancel</button>
+    <button id="collab-save" class="primary">Create</button>
   </div>
 </dialog>
 
@@ -199,7 +217,7 @@ function collabPanelHTML() {
   const doc = state.collab;
   if (!doc) return '';
   const openN = doc.tasks.filter((t) => t.state !== 'done' && t.state !== 'failed').length;
-  const head = `<div class="chead">📋 <b>Shared plan</b> · lead ${esc(doc.lead)} · ${doc.tasks.length} tasks (${openN} open)<span style="margin-left:auto">${state.collabCollapsed ? '▸' : '▾'}</span></div>`;
+  const head = `<div class="chead">📋 <b>Shared plan</b> · lead ${esc(doc.lead)} · ${doc.tasks.length} tasks (${openN} open)<span style="margin-left:auto;display:flex;gap:10px;align-items:center;"><button class="collab-edit">Edit plan</button>${state.collabCollapsed ? '▸' : '▾'}</span></div>`;
   if (state.collabCollapsed) return `<div id="collab">${head}</div>`;
   const tasks = doc.tasks.length ? `<div class="tasks">${doc.tasks.map((t) => {
     const label = t.step ? `${t.state} ${t.step}` : t.state;
@@ -222,7 +240,7 @@ function renderThread(keepScroll) {
   const scrollPos = keepScroll && prev ? prev.scrollTop : null;
 
   thread.innerHTML = `
-    <div id="thread-head">${dot(convo.a.agent)} ${esc(refLabel(convo.a))} ↔ ${dot(convo.b.agent)} ${esc(refLabel(convo.b))}</div>
+    <div id="thread-head"><span>${dot(convo.a.agent)} ${esc(refLabel(convo.a))} ↔ ${dot(convo.b.agent)} ${esc(refLabel(convo.b))}</span>${!state.collab ? '<button id="collab-new" class="hbtn">➕ Shared plan</button>' : ''}</div>
     ${collabPanelHTML()}
     <div id="messages">${state.messages.map((m, i) => {
       const retriable = m.status === 'failed' || m.status === 'dead';
@@ -250,7 +268,7 @@ function renderThread(keepScroll) {
         <option value="a">Speak as ${esc(refLabel(convo.a))}</option>
         <option value="b">Speak as ${esc(refLabel(convo.b))}</option>
         ${convo.a.agent !== 'user' && convo.b.agent !== 'user'
-          ? '<option value="me">As you — send to both</option>' : ''}
+          ? `<option value="me-a">As you → ${esc(refLabel(convo.a))}</option><option value="me-b">As you → ${esc(refLabel(convo.b))}</option>` : ''}
       </select>
       <input id="compose-text" placeholder="Type a message, Enter to send">
       <button id="compose-send" class="primary">Send</button>
@@ -264,9 +282,16 @@ function renderThread(keepScroll) {
     try {
       await api(`/api/collab/${n.dataset.conv}/advance`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: n.dataset.task }) });
       await refreshAll();
-    } catch (err) { n.disabled = false; $('#status-line').textContent = `advance failed: ${err.message}`; }
+    } catch (err) { n.disabled = false; setStatus('off', `advance failed: ${err.message}`); }
   }));
+  const newBtn = thread.querySelector('#collab-new');
+  if (newBtn) newBtn.addEventListener('click', () => openCollabDialog('create'));
+  const editBtn = thread.querySelector('#collab .collab-edit');
+  if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); openCollabDialog('edit'); });
 
+  // an old 'me' (send-to-both) selection is gone — fall back to 'a'
+  const validAs = ['a', 'b', 'me-a', 'me-b'];
+  if (!validAs.includes(state.composeAs)) state.composeAs = 'a';
   $('#compose-as').value = state.composeAs;
   $('#compose-as').addEventListener('change', (e) => { state.composeAs = e.target.value; });
   const doSend = async () => {
@@ -274,13 +299,12 @@ function renderThread(keepScroll) {
     if (!text) return;
     $('#compose-send').disabled = true;
     try {
-      if (state.composeAs === 'me') {
-        // The user speaks to the whole "room": one copy to each side,
-        // pinned to THIS conversation so the three-party context stays in one thread.
-        const me = { agent: 'user', sessionId: 'cli' };
-        for (const to of [convo.a, convo.b]) {
-          await api('/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: me, to, text, conversationId: convo.id }) });
-        }
+      if (state.composeAs === 'me-a' || state.composeAs === 'me-b') {
+        // You, in your own voice, to ONE agent — pinned to THIS conversation so
+        // the three-party context stays in one thread.
+        const from = { agent: 'user', sessionId: 'cli' };
+        const to = state.composeAs === 'me-a' ? convo.a : convo.b;
+        await api('/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from, to, text, conversationId: convo.id }) });
       } else {
         const from = state.composeAs === 'a' ? convo.a : convo.b;
         const to = state.composeAs === 'a' ? convo.b : convo.a;
@@ -366,14 +390,62 @@ $('#new-send').addEventListener('click', async () => {
   } finally { $('#new-send').disabled = false; }
 });
 
-function connectSSE() {
-  const es = new EventSource('/api/events');
-  es.onopen = () => { $('#status-line').textContent = '● Live'; };
-  es.onmessage = () => { refreshAll().catch(() => {}); };
-  es.onerror = () => { $('#status-line').textContent = '○ Disconnected, reconnecting…'; };
+let collabDialogMode = 'create';
+function openCollabDialog(mode) {
+  const convo = state.conversations.find((c) => c.id === state.activeId);
+  if (!convo) return;
+  collabDialogMode = mode;
+  if (mode === 'create') {
+    $('#collab-dialog-title').textContent = 'Create shared plan';
+    $('#collab-save').textContent = 'Create';
+    $('#collab-lead-row').style.display = '';
+    const aL = refLabel(convo.a), bL = refLabel(convo.b);
+    $('#collab-lead-choices').innerHTML =
+      `<label><input type="radio" name="collab-lead" value="${esc(aL)}" checked>${dot(convo.a.agent)} ${esc(aL)}</label>` +
+      `<label><input type="radio" name="collab-lead" value="${esc(bL)}">${dot(convo.b.agent)} ${esc(bL)}</label>`;
+    $('#collab-body').value = '';
+  } else {
+    $('#collab-dialog-title').textContent = 'Edit plan';
+    $('#collab-save').textContent = 'Save';
+    $('#collab-lead-row').style.display = 'none';
+    $('#collab-body').value = state.collab ? state.collab.body : '';
+  }
+  $('#collab-dialog').showModal();
+}
+$('#collab-cancel').addEventListener('click', () => $('#collab-dialog').close());
+$('#collab-save').addEventListener('click', async () => {
+  const convo = state.conversations.find((c) => c.id === state.activeId);
+  if (!convo) return;
+  const body = $('#collab-body').value;
+  $('#collab-save').disabled = true;
+  try {
+    if (collabDialogMode === 'create') {
+      const picked = document.querySelector('input[name="collab-lead"]:checked');
+      if (!picked) { alert('Pick who leads'); return; }
+      await api(`/api/collab/${convo.id}/create`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lead: picked.value, body }) });
+    } else {
+      await api(`/api/collab/${convo.id}/plan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body }) });
+    }
+    $('#collab-dialog').close();
+    await refreshAll();
+  } catch (err) { setStatus('off', `save failed: ${err.message}`); }
+  finally { $('#collab-save').disabled = false; }
+});
+
+function setStatus(kind, text) {
+  const cls = kind === 'on' ? 'on' : kind === 'off' ? 'off' : '';
+  $('#status-line').innerHTML = `<span class="live-dot ${cls}"></span><span>${esc(text)}</span>`;
 }
 
-refreshAll().then(connectSSE).catch((e) => { $('#status-line').textContent = `Load failed: ${e.message}`; });
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => setStatus('on', 'Live — receiving updates');
+  es.onmessage = () => { refreshAll().catch(() => {}); };
+  es.onerror = () => setStatus('off', 'Disconnected — reconnecting…');
+}
+
+setStatus('', 'Connecting…');
+refreshAll().then(connectSSE).catch((e) => setStatus('off', `Load failed: ${e.message}`));
 </script>
 </body>
 </html>
