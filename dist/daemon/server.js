@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { parse as parseCollabDoc } from '../collab/doc.js';
 import { tokenFingerprint } from '../cluster/token.js';
 const require = createRequire(import.meta.url);
 function json(res, status, body) {
@@ -96,6 +97,30 @@ export function startConsoleServer(opts) {
                 });
                 broadcast();
                 json(res, 201, { message: m });
+                return;
+            }
+            // Phase 4 / M3: a peer pushes its copy of a collab doc; we merge convergently.
+            if (req.method === 'POST' && path === '/api/peer/collab') {
+                if (!opts.collab) {
+                    json(res, 404, { error: 'collab not enabled on this device' });
+                    return;
+                }
+                const body = (await readBody(req));
+                if (typeof body.doc !== 'string') {
+                    json(res, 400, { error: 'expected {doc: <serialized markdown>}' });
+                    return;
+                }
+                let incoming;
+                try {
+                    incoming = parseCollabDoc(body.doc);
+                }
+                catch (e) {
+                    json(res, 400, { error: `unparseable collab doc: ${e instanceof Error ? e.message : String(e)}` });
+                    return;
+                }
+                const merged = await opts.collab.merge(incoming);
+                broadcast();
+                json(res, 200, { doc: merged });
                 return;
             }
             json(res, 404, { error: 'not found' });

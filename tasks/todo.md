@@ -52,7 +52,7 @@ Phase 1 M0-M6 全部完成：81 测试全绿（覆盖率 92.7/80/98.4），Codex
 
 - [x] **M1 同机协作文档**（2026-08-13，48 测试绿 + CLI 真机冒烟全过）：`~/.anytoany/collab/<conv>.md`（JSON front-matter + lead 正文 + `## Progress — <agent>` 段）；`src/collab/{doc,lock,store}.ts` 纯函数模型 + O_EXCL 文件锁 + 原子写；单写者强制（非 lead 改计划直接报错）；`anyd collab init/show/list/plan/task/progress/lead`；投递信封在有文档时追加 SHARED PLAN footer（不内联全文，省 token）；skill 增回合制协议。**范围决策**：文档创建走显式 `collab init`（不是每条消息自动建，避免污染 collab/ 目录）——auto-create-on-first-message 挪到 M2 配合控制台落地。
 - [x] **M2 任务生命周期 + 控制台**（2026-08-13，+4 测试绿 + 浏览器冒烟全过）：server 增 `GET /api/collab`（列表，供对话列表 📋 标记）+ `GET /api/collab/:id`（单文档，不存在返回 {doc:null} 不 404）；SSE 轮询纳入 collab 文档 `updated`——CLI 改文档时控制台自动刷新（真机验证:CLI append 进度→2.5s 内面板自动出现新行）；webui 加「Shared plan」面板（任务徽章按状态染色 / plan / 逐 agent 进度 / 可折叠）。**建档保持显式 `collab init`**（用户拍板不做自动建）。任务状态机模型 + `anyd collab` 已在 M1 落地。
-- [ ] **M3 跨设备文档同步**：文档随消息 relay（diff），双机一致——本阶段技术核心与独有价值
+- [x] **M3 跨设备文档同步**（2026-08-13，+11 测试绿 + 双 daemon 真机 HTTP 冒烟收敛）：`src/collab/merge.ts` 收敛合并（lead 区 last-writer-wins + 进度段按 agent 取更满的一份 + 平局确定性 tie-break，两机互推后收敛到同一状态,7 测试含收敛/幂等证明）；`store.merge()`（首见落盘原样、再合并不丢更新）；`POST /api/peer/collab`（token 门禁,收端 parse+merge+broadcast）；`pushCollabDoc` 客户端；`anyd collab sync <id> --to @device`（经本机 daemon 发现 peer 后直推,git push 式显式同步）。双机键同一 conversationId。**范围**：同步是显式 push（非自动 relay 挂载）；自动同步 + 跨设备信封/控制台关联 = M3.1 待做（需 conversationId 跨机统一）。真机验证脚本见 scripts/verify-m3-crossdevice.sh。
 - [ ] **M4 推进调度（最难）**：worker 干完一块的下一步唤醒——先半自动（控制台一键推进），全自动待验证
 - [ ] **安全阀**：config 增 inbound accept/hold/refuse（默认 accept）+ 不可逆动作走 needs-decision 确认（ADR-016 增补）
 

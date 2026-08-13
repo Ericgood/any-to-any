@@ -196,6 +196,50 @@ describe('peer endpoints', () => {
     expect(sessions).toHaveLength(2);
   });
 
+  it('merges a pushed collab doc (POST /api/peer/collab) and rejects a bad token', async () => {
+    const cdir = mkdtempSync(join(tmpdir(), 'anytoany-peer-collab-'));
+    const collab = createCollabStore({ dir: cdir });
+    const PC_PORT = 17436;
+    const srv = startConsoleServer({
+      mailbox: createMailbox(createDb(':memory:')),
+      directory: async () => DIRECTORY,
+      collab,
+      port: PC_PORT,
+      changePollMs: 60_000,
+      peering: { selfDevice: 'box', token: 'tok', localDirectory: async () => DIRECTORY },
+    });
+    try {
+      const docMd = [
+        '---',
+        JSON.stringify({ conversationId: 'sync-0000-4000-8000-000000000001', lead: '@claude:x', updated: '2026-08-13T10:00:00.000Z', tasks: [] }, null, 2),
+        '---',
+        '',
+        'remote plan',
+        '',
+        '## Progress — @codex:y',
+        '',
+        '- did the remote thing',
+        '',
+      ].join('\n');
+      // wrong token → 401
+      const bad = await fetch(`http://127.0.0.1:${PC_PORT}/api/peer/collab`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doc: docMd }),
+      });
+      expect(bad.status).toBe(401);
+      // valid token → merged and persisted
+      const ok = await fetch(`http://127.0.0.1:${PC_PORT}/api/peer/collab`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-anytoany-token': 'tok' }, body: JSON.stringify({ doc: docMd }),
+      });
+      expect(ok.status).toBe(200);
+      const stored = collab.load('sync-0000-4000-8000-000000000001');
+      expect(stored?.body).toBe('remote plan');
+      expect(stored?.progress[0]?.entries).toEqual(['did the remote thing']);
+    } finally {
+      srv.close();
+      rmSync(cdir, { recursive: true, force: true });
+    }
+  });
+
   it('accepts relayed messages into the local mailbox with context preserved', async () => {
     const r = await fetch(peerBase + '/api/peer/messages', {
       method: 'POST',

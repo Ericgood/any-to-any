@@ -69,6 +69,14 @@ anyd collab task <conversationId> --as "<your label>" --id t1 --owner "@<peer>:�
 - Task states: `assigned` → `working` (with `--step 2/4`) → `done`, or `blocked` (waiting on a dependency/credential/user) / `needs-decision` (needs the lead to choose) / `failed`.
 - Reversible work (write files, run tests) — just do it and log progress. Irreversible/destructive (delete data, touch production, change system state) — set the task `needs-decision` and confirm with the lead/operator first (ADR-016).
 
+**Across devices (M3):** the doc is keyed by the same `conversationId` on both machines — always use the id the lead shares, never a new one. Editing is local; sync is an explicit push (like `git push`), and the merge is convergent so pushing again is always safe:
+
+```bash
+anyd collab sync <conversationId> --to @<peer-device>   # push YOUR copy; the peer merges it
+```
+
+After you edit the doc (plan or progress) for a collaboration whose counterpart is on another device, push it so they see it: `anyd collab sync <conversationId> --to @mini`. When you receive a message whose plan lives on another device, `anyd collab show <conversationId>` reflects the latest that has been synced to you. Progress merges per agent (each writes only its own section) and the lead's plan is last-writer-wins, so both sides converge.
+
 ```bash
 anyd collab show <conversationId>      # read the plan + everyone's progress
 anyd collab list                       # all collaboration docs on this machine

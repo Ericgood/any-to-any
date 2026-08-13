@@ -19,6 +19,9 @@ export interface CollabStore {
     upsertTask(conversationId: string, agent: string, task: CollabTask): Promise<CollabDoc>;
     setLead(conversationId: string, agent: string, newLead: string): Promise<CollabDoc>;
     appendProgress(conversationId: string, agent: string, entry: string): Promise<CollabDoc>;
+    /** Merge a peer's copy into the local one (M3 cross-device sync). Writes the
+     *  incoming doc verbatim when this machine has never seen it. Convergent. */
+    merge(incoming: CollabDoc): Promise<CollabDoc>;
 }
 export declare function defaultCollabDir(): string;
 export declare function createCollabStore(opts?: {

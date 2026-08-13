@@ -5,7 +5,7 @@ import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
 import { createKimiAdapter } from './adapters/kimi.js';
 import { createZcodeAdapter } from './adapters/zcode.js';
-import { TASK_STATES, type CollabDoc, type CollabTask, type TaskState } from './collab/doc.js';
+import { serialize as serializeCollab, TASK_STATES, type CollabDoc, type CollabTask, type TaskState } from './collab/doc.js';
 import { createCollabStore } from './collab/store.js';
 import { resolveTarget } from './directory/resolve.js';
 import { listAllSessions } from './directory/scanner.js';
@@ -613,23 +613,41 @@ const collab = program
 collab
   .command('init')
   .description('Create the shared collaboration doc for a conversation (run by the lead)')
-  .argument('<target>', 'the peer session you are collaborating with, @<agent>[:<fragment>]')
-  .requiredOption('--as <self>', 'your own session, @<agent>[:<fragment>]')
+  .argument('[target]', 'the peer session, @<agent>[:<fragment>] (omit when using --conversation)')
+  .requiredOption('--as <self>', 'your own session/label')
+  .option('--conversation <id>', 'attach to an existing conversation id (e.g. a cross-device pair from anyd conversations)')
   .option('--lead <who>', 'who leads / owns the plan (defaults to you)')
   .option('--body <text>', 'initial plan / shared context (markdown)')
-  .action(async (target: string, opts: { as: string; lead?: string; body?: string }) => {
-    const self = await resolveOrExit(opts.as);
-    const peer = await resolveOrExit(target);
-    const conversationId = openMailbox().getOrCreateConversation(
-      { agent: self.agent, sessionId: self.sessionId },
-      { agent: peer.agent, sessionId: peer.sessionId },
-    );
-    const selfLabel = `@${self.agent}:${self.title}`;
-    const peerLabel = `@${peer.agent}:${peer.title}`;
-    let leadLabel = selfLabel;
-    if (opts.lead) {
-      const l = await resolveOrExit(opts.lead);
-      leadLabel = `@${l.agent}:${l.title}`;
+  .action(async (target: string | undefined, opts: { as: string; conversation?: string; lead?: string; body?: string }) => {
+    let conversationId: string;
+    let selfLabel: string;
+    let peerLabel: string;
+    let leadLabel: string;
+    if (opts.conversation) {
+      // Cross-device / explicit: labels are literal (no local scan needed — the
+      // remote peer's session isn't in this machine's directory anyway).
+      conversationId = opts.conversation;
+      selfLabel = normalizeLabel(opts.as);
+      peerLabel = target ? normalizeLabel(target) : '(the other party)';
+      leadLabel = opts.lead ? normalizeLabel(opts.lead) : selfLabel;
+    } else {
+      if (!target) {
+        console.error('error: give a <target>, or use --conversation <id> for a cross-device pair');
+        process.exit(1);
+      }
+      const self = await resolveOrExit(opts.as);
+      const peer = await resolveOrExit(target);
+      conversationId = openMailbox().getOrCreateConversation(
+        { agent: self.agent, sessionId: self.sessionId },
+        { agent: peer.agent, sessionId: peer.sessionId },
+      );
+      selfLabel = `@${self.agent}:${self.title}`;
+      peerLabel = `@${peer.agent}:${peer.title}`;
+      leadLabel = selfLabel;
+      if (opts.lead) {
+        const l = await resolveOrExit(opts.lead);
+        leadLabel = `@${l.agent}:${l.title}`;
+      }
     }
     const store = createCollabStore();
     const preexisting = store.exists(conversationId);
@@ -646,6 +664,7 @@ collab
     console.log(`\nNext:`);
     console.log(`  ${leadLabel === selfLabel ? 'you (lead) set the plan' : 'the lead sets the plan'}: anyd collab plan ${conversationId} --as "${leadLabel}" --body "..."`);
     console.log(`  either side logs progress:  anyd collab progress ${conversationId} --as "<your label>" "<one line>"`);
+    if (opts.conversation) console.log(`  push to the other device:   anyd collab sync ${conversationId} --to @<device>`);
     console.log(`  view it any time:            anyd collab show ${conversationId}`);
   });
 
@@ -766,6 +785,49 @@ collab
       console.log(`lead handed to ${normalizeLabel(newLead)}`);
     } catch (e) {
       console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+collab
+  .command('sync')
+  .description('Push this doc to a paired device, which merges it (M3 cross-device sync)')
+  .argument('<conversationId>', 'the conversation id (same id on both devices)')
+  .requiredOption('--to <device>', 'peer device to push to, e.g. @mini or mini')
+  .option('--port <port>', 'local daemon port (used to discover the peer)', '7433')
+  .action(async (conversationId: string, opts: { to: string; port: string }) => {
+    const doc = createCollabStore().load(conversationId);
+    if (!doc) {
+      console.error(`no collab doc for "${conversationId}" — nothing to sync`);
+      process.exit(1);
+    }
+    const device = opts.to.replace(/^@/, '').toLowerCase();
+    interface PeerRow { device: string; host: string; port: number; }
+    let peers: PeerRow[];
+    try {
+      const res = await fetch(`http://127.0.0.1:${opts.port}/api/peers`, { signal: AbortSignal.timeout(3000) });
+      const body = (await res.json()) as { lan: boolean; peers: PeerRow[] };
+      if (!body.lan) {
+        console.error('LAN peering is disabled on this daemon (--no-lan) — cannot sync');
+        process.exit(1);
+      }
+      peers = body.peers;
+    } catch {
+      console.error('cannot reach the local daemon to find the peer — is anyd start running?');
+      process.exit(1);
+    }
+    const peer = peers.find((p) => p.device.toLowerCase() === device);
+    if (!peer) {
+      console.error(`peer "@${device}" not found on the LAN (anyd peers to list). Is its daemon running and paired?`);
+      process.exit(1);
+    }
+    const { pushCollabDoc } = await import('./cluster/peers.js');
+    const { loadOrCreateToken } = await import('./cluster/token.js');
+    const r = await pushCollabDoc(peer, serializeCollab(doc), loadOrCreateToken());
+    if (r.ok) {
+      console.log(`synced ${conversationId} → @${peer.device} (it merged your copy)`);
+    } else {
+      console.error(`sync failed: ${r.error}`);
       process.exit(1);
     }
   });

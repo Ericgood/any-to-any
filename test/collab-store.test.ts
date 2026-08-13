@@ -116,6 +116,34 @@ describe('collab store', () => {
     expect(fresh.list()).toEqual([]);
   });
 
+  it('merge writes an unseen doc verbatim, then converges on later merges', async () => {
+    // incoming is older than this store's injected clock, so local edits win the
+    // lead region while progress still unions
+    const incoming = {
+      conversationId: CONV,
+      lead: LEAD,
+      updated: new Date(nowMs - 60_000).toISOString(),
+      tasks: [],
+      body: 'remote plan',
+      progress: [{ agent: WORKER, entries: ['remote did x'] }],
+    };
+    // first sight of this doc on this machine → stored as-is
+    const first = await store.merge(incoming);
+    expect(first.body).toBe('remote plan');
+    expect(store.load(CONV)?.progress[0]?.entries).toEqual(['remote did x']);
+
+    // a local lead edit, then a re-merge of the (older) incoming keeps local body
+    // but unions progress — convergent, no lost update
+    await store.setBody(CONV, LEAD, 'local newer plan');
+    nowMs += 10_000;
+    await store.appendProgress(CONV, LEAD, 'local lead note');
+    const merged = await store.merge(incoming);
+    expect(merged.body).toBe('local newer plan');
+    const byAgent = Object.fromEntries(merged.progress.map((p) => [p.agent, p.entries]));
+    expect(byAgent[WORKER]).toEqual(['remote did x']);
+    expect(byAgent[LEAD]).toEqual(['local lead note']);
+  });
+
   it('writes JSON front-matter to disk (human- and machine-readable)', async () => {
     await store.ensure({ conversationId: CONV, lead: LEAD, body: 'hi' });
     const raw = readFileSync(store.path(CONV), 'utf8');

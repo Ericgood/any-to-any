@@ -35,6 +35,15 @@ export declare function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry;
 /** Pull a peer's local session directory, stamping each entry with its device. */
 export declare function fetchPeerSessions(peer: Peer, token: string): Promise<SessionInfo[]>;
 /**
+ * Push our copy of a collaboration doc (serialized markdown) to a peer daemon,
+ * which merges it convergently (Phase 4 / M3). Only host/port/device are used,
+ * so a peer row from /api/peers works as well as a registry Peer.
+ */
+export declare function pushCollabDoc(peer: Pick<Peer, 'device' | 'host' | 'port'>, docSerialized: string, token: string): Promise<{
+    ok: boolean;
+    error?: string;
+}>;
+/**
  * Hand a message to the peer daemon. Perspective flip: our 'to.device' becomes
  * the peer's local target; our side becomes 'from.device' as seen by them.
  */

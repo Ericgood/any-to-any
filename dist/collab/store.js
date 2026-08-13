@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { anytoanyHome } from '../home.js';
 import { appendProgress as docAppendProgress, createDoc, parse, serialize, setBody as docSetBody, setLead as docSetLead, setTasks as docSetTasks, upsertTask as docUpsertTask, } from './doc.js';
 import { withFileLock } from './lock.js';
+import { mergeDoc } from './merge.js';
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 export function defaultCollabDir() {
     return join(anytoanyHome(), '.anytoany', 'collab');
@@ -97,6 +98,18 @@ export function createCollabStore(opts = {}) {
                 });
                 await writeAtomic(input.conversationId, doc);
                 return doc;
+            });
+        },
+        async merge(incoming) {
+            const file = path(incoming.conversationId);
+            mkdirSync(dir, { recursive: true });
+            return withFileLock(`${file}.lock`, async () => {
+                const local = load(incoming.conversationId);
+                // preserve the merged `updated` verbatim (do NOT re-stamp) or the two
+                // machines would keep leap-frogging and never converge
+                const next = local ? mergeDoc(local, incoming) : incoming;
+                await writeAtomic(incoming.conversationId, next);
+                return next;
             });
         },
         setBody: (conversationId, agent, body) => mutate(conversationId, (doc, updated) => docSetBody(doc, agent, body, updated)),

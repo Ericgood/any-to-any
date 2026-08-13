@@ -15,6 +15,7 @@ import {
   type CollabTask,
 } from './doc.js';
 import { withFileLock } from './lock.js';
+import { mergeDoc } from './merge.js';
 
 /** Filesystem-backed collaboration-document store (one Markdown file per conversation). */
 export interface CollabStore {
@@ -36,6 +37,9 @@ export interface CollabStore {
   upsertTask(conversationId: string, agent: string, task: CollabTask): Promise<CollabDoc>;
   setLead(conversationId: string, agent: string, newLead: string): Promise<CollabDoc>;
   appendProgress(conversationId: string, agent: string, entry: string): Promise<CollabDoc>;
+  /** Merge a peer's copy into the local one (M3 cross-device sync). Writes the
+   *  incoming doc verbatim when this machine has never seen it. Convergent. */
+  merge(incoming: CollabDoc): Promise<CollabDoc>;
 }
 
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
@@ -138,6 +142,19 @@ export function createCollabStore(opts: { dir?: string; now?: () => number } = {
         });
         await writeAtomic(input.conversationId, doc);
         return doc;
+      });
+    },
+
+    async merge(incoming) {
+      const file = path(incoming.conversationId);
+      mkdirSync(dir, { recursive: true });
+      return withFileLock(`${file}.lock`, async () => {
+        const local = load(incoming.conversationId);
+        // preserve the merged `updated` verbatim (do NOT re-stamp) or the two
+        // machines would keep leap-frogging and never converge
+        const next = local ? mergeDoc(local, incoming) : incoming;
+        await writeAtomic(incoming.conversationId, next);
+        return next;
       });
     },
 

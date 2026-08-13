@@ -112,6 +112,27 @@ export async function fetchPeerSessions(peer, token) {
     return sessions.map((s) => ({ ...s, device: peer.device }));
 }
 /**
+ * Push our copy of a collaboration doc (serialized markdown) to a peer daemon,
+ * which merges it convergently (Phase 4 / M3). Only host/port/device are used,
+ * so a peer row from /api/peers works as well as a registry Peer.
+ */
+export async function pushCollabDoc(peer, docSerialized, token) {
+    try {
+        const res = await peerFetch('/api/peer/collab', peer, token, {
+            method: 'POST',
+            body: JSON.stringify({ doc: docSerialized }),
+        });
+        if (!res.ok) {
+            const body = (await res.json().catch(() => ({})));
+            return { ok: false, error: `peer ${peer.device}: HTTP ${res.status} ${body.error ?? ''}`.trim() };
+        }
+        return { ok: true };
+    }
+    catch (e) {
+        return { ok: false, error: `peer ${peer.device} unreachable: ${e instanceof Error ? e.message : String(e)}` };
+    }
+}
+/**
  * Hand a message to the peer daemon. Perspective flip: our 'to.device' becomes
  * the peer's local target; our side becomes 'from.device' as seen by them.
  */
