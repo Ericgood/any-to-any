@@ -576,7 +576,8 @@ program
   .description('Pull new anytoany messages for THIS session from disk — manual reload, no restart needed')
   .option('--session <target>', 'pull for a specific session instead of auto-detecting by directory')
   .option('--cwd <dir>', 'directory used to identify your session (default: current directory)')
-  .action(async (opts: { session?: string; cwd?: string }) => {
+  .option('--quiet', 'print nothing when there is nothing new (for proactive/auto pulls)')
+  .action(async (opts: { session?: string; cwd?: string; quiet?: boolean }) => {
     const mailbox = openMailbox();
     const { collectInbox } = await import('./hooks/prompt-hook.js');
     let targets: Array<{ id: string; label: string }> = [];
@@ -588,7 +589,9 @@ program
       const { sessions } = await listAllSessions(defaultAdapters());
       const matches = sessions.filter((s) => s.cwd === cwd);
       if (matches.length === 0) {
-        console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
+        if (!opts.quiet) {
+          console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
+        }
         return;
       }
       targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
@@ -603,7 +606,7 @@ program
         any = true;
       }
     }
-    if (!any) console.log('no new anytoany messages — you are up to date.');
+    if (!any && !opts.quiet) console.log('no new anytoany messages — you are up to date.');
   });
 program
   .command('reply')

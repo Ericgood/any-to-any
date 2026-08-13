@@ -26,6 +26,7 @@ anyd send "@codex:frontend refactor" "your message here" --from "@claude:<your s
 - Check for replies/new messages addressed to you: `anyd inbox --session "@<agent>:<your session>" --take` (`--take` marks them delivered).
 - Messages may also arrive injected into your context labelled `[anytoany] Cross-agent message from …`.
 - **Didn't see a message you were expecting?** Codex / Kimi / Z Code interactive apps cache the session and don't live-refresh from disk, so a delivered cross-agent turn can sit unseen. Run `anyd pull` (or invoke the **reload** skill / say "/reload") to pull it from disk without restarting — no daemon needed.
+- **Pull proactively** (see the **reload** skill): if you're not Claude Code, run `anyd pull --quiet` on your own at the start of a turn during an active collaboration, right after messaging a peer, or when your operator asks about another agent — it's silent when nothing's new. Running it inside your turn is what surfaces a peer's message in this app.
 - To reply to a specific message: `anyd reply <messageId> "reply text"` — or end your response with a line `<<<ANYTOANY_REPLY>>> your reply` when the message asked you to.
 
 ## Receiving a task (protocol v2 — mandatory verdict)
@@ -42,6 +43,8 @@ This status line is protocol, not chatter — it is required even when an earlie
 ## Collaborating on a shared plan (Phase 4)
 
 For real multi-step work between two sessions, use a **shared collaboration doc** instead of stuffing everything into messages. The doc is the source of truth; messages are just the doorbell that says "look at the doc". One agent is the **lead** and owns the plan + task list; every agent appends only to its **own** progress section.
+
+**Start each collaboration turn by pulling** — unless you are Claude Code (whose inbox hook does this for you): run `anyd pull --quiet` first, so a peer's latest message actually lands in this live session (Codex / Kimi / Z Code apps don't show it on their own). It's silent when there's nothing new.
 
 **When a delivered `[anytoany]` message carries a `--- SHARED PLAN ---` footer**, this conversation has a doc. Then, in your single turn:
 
