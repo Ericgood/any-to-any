@@ -57,6 +57,15 @@ export async function dispatchOnce(opts) {
         messageId: claimed.id,
         fromLabel: label(sender, claimed.from.agent, claimed.from.sessionId),
         text: claimed.parts.map((p) => p.text).join('\n'),
+        // a shared collab doc turns the plain relay into a coordinated hand-off
+        ...(opts.collab?.exists(claimed.conversationId)
+            ? {
+                collab: {
+                    conversationId: claimed.conversationId,
+                    selfLabel: label(target, claimed.to.agent, claimed.to.sessionId),
+                },
+            }
+            : {}),
     });
     let result;
     try {

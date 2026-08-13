@@ -29,6 +29,16 @@ describe('mailbox', () => {
       expect(mailbox.listConversations()).toHaveLength(1);
     });
 
+    it('getOrCreateConversation returns a stable id for a pair without needing a message', () => {
+      const id1 = mailbox.getOrCreateConversation(CLAUDE_A, CODEX_B);
+      const id2 = mailbox.getOrCreateConversation(CODEX_B, CLAUDE_A); // order-independent
+      expect(id2).toBe(id1);
+      expect(mailbox.listConversations()).toHaveLength(1);
+      // a later message on the pair reuses the same conversation
+      const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi' });
+      expect(m.conversationId).toBe(id1);
+    });
+
     it('lists conversations with message count and last message', () => {
       mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'first' });
       nowMs += 1000;

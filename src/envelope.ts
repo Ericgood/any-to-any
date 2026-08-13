@@ -5,6 +5,32 @@ export interface EnvelopeInput {
   /** Human-readable sender label, e.g. '@claude:backend refactor'. */
   fromLabel: string;
   text: string;
+  /** When this conversation has a shared collaboration doc (Phase 4), point the
+   *  recipient at it and tell it the label to record progress under. */
+  collab?: {
+    conversationId: string;
+    /** The recipient's own label, e.g. '@codex:api' — what it passes to --as. */
+    selfLabel: string;
+  };
+}
+
+/**
+ * Footer appended when a collaboration doc exists: the shared plan is the source
+ * of truth; the recipient reads it, does ONE chunk this turn, and appends a
+ * one-line progress bullet under its own section. The whole doc is intentionally
+ * NOT inlined here (token cost) — the recipient pulls it with `anyd collab show`.
+ */
+function collabFooter(collab: NonNullable<EnvelopeInput['collab']>): string[] {
+  const { conversationId, selfLabel } = collab;
+  return [
+    `--- SHARED PLAN ---`,
+    `This conversation has a shared collaboration doc (the plan + everyone's progress is the source of truth, not this message).`,
+    `Read it first:   anyd collab show ${conversationId}`,
+    `Do ONE chunk you can finish this turn, then record it (one line, by product not time — "wrote X", "2/4 done"):`,
+    `  anyd collab progress ${conversationId} --as "${selfLabel}" "<what you just did + next step>"`,
+    `Only the lead edits the plan/tasks; you append to YOUR progress section. To change the plan or division, ask the lead in your reply.`,
+    `--- END SHARED PLAN ---`,
+  ];
 }
 
 /**
@@ -24,6 +50,7 @@ export function renderEnvelope(input: EnvelopeInput): string {
     `--- MESSAGE ---`,
     input.text,
     `--- END MESSAGE ---`,
+    ...(input.collab ? collabFooter(input.collab) : []),
     `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
     `ends, nothing continues automatically. You MUST end your response with one line:`,
     `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,

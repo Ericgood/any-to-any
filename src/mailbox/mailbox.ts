@@ -66,6 +66,9 @@ export interface Mailbox {
   getMessage(id: string): Message | null;
   listConversations(): ConversationSummary[];
   listMessages(conversationId: string): Message[];
+  /** Stable conversationId for a session pair (order-independent); creates the
+   *  row if absent WITHOUT bumping last_message_at. Used to key a collab doc. */
+  getOrCreateConversation(from: SessionRef, to: SessionRef): string;
   claimNextPending(): Message | null;
   markDelivered(id: string): Message;
   markFailed(id: string, error: string, opts?: { terminal?: boolean }): Message;
@@ -136,21 +139,29 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
     return row ? rowToMessage(row) : null;
   };
 
-  const ensureConversation = (from: SessionRef, to: SessionRef, ts: number): string => {
-    const key = pairKey(from, to);
-    const existing = db
+  const findConversationId = (from: SessionRef, to: SessionRef): string | undefined => {
+    const row = db
       .prepare('SELECT id FROM conversations WHERE pair_key = ?')
-      .get(key) as { id: string } | undefined;
-    if (existing) {
-      db.prepare('UPDATE conversations SET last_message_at = ? WHERE id = ?').run(ts, existing.id);
-      return existing.id;
-    }
+      .get(pairKey(from, to)) as { id: string } | undefined;
+    return row?.id;
+  };
+
+  const createConversation = (from: SessionRef, to: SessionRef, ts: number): string => {
     const id = randomUUID();
     db.prepare(
       `INSERT INTO conversations (id, pair_key, a_agent, a_session, a_device, b_agent, b_session, b_device, created_at, last_message_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, key, from.agent, from.sessionId, from.device ?? null, to.agent, to.sessionId, to.device ?? null, ts, ts);
+    ).run(id, pairKey(from, to), from.agent, from.sessionId, from.device ?? null, to.agent, to.sessionId, to.device ?? null, ts, ts);
     return id;
+  };
+
+  const ensureConversation = (from: SessionRef, to: SessionRef, ts: number): string => {
+    const existing = findConversationId(from, to);
+    if (existing) {
+      db.prepare('UPDATE conversations SET last_message_at = ? WHERE id = ?').run(ts, existing);
+      return existing;
+    }
+    return createConversation(from, to, ts);
   };
 
   const assertLoopSafe = (contextId: string, ts: number): void => {
@@ -294,6 +305,10 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
         .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
         .all(conversationId) as MessageRow[];
       return rows.map(rowToMessage);
+    },
+
+    getOrCreateConversation(from: SessionRef, to: SessionRef): string {
+      return findConversationId(from, to) ?? createConversation(from, to, now());
     },
 
     retry(id: string): Message {

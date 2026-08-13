@@ -1,7 +1,7 @@
 # Phase 4 规格 — 协作层：共享上下文文档 + 任务生命周期（跨厂商弱一致版）
 
 > 创建：2026-08-13 · 最后更新：2026-08-13
-> 状态：规划中（待用户审阅本 spec 后开工）。母决策：[ADR-017](../decisions.md) · 相关：ADR-014（room）、ADR-016（信任）
+> 状态：**M1 已落地**（同机协作文档 + CLI，48 测试绿 + 真机冒烟，2026-08-13）；M2–M4 规划中。母决策：[ADR-017](../decisions.md) · 相关：ADR-014（room）、ADR-016（信任）
 > 一句话：把「消息即一切」升级为「**共享文档为状态、消息为事件、一个 lead 主导、跨机同步**」，让两个（乃至多个）agent 能像两个人一样先对齐、再分工、边干边汇报、把活干完。
 
 ## 0. 为什么现在做
@@ -44,39 +44,37 @@
 
 ## 4. 协作文档结构（single-writer 正文 + append-only 进度段 + 机读状态区）
 
-`~/.anytoany/collab/<conversationId>.md`：
+`~/.anytoany/collab/<conversationId>.md`（**M1 已落地的实际格式**）：
 
 ```markdown
 ---
-# 机读状态区（lead 维护；控制台/CLI 解析）
-lead: "@claude:web-app"
-updated: 2026-08-13T10:20:00Z
-tasks:
-  - id: t1  owner: "@codex:api"      state: working   step: "2/4"  updated: 2026-08-13T10:18Z
-  - id: t2  owner: "@claude:web-app" state: blocked   note: "等 t1 的 /auth 契约"
+{
+  "conversationId": "17c34304-4158-4cf0-9a47-30bea28b84ef",
+  "lead": "@claude:web-app",
+  "updated": "2026-08-13T10:20:00.000Z",
+  "tasks": [
+    { "id": "t1", "owner": "@codex:api",      "state": "working", "step": "2/4", "updated": "2026-08-13T10:18:00Z" },
+    { "id": "t2", "owner": "@claude:web-app", "state": "blocked", "note": "等 t1 的 /auth 契约", "updated": "…" }
+  ]
+}
 ---
 
-## 目标与共享上下文        # ← lead 独占正文
-（要做什么、关键背景、约束、决策）
+（lead 独占正文：目标 / 关键背景 / 分工 / 决策日志，自由 markdown）
 
-## 分工
-- @codex:api → 后端 /auth 刷新端点（t1）
-- @claude:web-app → 前端静默刷新（t2，依赖 t1）
+## Progress — @codex:api           <!-- 只有 @codex:api 能 append -->
 
-## 决策日志（append-only，带时间戳）
-- 2026-08-13T10:05Z 定 401→refresh→retry 方案（lead）
+- 10:12Z 开工：读 authMiddleware → 加 /auth/refresh → 测 → 交契约，分 4 步
+- 10:18Z 2/4：/auth/refresh 已写，返回 {token,exp}
 
-## 进度 · @codex:api           # ← 只有 @codex:api 能 append
-- 10:12Z 开工，计划：读现有 authMiddleware → 加 /auth/refresh → 测 → 交契约。预计 3 步。
-- 10:18Z 第 2/4：/auth/refresh 已写，返回 {token,exp}。契约见下…
+## Progress — @claude:web-app       <!-- 只有 @claude:web-app 能 append -->
 
-## 进度 · @claude:web-app       # ← 只有 @claude:web-app 能 append
-- 10:06Z 待 t1 契约，先搭 interceptor 骨架。
+- 10:06Z 待 t1 契约，先搭 interceptor 骨架
 ```
 
-- **机读 front-matter**：lead 维护的任务清单 + 每项状态，供控制台渲染「B 在干，第 2/4 块」。
-- **正文**：lead 独占（目标/分工/决策）。
-- **每个 agent 一段 `## 进度 · <agent>`**：**只有该 agent append**，天然无写冲突。
+- **机读区 = front-matter 内的一段 JSON**（不是手写 YAML）。理由：JSON 是 YAML 严格子集 → 既人类可读、未来 YAML 工具也认；且用内置 `JSON.parse` 零依赖、零手写引号 bug（ISO 时间戳带冒号、note 带 unicode）；serialize/parse 保证 round-trip。lead 维护，供控制台渲染「B 在干，第 2/4 块」。
+- **正文**：lead 独占（目标/分工/决策），存为一段不透明 markdown。
+- **每个 agent 一段 `## Progress — <agent>`**（英文标题，面向跨厂商/国际化）：**只有该 agent append**，天然无写冲突。
+- **落盘一致性**：写走「文件锁（O_EXCL）→ 读改 → 写临时文件 → rename」原子替换；非 lead 改正文/任务在模型层直接抛错。
 
 ## 5. 所有权与并发
 
@@ -131,7 +129,7 @@ assigned ──> working(n/m) ──> done
 
 ## 11. 分期里程碑（MVP 优先，每步可独立验收）
 
-- **M1 · 同机协作文档**：`anyd` 自动为 conversation 建 `<conv>.md`；lead 单写正文 + worker append 进度段 + file-lock；消息可引用文档；skill 教会协议。**不碰跨设备。**
+- **M1 · 同机协作文档** ✅（2026-08-13）：`src/collab/{doc,lock,store}.ts`（纯模型 + O_EXCL 文件锁 + 原子写）；lead 单写正文 + worker append 进度段 + 单写者强制；`anyd collab init/show/list/plan/task/progress/lead`；投递信封在有文档时追加 SHARED PLAN footer（指针式，不内联全文）；skill 增回合制协议。48 测试绿 + 真机 CLI 冒烟全过。**范围决策**：创建走显式 `collab init`（非每条消息自动建），auto-create-on-first-message 挪 M2。**未碰跨设备。**
 - **M2 · 任务生命周期 + 控制台**：front-matter 状态机；控制台加「协作文档」面板（渲染 MD + 任务徽章）；`anyd collab`。
 - **M3 · 跨设备文档同步**：文档随消息 relay（diff），双机一致——本阶段的技术核心与独有价值。
 - **M4 · 推进调度**（最难）：worker「干完一块该谁唤醒它干下一块」——lead 主动 resume？一个轻调度器？还是操作者一键「继续」？先做**半自动**（控制台一键推进），全自动留待验证。

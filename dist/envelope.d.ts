@@ -4,6 +4,13 @@ export interface EnvelopeInput {
     /** Human-readable sender label, e.g. '@claude:backend refactor'. */
     fromLabel: string;
     text: string;
+    /** When this conversation has a shared collaboration doc (Phase 4), point the
+     *  recipient at it and tell it the label to record progress under. */
+    collab?: {
+        conversationId: string;
+        /** The recipient's own label, e.g. '@codex:api' — what it passes to --as. */
+        selfLabel: string;
+    };
 }
 /**
  * Render the delivery prompt injected into the target session.

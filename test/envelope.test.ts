@@ -54,6 +54,29 @@ describe('renderEnvelope', () => {
   });
 });
 
+describe('renderEnvelope — collab footer (Phase 4)', () => {
+  it('omits the shared-plan footer when no collab doc is attached', () => {
+    const env = renderEnvelope({ messageId: 'm', fromLabel: '@a:x', text: 'hi' });
+    expect(env).not.toContain('SHARED PLAN');
+  });
+
+  it('points the recipient at the doc with its own label and ready-to-run commands', () => {
+    const env = renderEnvelope({
+      messageId: 'm',
+      fromLabel: '@claude:web-app',
+      text: 'take t1',
+      collab: { conversationId: 'conv-abc', selfLabel: '@codex:api' },
+    });
+    expect(env).toContain('--- SHARED PLAN ---');
+    expect(env).toContain('anyd collab show conv-abc');
+    expect(env).toContain('anyd collab progress conv-abc --as "@codex:api"');
+    // the footer sits after the message body
+    expect(env.indexOf('--- END MESSAGE ---')).toBeLessThan(env.indexOf('SHARED PLAN'));
+    // still carries the verdict protocol
+    expect(env).toContain(REPLY_MARKER);
+  });
+});
+
 describe('extractReply', () => {
   it('extracts same-line reply after the marker', () => {
     const out = `did some work\n${REPLY_MARKER} tests all green, 12 passed`;

@@ -5,6 +5,8 @@ import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
 import { createKimiAdapter } from './adapters/kimi.js';
 import { createZcodeAdapter } from './adapters/zcode.js';
+import { TASK_STATES, type CollabDoc, type CollabTask, type TaskState } from './collab/doc.js';
+import { createCollabStore } from './collab/store.js';
 import { resolveTarget } from './directory/resolve.js';
 import { listAllSessions } from './directory/scanner.js';
 import { formatRelativeTime, shortenHome } from './format.js';
@@ -41,6 +43,36 @@ function printMessage(m: Message): void {
   console.log(
     `[${m.id.slice(0, 8)}] ${m.status}  @${m.from.agent} → @${m.to.agent}:${m.to.sessionId.slice(0, 8)}  ${JSON.stringify(text.length > 120 ? `${text.slice(0, 120)}…` : text)}`,
   );
+}
+
+/** Agent labels are opaque doc keys; just guarantee a leading '@'. */
+const normalizeLabel = (s: string): string => (s.startsWith('@') ? s : `@${s}`);
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString('utf8').trim();
+}
+
+/** Human-readable rendering of a collaboration doc for `anyd collab show`. */
+function printCollabDoc(doc: CollabDoc): void {
+  console.log(`● collab ${doc.conversationId}`);
+  console.log(`  lead: ${doc.lead}   updated: ${doc.updated}`);
+  if (doc.tasks.length) {
+    console.log('  tasks:');
+    for (const t of doc.tasks) {
+      const badge = t.step ? `${t.state} ${t.step}` : t.state;
+      console.log(`    [${badge}] ${t.id} ${t.owner}${t.note ? ` — ${t.note}` : ''}`);
+    }
+  }
+  if (doc.body) {
+    console.log('  ── plan ──');
+    for (const line of doc.body.split('\n')) console.log(`  ${line}`);
+  }
+  for (const section of doc.progress) {
+    console.log(`  ── progress · ${section.agent} ──`);
+    for (const e of section.entries) console.log(`  - ${e}`);
+  }
 }
 
 const program = new Command();
@@ -205,11 +237,13 @@ program
     }
 
     const { startDispatcher } = await import('./daemon/dispatcher.js');
+    const collab = createCollabStore();
     const running = startDispatcher(
       {
         mailbox,
         adapters: new Map(adapters.map((a) => [a.agent, a])),
         directory,
+        collab,
         ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
         onEvent: (e) => {
           const m = e.message;
@@ -299,6 +333,7 @@ program
       mailbox: openMailbox(),
       adapters: new Map(adapters.map((a) => [a.agent, a])),
       directory: async () => sessions,
+      collab: createCollabStore(),
       onEvent: (e: { kind: string; message: { id: string }; detail?: string }) =>
         console.log(`${e.kind} ${e.message.id.slice(0, 8)}${e.detail ? ` — ${e.detail}` : ''}`),
     };
@@ -567,6 +602,170 @@ program
       console.log(
         `@${c.a.agent}:${c.a.sessionId.slice(0, 8)} ↔ @${c.b.agent}:${c.b.sessionId.slice(0, 8)}  (${c.messageCount} msgs, ${formatRelativeTime(c.lastMessageAt)})${last}`,
       );
+    }
+  });
+
+const collab = program
+  .command('collab')
+  .description('Shared collaboration doc for a conversation (Phase 4): one lead writes the plan, everyone appends progress');
+
+collab
+  .command('init')
+  .description('Create the shared collaboration doc for a conversation (run by the lead)')
+  .argument('<target>', 'the peer session you are collaborating with, @<agent>[:<fragment>]')
+  .requiredOption('--as <self>', 'your own session, @<agent>[:<fragment>]')
+  .option('--lead <who>', 'who leads / owns the plan (defaults to you)')
+  .option('--body <text>', 'initial plan / shared context (markdown)')
+  .action(async (target: string, opts: { as: string; lead?: string; body?: string }) => {
+    const self = await resolveOrExit(opts.as);
+    const peer = await resolveOrExit(target);
+    const conversationId = openMailbox().getOrCreateConversation(
+      { agent: self.agent, sessionId: self.sessionId },
+      { agent: peer.agent, sessionId: peer.sessionId },
+    );
+    const selfLabel = `@${self.agent}:${self.title}`;
+    const peerLabel = `@${peer.agent}:${peer.title}`;
+    let leadLabel = selfLabel;
+    if (opts.lead) {
+      const l = await resolveOrExit(opts.lead);
+      leadLabel = `@${l.agent}:${l.title}`;
+    }
+    const store = createCollabStore();
+    const preexisting = store.exists(conversationId);
+    const doc = await store.ensure({
+      conversationId,
+      lead: leadLabel,
+      ...(opts.body ? { body: opts.body } : {}),
+    });
+    console.log(`collab doc: ${store.path(conversationId)}`);
+    console.log(`  conversationId: ${conversationId}`);
+    console.log(`  lead: ${doc.lead}`);
+    console.log(`  peers: ${selfLabel} ↔ ${peerLabel}`);
+    if (preexisting) console.log(`  (doc already existed — left as-is; use anyd collab plan/task to change it)`);
+    console.log(`\nNext:`);
+    console.log(`  ${leadLabel === selfLabel ? 'you (lead) set the plan' : 'the lead sets the plan'}: anyd collab plan ${conversationId} --as "${leadLabel}" --body "..."`);
+    console.log(`  either side logs progress:  anyd collab progress ${conversationId} --as "<your label>" "<one line>"`);
+    console.log(`  view it any time:            anyd collab show ${conversationId}`);
+  });
+
+collab
+  .command('show')
+  .description('Print a collaboration doc')
+  .argument('<conversationId>', 'the conversation id (see anyd collab list / anyd conversations)')
+  .option('--json', 'output the raw document as JSON')
+  .action((conversationId: string, opts: { json?: boolean }) => {
+    const store = createCollabStore();
+    let doc: CollabDoc | null;
+    try {
+      doc = store.load(conversationId);
+    } catch (e) {
+      console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    if (!doc) {
+      console.error(`no collab doc for "${conversationId}" — create one with anyd collab init`);
+      process.exit(1);
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(doc, null, 2));
+      return;
+    }
+    printCollabDoc(doc);
+  });
+
+collab
+  .command('list')
+  .description('List all collaboration docs on this machine')
+  .action(() => {
+    const docs = createCollabStore().list();
+    if (docs.length === 0) {
+      console.log('no collab docs yet — start one with anyd collab init');
+      return;
+    }
+    for (const d of docs) {
+      const open = d.tasks.filter((t) => t.state !== 'done' && t.state !== 'failed').length;
+      console.log(`${d.conversationId}  lead ${d.lead}  (${d.tasks.length} tasks, ${open} open)  ${d.updated}`);
+    }
+  });
+
+collab
+  .command('plan')
+  .description('Set the plan / shared context (lead only)')
+  .argument('<conversationId>', 'the conversation id')
+  .requiredOption('--as <self>', 'your label — must be the lead')
+  .option('--body <text>', 'plan markdown; omit to read from stdin')
+  .action(async (conversationId: string, opts: { as: string; body?: string }) => {
+    const body = opts.body ?? (await readStdin());
+    try {
+      await createCollabStore().setBody(conversationId, normalizeLabel(opts.as), body);
+      console.log(`plan updated for ${conversationId}`);
+    } catch (e) {
+      console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+collab
+  .command('task')
+  .description('Add or update a task (lead only)')
+  .argument('<conversationId>', 'the conversation id')
+  .requiredOption('--as <self>', 'your label — must be the lead')
+  .requiredOption('--id <id>', 'task id, e.g. t1')
+  .requiredOption('--owner <who>', 'agent label that owns the task')
+  .requiredOption('--state <state>', `one of: ${TASK_STATES.join(', ')}`)
+  .option('--step <n/m>', 'progress by product, e.g. 2/4')
+  .option('--note <text>', 'free note (e.g. what a blocked task waits on)')
+  .action(async (conversationId: string, opts: { as: string; id: string; owner: string; state: string; step?: string; note?: string }) => {
+    if (!TASK_STATES.includes(opts.state as TaskState)) {
+      console.error(`error: invalid state "${opts.state}" — use one of: ${TASK_STATES.join(', ')}`);
+      process.exit(1);
+    }
+    const task: CollabTask = {
+      id: opts.id,
+      owner: normalizeLabel(opts.owner),
+      state: opts.state as TaskState,
+      updated: new Date().toISOString(),
+      ...(opts.step ? { step: opts.step } : {}),
+      ...(opts.note ? { note: opts.note } : {}),
+    };
+    try {
+      await createCollabStore().upsertTask(conversationId, normalizeLabel(opts.as), task);
+      console.log(`task ${opts.id} → ${opts.state}${opts.step ? ` (${opts.step})` : ''}`);
+    } catch (e) {
+      console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+collab
+  .command('progress')
+  .description('Append one line to YOUR progress section (any agent)')
+  .argument('<conversationId>', 'the conversation id')
+  .argument('<text>', 'one-line progress note (what you did + next step)')
+  .requiredOption('--as <self>', 'your label')
+  .action(async (conversationId: string, text: string, opts: { as: string }) => {
+    try {
+      await createCollabStore().appendProgress(conversationId, normalizeLabel(opts.as), text);
+      console.log(`progress logged for ${normalizeLabel(opts.as)}`);
+    } catch (e) {
+      console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+collab
+  .command('lead')
+  .description('Hand the lead role to another agent (current lead only)')
+  .argument('<conversationId>', 'the conversation id')
+  .argument('<newLead>', 'label of the agent to become lead')
+  .requiredOption('--as <self>', 'your label — must be the current lead')
+  .action(async (conversationId: string, newLead: string, opts: { as: string }) => {
+    try {
+      await createCollabStore().setLead(conversationId, normalizeLabel(opts.as), normalizeLabel(newLead));
+      console.log(`lead handed to ${normalizeLabel(newLead)}`);
+    } catch (e) {
+      console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
     }
   });
 

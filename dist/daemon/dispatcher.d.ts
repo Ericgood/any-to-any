@@ -19,6 +19,11 @@ export interface DispatcherOptions {
         ok: boolean;
         error?: string;
     }>;
+    /** When set and a doc exists for the conversation, the delivery envelope
+     *  points the recipient at the shared collaboration plan (Phase 4). */
+    collab?: {
+        exists(conversationId: string): boolean;
+    };
 }
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export declare function dispatchOnce(opts: DispatcherOptions): Promise<boolean>;

@@ -35,19 +35,25 @@ export function createMailbox(db, opts = {}) {
         const row = getMessageStmt.get(id);
         return row ? rowToMessage(row) : null;
     };
-    const ensureConversation = (from, to, ts) => {
-        const key = pairKey(from, to);
-        const existing = db
+    const findConversationId = (from, to) => {
+        const row = db
             .prepare('SELECT id FROM conversations WHERE pair_key = ?')
-            .get(key);
-        if (existing) {
-            db.prepare('UPDATE conversations SET last_message_at = ? WHERE id = ?').run(ts, existing.id);
-            return existing.id;
-        }
+            .get(pairKey(from, to));
+        return row?.id;
+    };
+    const createConversation = (from, to, ts) => {
         const id = randomUUID();
         db.prepare(`INSERT INTO conversations (id, pair_key, a_agent, a_session, a_device, b_agent, b_session, b_device, created_at, last_message_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, key, from.agent, from.sessionId, from.device ?? null, to.agent, to.sessionId, to.device ?? null, ts, ts);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, pairKey(from, to), from.agent, from.sessionId, from.device ?? null, to.agent, to.sessionId, to.device ?? null, ts, ts);
         return id;
+    };
+    const ensureConversation = (from, to, ts) => {
+        const existing = findConversationId(from, to);
+        if (existing) {
+            db.prepare('UPDATE conversations SET last_message_at = ? WHERE id = ?').run(ts, existing);
+            return existing;
+        }
+        return createConversation(from, to, ts);
     };
     const assertLoopSafe = (contextId, ts) => {
         const depth = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE context_id = ?').get(contextId).n;
@@ -160,6 +166,9 @@ export function createMailbox(db, opts = {}) {
                 .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
                 .all(conversationId);
             return rows.map(rowToMessage);
+        },
+        getOrCreateConversation(from, to) {
+            return findConversationId(from, to) ?? createConversation(from, to, now());
         },
         retry(id) {
             const current = getMessage(id);

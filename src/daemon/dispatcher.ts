@@ -20,6 +20,9 @@ export interface DispatcherOptions {
   selfDevice?: string;
   /** Hand a message to a paired peer daemon (Phase 2 LAN). */
   relay?: (device: string, message: Message) => Promise<{ ok: boolean; error?: string }>;
+  /** When set and a doc exists for the conversation, the delivery envelope
+   *  points the recipient at the shared collaboration plan (Phase 4). */
+  collab?: { exists(conversationId: string): boolean };
 }
 
 const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: string): string =>
@@ -85,6 +88,15 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     messageId: claimed.id,
     fromLabel: label(sender, claimed.from.agent, claimed.from.sessionId),
     text: claimed.parts.map((p) => p.text).join('\n'),
+    // a shared collab doc turns the plain relay into a coordinated hand-off
+    ...(opts.collab?.exists(claimed.conversationId)
+      ? {
+          collab: {
+            conversationId: claimed.conversationId,
+            selfLabel: label(target, claimed.to.agent, claimed.to.sessionId),
+          },
+        }
+      : {}),
   });
 
   let result;

@@ -57,6 +57,9 @@ export interface Mailbox {
     getMessage(id: string): Message | null;
     listConversations(): ConversationSummary[];
     listMessages(conversationId: string): Message[];
+    /** Stable conversationId for a session pair (order-independent); creates the
+     *  row if absent WITHOUT bumping last_message_at. Used to key a collab doc. */
+    getOrCreateConversation(from: SessionRef, to: SessionRef): string;
     claimNextPending(): Message | null;
     markDelivered(id: string): Message;
     markFailed(id: string, error: string, opts?: {

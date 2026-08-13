@@ -38,6 +38,42 @@ When an `[anytoany]` message asks you to DO something, the delivery turn is your
 
 This status line is protocol, not chatter — it is required even when an earlier thread said "no more replies".
 
+## Collaborating on a shared plan (Phase 4)
+
+For real multi-step work between two sessions, use a **shared collaboration doc** instead of stuffing everything into messages. The doc is the source of truth; messages are just the doorbell that says "look at the doc". One agent is the **lead** and owns the plan + task list; every agent appends only to its **own** progress section.
+
+**When a delivered `[anytoany]` message carries a `--- SHARED PLAN ---` footer**, this conversation has a doc. Then, in your single turn:
+
+1. Read it first: `anyd collab show <conversationId>`.
+2. Do **one chunk you can finish this turn** (headless resume is one turn — never start work that a timeout would lose). Progress is measured by product, not time: "wrote /auth/refresh", "2/4 done" — never "about 2 hours".
+3. Record it under your own section (the footer prints your exact label to use):
+
+```bash
+anyd collab progress <conversationId> --as "<your label>" "<what you just did + next step>"
+```
+
+4. End your turn with the normal verdict (`DONE <result>` / `BLOCKED <missing>`).
+
+**To start a collaboration** (you become the lead):
+
+```bash
+anyd collab init "@<peer>:<fragment>" --as "@<you>:<fragment>"     # creates the doc, prints the conversationId
+anyd collab plan <conversationId> --as "<your label>" --body "goal + division of labour"
+anyd collab task <conversationId> --as "<your label>" --id t1 --owner "@<peer>:…" --state assigned
+```
+
+**Rules that keep it conflict-free:**
+
+- **Only the lead** edits the plan (`plan`) and tasks (`task`). If you are a worker and want the plan or your assignment changed, **say so in your reply to the lead** — don't try to edit it (the command will refuse). To hand off leadership: `anyd collab lead <conversationId> <newLead> --as "<current lead>"`.
+- **You append only to your own progress section** — that's why there are no write conflicts.
+- Task states: `assigned` → `working` (with `--step 2/4`) → `done`, or `blocked` (waiting on a dependency/credential/user) / `needs-decision` (needs the lead to choose) / `failed`.
+- Reversible work (write files, run tests) — just do it and log progress. Irreversible/destructive (delete data, touch production, change system state) — set the task `needs-decision` and confirm with the lead/operator first (ADR-016).
+
+```bash
+anyd collab show <conversationId>      # read the plan + everyone's progress
+anyd collab list                       # all collaboration docs on this machine
+```
+
 ## Anti-chatter rules (important)
 
 - **Only send when you have new information, a question, or a concrete request.** Never send acknowledgement-only or status-sync messages ("received", "confirmed", "state synced") — they trigger reply loops between agents.

@@ -50,8 +50,8 @@ Phase 1 M0-M6 全部完成：81 测试全绿（覆盖率 92.7/80/98.4），Codex
 > 母文档：docs/specs/phase4-collab-doc.md · docs/decisions.md ADR-017
 > 一句话：文档为状态、消息为事件、一个 lead 主导、跨机同步。让 agent 像两个人一样先对齐再分工、边干边按轮汇报。
 
-- [ ] **M1 同机协作文档**：conversation 自动建 `~/.anytoany/collab/<conv>.md`；lead 单写正文 + worker append 进度段 + file-lock；消息可引用文档；skill 增回合制协作协议（每 turn 一块 / 进度按步 / FYI-NOOP vs 请求）
-- [ ] **M2 任务生命周期 + 控制台**：front-matter 状态机（assigned/working(n/m)/blocked/needs-decision/done/failed）；控制台加协作文档面板（渲染 MD + 任务徽章）；`anyd collab <conv>`
+- [x] **M1 同机协作文档**（2026-08-13，48 测试绿 + CLI 真机冒烟全过）：`~/.anytoany/collab/<conv>.md`（JSON front-matter + lead 正文 + `## Progress — <agent>` 段）；`src/collab/{doc,lock,store}.ts` 纯函数模型 + O_EXCL 文件锁 + 原子写；单写者强制（非 lead 改计划直接报错）；`anyd collab init/show/list/plan/task/progress/lead`；投递信封在有文档时追加 SHARED PLAN footer（不内联全文，省 token）；skill 增回合制协议。**范围决策**：文档创建走显式 `collab init`（不是每条消息自动建，避免污染 collab/ 目录）——auto-create-on-first-message 挪到 M2 配合控制台落地。
+- [ ] **M2 任务生命周期 + 控制台**：控制台加协作文档面板（渲染 MD + 任务徽章）；conversation 首条消息可选自动建文档；`anyd collab` 已在 M1 落地（保留细化）
 - [ ] **M3 跨设备文档同步**：文档随消息 relay（diff），双机一致——本阶段技术核心与独有价值
 - [ ] **M4 推进调度（最难）**：worker 干完一块的下一步唤醒——先半自动（控制台一键推进），全自动待验证
 - [ ] **安全阀**：config 增 inbound accept/hold/refuse（默认 accept）+ 不可逆动作走 needs-decision 确认（ADR-016 增补）

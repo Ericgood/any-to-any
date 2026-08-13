@@ -4,9 +4,12 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
-### Design — collaboration layer (Phase 4, planned)
+### Collaboration layer (Phase 4) — M1: same-machine shared doc
 
-- Wrote the spec + ADR for a **shared collaboration document** model: the doc (per conversation) becomes the durable coordination state, messages become lightweight events pointing into it, one lead owns the doc while workers append their own progress sections, and the doc syncs across devices. Grounded in research of how Codex subagents and Claude Code agent teams / cross-session messaging actually work — anytoany does the cross-vendor, cross-device, weak-consistency version. See [docs/specs/phase4-collab-doc.md](docs/specs/phase4-collab-doc.md) and ADR-017.
+- **Shared collaboration document** per conversation at `~/.anytoany/collab/<conversationId>.md`. The doc is the durable coordination state (plan + task list + everyone's progress); messages become lightweight events that point into it. One **lead** owns the plan and task list (single-writer, enforced — a non-lead edit is refused); every agent appends only to its **own** `## Progress — <agent>` section, so there are no write conflicts.
+- On-disk format: a JSON block inside the `---` front-matter fence (a strict YAML subset — human- and machine-readable, zero new deps, round-trip safe) + lead-owned markdown body + per-agent progress sections. Writes go through an `O_EXCL` file lock + atomic temp-and-rename.
+- New CLI: `anyd collab init | show | list | plan | task | progress | lead`. When a conversation has a doc, the delivery envelope gains a `--- SHARED PLAN ---` footer pointing the recipient at it (a pointer, not the whole doc inlined — keeps token cost down) with its exact label and ready-to-run commands. The skill teaches the turn-based protocol (one chunk per turn, progress by product not time, lead-owns-plan).
+- Scope: creation is explicit via `collab init` (auto-create-on-first-message is deferred to M2); cross-device sync is M3. 48 new tests; verified end-to-end via the real CLI. Design: [docs/specs/phase4-collab-doc.md](docs/specs/phase4-collab-doc.md), ADR-017.
 
 
 Everything below has shipped to `main`. No tagged release yet.

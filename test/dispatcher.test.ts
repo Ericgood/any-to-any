@@ -311,6 +311,38 @@ describe('anti-pingpong suppression', () => {
   });
 });
 
+describe('collab-doc envelope footer (Phase 4)', () => {
+  it('adds the shared-plan footer only when a doc exists for the conversation', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const withDoc = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'take t1' });
+    await dispatchOnce({
+      mailbox,
+      adapters: new Map([[withDoc.agent, withDoc]]),
+      directory: async () => DIRECTORY,
+      collab: { exists: (id) => id === m.conversationId },
+    });
+    const env = withDoc.calls[0]!.envelope;
+    expect(env).toContain('--- SHARED PLAN ---');
+    expect(env).toContain(`anyd collab show ${m.conversationId}`);
+    // the recipient is told to record progress under its OWN resolved label
+    expect(env).toContain('--as "@codex:frontend refactor"');
+  });
+
+  it('omits the footer when no collab doc exists', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const plain = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi' });
+    await dispatchOnce({
+      mailbox,
+      adapters: new Map([[plain.agent, plain]]),
+      directory: async () => DIRECTORY,
+      collab: { exists: () => false },
+    });
+    expect(plain.calls[0]!.envelope).not.toContain('SHARED PLAN');
+  });
+});
+
 describe('non-retryable delivery failures', () => {
   it('a result with retry:false goes straight to dead (no wasteful re-run of a turn that already ran)', async () => {
     const mailbox = createMailbox(createDb(':memory:'));
