@@ -44,3 +44,18 @@ Phase 1 M0-M6 全部完成：81 测试全绿（覆盖率 92.7/80/98.4），Codex
 
 ## Review（2026-08-05 规范与计划轮）
 规范落地：先文档后动作 / docs 分区 / CHANGELOG 带时间戳 / 每轮必推 GitHub——已写入 CLAUDE.md 成为项目章程。Phase 1 spec 含验收脚本、模块边界、数据模型、信封防注入、TDD 计划、五个里程碑与四项风险的首日实验方案。下一步：用户审阅 spec → M0 开工。
+
+## Phase 4 — 协作层（共享上下文文档 + 任务生命周期）· 规划 2026-08-13
+
+> 母文档：docs/specs/phase4-collab-doc.md · docs/decisions.md ADR-017
+> 一句话：文档为状态、消息为事件、一个 lead 主导、跨机同步。让 agent 像两个人一样先对齐再分工、边干边按轮汇报。
+
+- [ ] **M1 同机协作文档**：conversation 自动建 `~/.anytoany/collab/<conv>.md`；lead 单写正文 + worker append 进度段 + file-lock；消息可引用文档；skill 增回合制协作协议（每 turn 一块 / 进度按步 / FYI-NOOP vs 请求）
+- [ ] **M2 任务生命周期 + 控制台**：front-matter 状态机（assigned/working(n/m)/blocked/needs-decision/done/failed）；控制台加协作文档面板（渲染 MD + 任务徽章）；`anyd collab <conv>`
+- [ ] **M3 跨设备文档同步**：文档随消息 relay（diff），双机一致——本阶段技术核心与独有价值
+- [ ] **M4 推进调度（最难）**：worker 干完一块的下一步唤醒——先半自动（控制台一键推进），全自动待验证
+- [ ] **安全阀**：config 增 inbound accept/hold/refuse（默认 accept）+ 不可逆动作走 needs-decision 确认（ADR-016 增补）
+
+**开放问题（边做边定）**：推进调度归谁 · 大文档 token 成本（只传 diff？）· lead 失活转交 · 跨机一致性收敛 · 与各家原生 subagent 的边界
+
+**明确不做（本阶段）**：多 lead / 实时协同编辑 / >2 方复杂 room / 跨厂商 streaming 监督 / 暂停对方 turn / 自动 merge

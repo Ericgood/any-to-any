@@ -4,6 +4,11 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Design — collaboration layer (Phase 4, planned)
+
+- Wrote the spec + ADR for a **shared collaboration document** model: the doc (per conversation) becomes the durable coordination state, messages become lightweight events pointing into it, one lead owns the doc while workers append their own progress sections, and the doc syncs across devices. Grounded in research of how Codex subagents and Claude Code agent teams / cross-session messaging actually work — anytoany does the cross-vendor, cross-device, weak-consistency version. See [docs/specs/phase4-collab-doc.md](docs/specs/phase4-collab-doc.md) and ADR-017.
+
+
 Everything below has shipped to `main`. No tagged release yet.
 
 ### Agents (5)

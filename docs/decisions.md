@@ -160,3 +160,23 @@ Codex 侧不分层（exec resume 已全验证）。
 - **保留不变**：防幻觉条款（DONE 只认亲手可验证的事实——用户要的正是「两边诚实」）；投递层仍走各家官方 headless 通道、机主经 `~/.anytoany/config.json` 掌控本机权限档（zcode deliverMode / codex sandbox），不碰 `--dangerously-*`。信任在**接收方如何对待消息**，权限在**机主如何配置本机执行**——两者都把控制权交给操作者，互补不冲突。
 
 **边界**：此信任模型的作用域是**共享 token 的单一操作者集群**。若将来演进到多用户/跨信任域，须重新引入来源鉴别与授权分级（记入 backlog）。当前用户集群为其本人双 Mac，前提成立。
+
+## ADR-017 协作层定案：共享上下文文档为状态本体 + 消息为事件 + 单写者 lead + 跨机文档同步（跨厂商弱一致版）（2026-08-13，用户设计 + Codex/Claude 机制调研）
+
+**背景**：真实事故连续暴露「消息即一切」模型的天花板——重活在一轮 headless 回合内超时被杀（ADR 无、见 codex.deliverTimeoutSec 修复）、agent 两轮之间无状态、lead 看不到 worker 进度（盲区）、两个 agent「我等你/我也等你」过度客气死循环（反乒乓）。用户从**人际协作**提出模型：先对齐上下文（一份共享文档）→ 把分工写进文档 → 一个更强的 agent 当 **lead** 维护文档 → worker 按轮汇报进度与计划 → 「事事有回应」。
+
+**调研验证与修正**（Codex/Claude 官方文档，出处见 spec）：
+- Codex 的「@ agent」实为**自然语言委派给 subagents**（manager **阻塞等全部结果再汇总**，单 turn 内无中间进度、parent 会误判 child 卡死而重做，[issue #16900](https://github.com/openai/codex/issues/16900)），并非 @ 语法；无一等公民共享 plan 文档，靠 `AGENTS.md`（静态）+ 汇总（动态）。
+- **Claude Code「agent teams」正是「1 lead + N worker + 共享 task list + 进度回报」最完整的实现**（共享 task list 三态 + 依赖 + **file-lock claim** 防并发冲突 + mailbox 直连 + 干完自动 idle 通知，存 `~/.claude/tasks/`）——最值得借鉴（[docs](https://code.claude.com/docs/en/agent-teams)）。
+- Claude Code「cross-session messaging」几乎是 anytoany 的**同厂商版**（ListAgents/SendMessage，同机 unix socket 不经云，跨机经服务器，**tool call 之间读消息不打断正在跑的 tool**）——投递语义可对标（[docs](https://code.claude.com/docs/en/cross-session-messaging)）。
+- **跨厂商注定只能弱一致**：共享 context window / fork 对方 thread / 非破坏性 pause 对方 turn / 实时 streaming 监督 / 自动 merge 单 PR，全依赖单厂商同进程内部状态，anytoany 做不了，只能**文件约定 + turn 边界 summary + plain-text envelope**。
+
+**决策**：
+1. **协作文档为状态本体**：每个 conversation 一份 Markdown（`~/.anytoany/collab/<conv>.md`），是跨 agent 协作的持久状态——无状态的 agent 被 resume 时靠它水合「我们在干嘛/定了什么/我下一步」。**消息降级为指向文档的「事件/门铃」**，不再当重内容的载体（把 agent 自行发明的「文件交接」升为一等公民）。控制台 = 事件流；文档 = 状态；两视图互补。
+2. **单写者 lead**（由 ADR-016 的「操作者指定谁主导」确定；默认发起方或更强模型）独占文档正文（目标/分工/决策/计划）；每个 worker 只 **append 自己的进度段**（append-only 天然无冲突）；worker 想改正文 → 发消息给 lead 整合。借鉴 Claude teams 的 file-lock claim 防并发抢占。
+3. **turn 边界进度，非实时**：worker 每 turn 干一块 → 写进度到文档 → 回 `DONE 第n块 / BLOCKED`；进度按**步数/产物**衡量（LLM 估不准时间）；FYI（`NOOP`）与请求区分、纯状态更新自动闭环（承接反乒乓）。
+4. **跨设备文档同步**：文档随消息 relay（或 diff 同步），single-writer 规避冲突——这是同机文件技巧做不到、**anytoany 跨设备中继独有价值**的部分。
+5. **明确弱一致边界**：不做共享 context window、不 fork 对方 thread、不暂停对方厂商正在跑的 turn、不做跨厂商 streaming 监督、不做自动 merge。
+6. **信任安全阀（ADR-016 增补，非推翻）**：调研发现 Claude 默认「另一 session 消息 ≠ 你的授权」，比 ADR-016 保守。ADR-016 的「信任队友」默认在单操作者集群前提下不变，但**补一层可选 inbound 分级（accept / hold / refuse）+ 不可逆动作确认**作为安全阀（尤其跨机）。
+
+完整产品/技术设计见 [specs/phase4-collab-doc.md](specs/phase4-collab-doc.md)。
