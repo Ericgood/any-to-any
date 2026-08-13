@@ -68,7 +68,7 @@ export interface Mailbox {
   listMessages(conversationId: string): Message[];
   claimNextPending(): Message | null;
   markDelivered(id: string): Message;
-  markFailed(id: string, error: string): Message;
+  markFailed(id: string, error: string, opts?: { terminal?: boolean }): Message;
   retry(id: string): Message;
   /** Requeue messages stranded in 'delivering' by a crashed daemon (at-least-once). */
   recoverStale(): number;
@@ -358,14 +358,15 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
       return updated;
     },
 
-    markFailed(id: string, error: string): Message {
+    markFailed(id: string, error: string, opts?: { terminal?: boolean }): Message {
       const current = getMessage(id);
       if (!current) throw new Error(`message not found: ${id}`);
       if (current.status !== 'delivering') {
         throw new Error(`illegal transition: ${current.status} -> failed (must claim first)`);
       }
       const attempts = current.attempts + 1;
-      const status: MessageStatus = attempts >= MAX_ATTEMPTS ? 'dead' : 'failed';
+      // terminal = don't auto-retry (e.g. a timeout whose turn already ran)
+      const status: MessageStatus = opts?.terminal || attempts >= MAX_ATTEMPTS ? 'dead' : 'failed';
       db.prepare(
         `UPDATE messages SET status = ?, attempts = ?, last_error = ?, updated_at = ? WHERE id = ?`,
       ).run(status, attempts, error, now(), id);

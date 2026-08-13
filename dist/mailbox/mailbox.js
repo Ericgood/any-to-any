@@ -217,7 +217,7 @@ export function createMailbox(db, opts = {}) {
                 throw new Error('update failed');
             return updated;
         },
-        markFailed(id, error) {
+        markFailed(id, error, opts) {
             const current = getMessage(id);
             if (!current)
                 throw new Error(`message not found: ${id}`);
@@ -225,7 +225,8 @@ export function createMailbox(db, opts = {}) {
                 throw new Error(`illegal transition: ${current.status} -> failed (must claim first)`);
             }
             const attempts = current.attempts + 1;
-            const status = attempts >= MAX_ATTEMPTS ? 'dead' : 'failed';
+            // terminal = don't auto-retry (e.g. a timeout whose turn already ran)
+            const status = opts?.terminal || attempts >= MAX_ATTEMPTS ? 'dead' : 'failed';
             db.prepare(`UPDATE messages SET status = ?, attempts = ?, last_error = ?, updated_at = ? WHERE id = ?`).run(status, attempts, error, now(), id);
             const updated = getMessage(id);
             if (!updated)

@@ -39,6 +39,7 @@ Everything below has shipped to `main`. No tagged release yet.
 - `codex --sandbox` must precede the `resume` subcommand, or every reply silently fails.
 - Cross-device replies addressed to the human must relay home, not get captured as a local inbox.
 - A test that wrote to the real `~/.anytoany/` was deleting the live daemon's pid file on every run.
+- A heavy delivered turn that outran the 5-minute budget was killed and blindly retried, re-running (and duplicating) the same long work. Per-turn budget is now owner-configurable (`codex.deliverTimeoutSec` / `zcode.deliverTimeoutSec`, 60–3600s), and a timeout now fails terminally instead of looping.
 
 ---
 

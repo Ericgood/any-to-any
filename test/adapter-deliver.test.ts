@@ -108,3 +108,36 @@ describe('codex per-machine sandbox escalation', () => {
     expect(calls[2]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
   });
 });
+
+describe('codex per-turn timeout (owner-configurable) & timeout handling', () => {
+  it('honors codex.deliverTimeoutSec from config, bounded 60-3600s', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const cfg = join(mkdtempSync(join(tmpdir(), 'anytoany-codextmo-')), 'config.json');
+    const seen: number[] = [];
+    const exec: ExecFn = async (_c, _a, opts) => {
+      seen.push(opts.timeoutMs);
+      return { stdout: 'ok', stderr: '', code: 0 };
+    };
+    const a = createCodexAdapter({ exec, configFile: cfg });
+    const session = { agent: 'codex', sessionId: 'x-1', title: 't', cwd: '/w', lastActiveAt: 0 };
+
+    writeFileSync(cfg, JSON.stringify({ codex: { deliverTimeoutSec: 1200 } }));
+    await a.deliver(session, 'E');
+    expect(seen[0]).toBe(1_200_000);
+
+    writeFileSync(cfg, JSON.stringify({ codex: { deliverTimeoutSec: 5 } })); // below floor → default
+    await a.deliver(session, 'E');
+    expect(seen[1]).toBe(300_000);
+  });
+
+  it('a timeout (exit 124) is a non-retryable failure — the turn already ran on the target', async () => {
+    const exec: ExecFn = async () => ({ stdout: '', stderr: 'stuff\n… reading big dir', code: 124 });
+    const a = createCodexAdapter({ exec, configFile: '/nonexistent/cfg.json' });
+    const r = await a.deliver({ agent: 'codex', sessionId: 'x', title: 't', cwd: '/w', lastActiveAt: 0 }, 'E');
+    expect(r.ok).toBe(false);
+    expect(r.retry).toBe(false);
+    expect(r.error).toMatch(/timed out/i);
+  });
+})

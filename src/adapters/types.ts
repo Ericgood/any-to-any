@@ -24,6 +24,9 @@ export interface DeliveryResult {
   /** Target agent's stdout for the injected turn (reply extraction source). */
   output?: string;
   error?: string;
+  /** false = terminal failure, do not auto-retry (e.g. a timeout — the turn
+   *  already ran on the target, so re-running it just duplicates the work). */
+  retry?: boolean;
 }
 
 export interface DeliveryAdapter extends AgentAdapter {

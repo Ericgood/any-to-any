@@ -31,8 +31,8 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
   if (!claimed) return false;
   const emit = (event: DispatchEvent) => opts.onEvent?.(event);
 
-  const fail = (error: string): true => {
-    const failed = opts.mailbox.markFailed(claimed.id, error);
+  const fail = (error: string, terminal = false): true => {
+    const failed = opts.mailbox.markFailed(claimed.id, error, terminal ? { terminal: true } : undefined);
     emit({ kind: 'failed', message: failed, detail: error });
     return true;
   };
@@ -93,7 +93,7 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e));
   }
-  if (!result.ok) return fail(result.error ?? 'delivery failed');
+  if (!result.ok) return fail(result.error ?? 'delivery failed', result.retry === false);
 
   const delivered = opts.mailbox.markDelivered(claimed.id);
   emit({ kind: 'delivered', message: delivered });

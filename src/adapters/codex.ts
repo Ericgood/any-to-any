@@ -7,6 +7,12 @@ import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './typ
 
 const CODEX_SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 
+/** Owner-configured per-turn budget (heavy tasks outgrow the 300s default). */
+function loadCodexTimeoutMs(configFile: string): number | null {
+  const sec = readMachineConfig(configFile).codex?.deliverTimeoutSec;
+  return typeof sec === 'number' && sec >= 60 && sec <= 3600 ? sec * 1000 : null;
+}
+
 const ROLLOUT_RE =
   /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
 
@@ -94,14 +100,25 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
       // owner may pick for their own cluster.
       const sandbox = readMachineConfig(configFile).codex?.sandbox;
       const sandboxArgs = sandbox && CODEX_SANDBOX_MODES.has(sandbox) ? ['--sandbox', sandbox] : [];
+      // read per delivery so config edits apply without a daemon restart
+      const turnTimeoutMs = options.deliverTimeoutMs ?? loadCodexTimeoutMs(configFile) ?? timeoutMs;
       // --sandbox is an `exec` option, NOT a `resume` one — it must sit between
       // `exec` and the `resume` subcommand, or the CLI rejects it (exit 2,
       // "unexpected argument '--sandbox'") and every delivery fails.
       const { stdout, stderr, code } = await exec(
         'codex',
         ['exec', ...sandboxArgs, 'resume', session.sessionId, '--skip-git-repo-check', envelope],
-        session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
+        session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
       );
+      if (code === 124) {
+        // timeout: the turn DID run on the target and was killed mid-work — retrying
+        // just re-runs (and duplicates) the same heavy turn. Terminal, not retryable.
+        return {
+          ok: false,
+          retry: false,
+          error: `codex exec resume timed out after ${Math.round(turnTimeoutMs / 1000)}s — the turn ran but exceeded the budget. Raise codex.deliverTimeoutSec in ~/.anytoany/config.json, or open the session to see its progress. …${stderr.slice(-300)}`,
+        };
+      }
       if (code !== 0) {
         // the actual error is at the END of stderr (after the banner + prompt echo)
         return { ok: false, error: `codex exec resume exited ${code}: …${stderr.slice(-500)}` };

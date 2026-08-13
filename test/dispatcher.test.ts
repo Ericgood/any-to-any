@@ -310,3 +310,13 @@ describe('anti-pingpong suppression', () => {
     expect(mailbox.inbox({ all: true })).toHaveLength(2);
   });
 });
+
+describe('non-retryable delivery failures', () => {
+  it('a result with retry:false goes straight to dead (no wasteful re-run of a turn that already ran)', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'heavy task' });
+    const adapter = fakeAdapter('codex', () => ({ ok: false, error: 'codex exec resume timed out after 300s', retry: false }));
+    await dispatchOnce({ mailbox, adapters: new Map([['codex', adapter]]), directory: async () => DIRECTORY });
+    expect(mailbox.getMessage(m.id)?.status).toBe('dead'); // not 'failed' (which would retry)
+  });
+})

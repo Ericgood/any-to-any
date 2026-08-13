@@ -10,7 +10,7 @@ import { anytoanyHome } from './home.js';
  */
 export interface MachineConfig {
   zcode?: { deliverMode?: string; deliverTimeoutSec?: number };
-  codex?: { sandbox?: string };
+  codex?: { sandbox?: string; deliverTimeoutSec?: number };
 }
 
 export function defaultConfigFile(): string {

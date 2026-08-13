@@ -11,6 +11,7 @@ export interface MachineConfig {
     };
     codex?: {
         sandbox?: string;
+        deliverTimeoutSec?: number;
     };
 }
 export declare function defaultConfigFile(): string;

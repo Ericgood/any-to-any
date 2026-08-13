@@ -59,7 +59,9 @@ export interface Mailbox {
     listMessages(conversationId: string): Message[];
     claimNextPending(): Message | null;
     markDelivered(id: string): Message;
-    markFailed(id: string, error: string): Message;
+    markFailed(id: string, error: string, opts?: {
+        terminal?: boolean;
+    }): Message;
     retry(id: string): Message;
     /** Requeue messages stranded in 'delivering' by a crashed daemon (at-least-once). */
     recoverStale(): number;

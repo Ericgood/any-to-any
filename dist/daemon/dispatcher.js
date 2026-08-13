@@ -7,8 +7,8 @@ export async function dispatchOnce(opts) {
     if (!claimed)
         return false;
     const emit = (event) => opts.onEvent?.(event);
-    const fail = (error) => {
-        const failed = opts.mailbox.markFailed(claimed.id, error);
+    const fail = (error, terminal = false) => {
+        const failed = opts.mailbox.markFailed(claimed.id, error, terminal ? { terminal: true } : undefined);
         emit({ kind: 'failed', message: failed, detail: error });
         return true;
     };
@@ -66,7 +66,7 @@ export async function dispatchOnce(opts) {
         return fail(e instanceof Error ? e.message : String(e));
     }
     if (!result.ok)
-        return fail(result.error ?? 'delivery failed');
+        return fail(result.error ?? 'delivery failed', result.retry === false);
     const delivered = opts.mailbox.markDelivered(claimed.id);
     emit({ kind: 'delivered', message: delivered });
     const replyText = extractReply(result.output ?? '');
