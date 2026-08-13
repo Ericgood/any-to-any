@@ -21,6 +21,15 @@ export declare function collectInbox(mailbox: Mailbox, sessionId: string, opts?:
     now?: () => number;
 }): string | null;
 /**
+ * Full recent cross-agent exchange for a session — read-only, ignores the cursor,
+ * takes nothing. This is the "let me SEE what happened" view: once a message is
+ * delivered (headlessly) and the cursor moves past it, `collectInbox` won't show
+ * it again, but the live app never displayed it either. `anyd pull --history`
+ * uses this to pull the whole recent exchange (both directions, including failed/
+ * dead messages) back into the live session on demand.
+ */
+export declare function recentExchange(mailbox: Mailbox, sessionId: string, limit?: number): string | null;
+/**
  * Shared UserPromptSubmit processor for Claude Code and Codex (same output shape).
  * Two layers: pending messages are fully injected (and taken); already-handled
  * traffic since the last cursor is shown as an FYI digest — this is what makes

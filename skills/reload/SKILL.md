@@ -20,7 +20,17 @@ anyd pull
 - **Pending messages** — addressed to you and not yet handled. These are fresh: **act on each one now** per the any-to-any protocol (do the work; answer with `anyd reply <id> "<your reply>"`, or end with the `<<<ANYTOANY_REPLY>>> DONE/BLOCKED/…` verdict line if the message asked you to).
 - **An "Activity digest"** — traffic that was ALREADY handled in a headless turn (you just didn't see it in this app). This is **FYI/context only**: do NOT reply to it, do NOT re-run it. Use it to catch up on what happened.
 
-2. If it prints `no new anytoany messages`, you're up to date — say so and continue.
+2. **If the operator wants to SEE what happened** (they said "reload", "拉一下消息", "看看发生了啥", "有没有漏的") — or `anyd pull` reported nothing new but you suspect they missed the exchange — run:
+
+```bash
+anyd pull --history
+```
+
+This is a **read-only** view of the recent cross-agent exchange in **full** (both directions, oldest→newest, **including failed/`dead` messages that never reached you**). It ignores the "already seen" cursor, so it always shows the real conversation — this is the reliable way to answer "what did I miss?". Present it to the operator as a recap; do NOT re-reply to those messages (they were already handled). Use `--limit N` for more/less.
+
+3. If even `--history` is empty, there genuinely is no anytoany traffic for this session — say so.
+
+**Why "no new messages" can be misleading:** once a message is delivered (Codex/Kimi/Z Code handle it in a headless turn) and the cursor moves past it, plain `anyd pull` won't show it again — but you never saw it in the live app either. So when the operator asks to reload and plain `pull` says "nothing new", **follow up with `anyd pull --history`** so they can actually see the exchange.
 
 ## Pull proactively — don't wait for /reload
 

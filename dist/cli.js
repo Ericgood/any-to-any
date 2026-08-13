@@ -540,9 +540,11 @@ program
     .option('--session <target>', 'pull for a specific session instead of auto-detecting by directory')
     .option('--cwd <dir>', 'directory used to identify your session (default: current directory)')
     .option('--quiet', 'print nothing when there is nothing new (for proactive/auto pulls)')
+    .option('--history', 'SEE the recent cross-agent exchange in full (read-only, ignores cursor) — even messages already delivered/handled')
+    .option('--limit <n>', 'with --history, how many recent messages to show', '15')
     .action(async (opts) => {
     const mailbox = openMailbox();
-    const { collectInbox } = await import('./hooks/prompt-hook.js');
+    const { collectInbox, recentExchange } = await import('./hooks/prompt-hook.js');
     let targets = [];
     if (opts.session) {
         const s = await resolveOrExit(opts.session);
@@ -560,6 +562,24 @@ program
         }
         targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
     }
+    // --history: read-only view of the recent exchange, so you can SEE what
+    // happened even after it was delivered headlessly and the cursor moved on.
+    if (opts.history) {
+        const limit = Number.parseInt(opts.limit ?? '15', 10) || 15;
+        let shown = false;
+        for (const t of targets) {
+            const text = recentExchange(mailbox, t.id, limit);
+            if (text) {
+                console.log(`===== ${t.label} =====`);
+                console.log(text);
+                console.log('');
+                shown = true;
+            }
+        }
+        if (!shown && !opts.quiet)
+            console.log('no anytoany history for this session yet.');
+        return;
+    }
     let any = false;
     for (const t of targets) {
         const text = collectInbox(mailbox, t.id);
@@ -570,8 +590,9 @@ program
             any = true;
         }
     }
-    if (!any && !opts.quiet)
-        console.log('no new anytoany messages — you are up to date.');
+    if (!any && !opts.quiet) {
+        console.log('no new anytoany messages — run `anyd pull --history` to see the recent exchange (delivered ones included).');
+    }
 });
 program
     .command('reply')

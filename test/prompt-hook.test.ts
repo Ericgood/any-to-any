@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { collectInbox, processPromptHook } from '../src/hooks/prompt-hook.js';
+import { collectInbox, processPromptHook, recentExchange } from '../src/hooks/prompt-hook.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
 
@@ -96,6 +96,33 @@ describe('collectInbox (shared by hook and `anyd pull`)', () => {
   beforeEach(() => {
     nowMs = 1_700_000_000_000;
     mailbox = createMailbox(createDb(':memory:'), { now: () => nowMs });
+  });
+
+  it('recentExchange shows the full recent exchange both directions incl. dead, ignoring the cursor', () => {
+    let t = 1_700_000_000_000;
+    const mb = createMailbox(createDb(':memory:'), { now: () => t });
+    const SID = 'sess-hist';
+    const CLAUDE = { agent: 'claude', sessionId: 'claude-x' };
+    const m1 = mb.send({ from: CLAUDE, to: { agent: 'codex', sessionId: SID }, text: 'please review PR 42' });
+    mb.claimNextPending();
+    mb.markDelivered(m1.id);
+    t += 1000;
+    const r = mb.reply(m1.id, 'DONE reviewed');
+    mb.claimNextPending();
+    mb.markDelivered(r.id);
+    t += 1000;
+    const m2 = mb.send({ from: CLAUDE, to: { agent: 'codex', sessionId: SID }, text: 'timed-out long message' });
+    for (let i = 0; i < 3; i++) {
+      mb.claimNextPending();
+      mb.markFailed(m2.id, 'timeout');
+      t += 31_000;
+    }
+    const out = recentExchange(mb, SID, 15) ?? '';
+    expect(out).toContain('please review PR 42'); // received, full text
+    expect(out).toContain('DONE reviewed'); // sent reply, full text
+    expect(out).toContain('timed-out long message'); // the dead one is shown
+    expect(out).toMatch(/dead|never reached/i); // and flagged as undelivered
+    expect(recentExchange(createMailbox(createDb(':memory:')), 'nobody')).toBeNull();
   });
 
   it('returns pending text and takes the message; null when nothing new', () => {

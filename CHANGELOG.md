@@ -4,6 +4,10 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### `anyd pull --history` — see the whole recent exchange, not just "what's new"
+
+- Fixes a real hole: once a message is delivered (Codex/Kimi/Z Code handle it in a headless turn) and the "already seen" cursor moves past it, plain `anyd pull` correctly says "nothing new" — but the interactive app never showed that message either, so you couldn't see it at all. Diagnosed live: a Codex session had 17 real cross-agent messages (two of them `dead`/failed) that `pull` would never surface again. `anyd pull --history` is a read-only view of the recent exchange in **full** — both directions, oldest→newest, **including failed/`dead` messages that never reached you** — ignoring the cursor. The reload skill now falls back to it whenever plain `pull` reports nothing new, so "reload" actually shows the conversation. Plain `pull`'s empty message points at it too.
+
 ### Collaboration layer — the shared plan is now born with the connection (ADR-018)
 
 - **Reverses the earlier "create the plan manually, after the fact" model.** Now the moment two agent sessions connect, the first agent↔agent message **auto-creates a seeded shared plan** — lead = the initiator, body seeded with the request itself — so alignment exists from message one and the delivery already carries the SHARED PLAN footer. Real using surfaced that a manual, post-hoc "Create shared plan" button had the order backwards: alignment should be collaboration's *first* step, done by the agents, not a human afterthought.

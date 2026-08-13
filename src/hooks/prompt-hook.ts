@@ -92,6 +92,33 @@ export function collectInbox(
 }
 
 /**
+ * Full recent cross-agent exchange for a session — read-only, ignores the cursor,
+ * takes nothing. This is the "let me SEE what happened" view: once a message is
+ * delivered (headlessly) and the cursor moves past it, `collectInbox` won't show
+ * it again, but the live app never displayed it either. `anyd pull --history`
+ * uses this to pull the whole recent exchange (both directions, including failed/
+ * dead messages) back into the live session on demand.
+ */
+export function recentExchange(mailbox: Mailbox, sessionId: string, limit = 15): string | null {
+  const msgs = mailbox.recentActivity(sessionId, 0, 500).slice(-limit);
+  if (msgs.length === 0) return null;
+  const lines = msgs.map((m) => {
+    const received = m.to.sessionId === sessionId;
+    const other = received ? m.from : m.to;
+    const who = `@${other.agent}:${other.sessionId.slice(0, 8)}`;
+    const undelivered = m.status === 'dead' || m.status === 'failed';
+    const flag = undelivered ? `  ⚠️ ${m.status.toUpperCase()} — this one never reached you` : '';
+    const text = m.parts.map((p) => p.text).join('\n');
+    return `${received ? '←' : '→'} ${who} [${m.status}]${flag}\n${text}`;
+  });
+  return [
+    `[anytoany] Recent cross-agent exchange for this session — full text, oldest→newest, context only`,
+    `(these were already handled in headless turns; do NOT re-run or re-reply — this is so you can SEE what happened):`,
+    ...lines,
+  ].join('\n\n');
+}
+
+/**
  * Shared UserPromptSubmit processor for Claude Code and Codex (same output shape).
  * Two layers: pending messages are fully injected (and taken); already-handled
  * traffic since the last cursor is shown as an FYI digest — this is what makes
