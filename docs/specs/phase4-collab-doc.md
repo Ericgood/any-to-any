@@ -1,7 +1,7 @@
 # Phase 4 规格 — 协作层：共享上下文文档 + 任务生命周期（跨厂商弱一致版）
 
 > 创建：2026-08-13 · 最后更新：2026-08-13
-> 状态：**M1–M4（半自动）已落地**（同机文档 + CLI + 控制台 + 跨设备收敛同步 + 一键推进，2026-08-13：222 全仓测试绿 + CLI/浏览器/双 daemon 冒烟）；M4 全自动 + M3.1 规划中。母决策：[ADR-017](../decisions.md) · 相关：ADR-014（room）、ADR-016（信任）
+> 状态：**M1–M4（半自动）已落地 + M5（文档随连接诞生）进行中**（2026-08-13）；M4 全自动 + M3.1 规划中。母决策：[ADR-017](../decisions.md)、**[ADR-018](../decisions.md)（建档时机演进）** · 相关：ADR-014（room）、ADR-016（信任）
 > 一句话：把「消息即一切」升级为「**共享文档为状态、消息为事件、一个 lead 主导、跨机同步**」，让两个（乃至多个）agent 能像两个人一样先对齐、再分工、边干边汇报、把活干完。
 
 ## 0. 为什么现在做
@@ -101,6 +101,8 @@ assigned ──> working(n/m) ──> done
 
 ## 7. 回合制协作协议（把 AI 四差异变成规则，写进 skill）
 
+**0. 对齐优先——协作第一步就建/填小本本（ADR-018，主模型）**：小本本**随连接诞生**——首条 agent↔agent 消息通了，daemon 就自动建一份（以那条诉求为种子内容，lead=发起方）。lead 的**开局第一动作 = 把操作者的诉求分解进小本本**（目标 + 分工 + 任务），**按量**：一次性小活一行诉求 + 顶多一个任务，大活才 full 分解。发起方理想是**在 @ 对方之前**就 `collab init`+`plan`+`task` 建好+分解；即便忘了，auto-create 也保证文档从第一条消息起就在、信封带 footer，lead 下一轮补分解。控制台「Create/Edit」按钮**降级为兜底**（agent 没建、或人工想改）。**「事后手动建」是被推翻的旧路径。**
+
 1. **每 turn 一块**：worker 收到「读 §context，干 t1，进度写 §进度」→ 在一轮内干**一块**（能一轮完成的量）→ append 进度 + 下一步 → 回 `DONE 第n块` 或 `BLOCKED <缺什么>`。**不做一轮超时会丢的重活**。
 2. **进度按步不按时**：不报「大概 2 小时」，报「分 4 步，已完成 2 步」。
 3. **FYI vs 请求**：纯状态更新（我干完了 X）自动闭环，回 `NOOP`；只有含**新请求/问题**才要求对方回。（承接反乒乓 + Claude「消息≠授权」精神。）
@@ -133,6 +135,7 @@ assigned ──> working(n/m) ──> done
 - **M2 · 任务生命周期 + 控制台** ✅（2026-08-13）：控制台加「Shared plan」面板（任务徽章按状态染色 / plan / 逐 agent 进度 / 可折叠）+ 对话列表 📋 标记；`GET /api/collab`、`GET /api/collab/:id`；SSE 轮询纳入文档 `updated`（CLI 改文档→控制台自动刷新）。任务状态机模型 + `anyd collab` 在 M1 已落地。**建档保持显式 `collab init`**（用户拍板不做自动建）。
 - **M3 · 跨设备文档同步** ✅（2026-08-13）：`merge.ts` 收敛合并（lead 区 last-writer-wins + 进度段按 agent 取更满一份 + 确定性 tie-break）；`store.merge()`；`POST /api/peer/collab`（token 门禁）；`pushCollabDoc`；`anyd collab sync <id> --to @device`（显式 push 式,git push 语义,幂等安全）。双机键同一 conversationId。+11 测试含双 daemon 真机 HTTP 收敛证明。**范围收窄**：本轮做的是**显式 push 同步**而非「随消息自动 relay」——后者要 conversationId 跨机统一（收端 mailbox 采用发起端 id），牵动路由语义,拆到 **M3.1** 单独做,连带受端信封 footer / 控制台面板的跨设备关联。今日受端经 `collab show/list` 可见同步来的文档。
 - **M4 · 推进调度·半自动** ✅（2026-08-13）：控制台每个未完成任务加「▶ Continue」→ `POST /api/collab/:id/advance {taskId}` → 解析 owner label 为 session → 发一条 pin 在协作对话上的「继续下一块」nudge（投递带 SHARED PLAN footer）。**操作者点触发,不自循环**。**全自动调度器**（干完自动唤醒下一块）留后——见 §12 开放问题#1,风险是跑飞/无限推进,需先定「何时停」。
+- **M5 · 文档随连接诞生 + lead 开局分解**（ADR-018，2026-08-13，进行中）：**推翻 M1/M2 期「手动建为主」**。daemon 在首条 agent↔agent 消息投递时自动建种子文档（body=诉求，lead=发起方）；skill 把「对齐+分解诉求」设为协作**第一步**；控制台 Create/Edit 降级为兜底。硬机制（连接即有壳）+ 软提示（lead 开局填肉）配合。
 
 ## 12. 明确不做 / 开放问题
 

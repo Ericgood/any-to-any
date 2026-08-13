@@ -20,9 +20,16 @@ export interface DispatcherOptions {
         error?: string;
     }>;
     /** When set and a doc exists for the conversation, the delivery envelope
-     *  points the recipient at the shared collaboration plan (Phase 4). */
+     *  points the recipient at the shared collaboration plan (Phase 4). `ensure`,
+     *  when present, lets the first agent↔agent message auto-create a seeded doc
+     *  (ADR-018 — the plan is born with the connection). */
     collab?: {
         exists(conversationId: string): boolean;
+        ensure?(input: {
+            conversationId: string;
+            lead: string;
+            body?: string;
+        }): Promise<unknown>;
     };
 }
 /** Claim and deliver a single message. Returns false when nothing was pending. */

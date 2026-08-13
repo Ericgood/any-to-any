@@ -53,10 +53,31 @@ export async function dispatchOnce(opts) {
     if (!adapter)
         return fail(`no adapter for agent: ${claimed.to.agent}`);
     const sender = sessions.find((s) => s.agent === claimed.from.agent && s.sessionId === claimed.from.sessionId);
+    const senderLabel = label(sender, claimed.from.agent, claimed.from.sessionId);
+    const text = claimed.parts.map((p) => p.text).join('\n');
+    // ADR-018: the shared plan is born with the connection. The FIRST agent↔agent
+    // message auto-creates a seeded doc (lead = initiator, body = the request), so
+    // alignment exists from message one instead of being a manual afterthought.
+    // The lead decomposes the request into tasks on its turn (driven by the skill).
+    if (opts.collab?.ensure &&
+        claimed.from.agent !== 'user' &&
+        claimed.to.agent !== 'user' &&
+        !opts.collab.exists(claimed.conversationId)) {
+        try {
+            await opts.collab.ensure({
+                conversationId: claimed.conversationId,
+                lead: senderLabel,
+                body: `Initial request (from ${senderLabel}):\n${text}`,
+            });
+        }
+        catch {
+            // best-effort — never fail delivery because the doc couldn't be seeded
+        }
+    }
     const envelope = renderEnvelope({
         messageId: claimed.id,
-        fromLabel: label(sender, claimed.from.agent, claimed.from.sessionId),
-        text: claimed.parts.map((p) => p.text).join('\n'),
+        fromLabel: senderLabel,
+        text,
         // a shared collab doc turns the plain relay into a coordinated hand-off
         ...(opts.collab?.exists(claimed.conversationId)
             ? {

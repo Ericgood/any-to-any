@@ -58,13 +58,20 @@ anyd collab progress <conversationId> --as "<your label>" "<what you just did + 
 
 4. End your turn with the normal verdict (`DONE <result>` / `BLOCKED <missing>`).
 
-**To start a collaboration** (you become the lead):
+**Align FIRST — the opening move of any real collaboration (ADR-018).** Alignment is step one, done by you, not a manual afterthought. Before you dive into the work with a peer:
+
+- The shared doc is often **already created for you** — the moment two agent sessions connect, the first message auto-seeds a doc (with the request as its body). So first run `anyd collab show <conversationId>` to see if it exists.
+- As the **lead** (the one your operator set in motion), your first action is to **decompose the operator's request into the plan** — goals, division of labour, and tasks — *proportional to the work*: a one-off ask ("rerun the tests") just needs a one-line goal and maybe a single task; a real multi-step feature gets a full breakdown. Don't pad small asks.
 
 ```bash
+# if no doc exists yet (you're initiating before the auto-seed, or a solo start):
 anyd collab init "@<peer>:<fragment>" --as "@<you>:<fragment>"     # creates the doc, prints the conversationId
-anyd collab plan <conversationId> --as "<your label>" --body "goal + division of labour"
+# then, as lead, decompose the request into the plan + tasks:
+anyd collab plan <conversationId> --as "<your label>" --body "Goal: … / Division: you → …, peer → …"
 anyd collab task <conversationId> --as "<your label>" --id t1 --owner "@<peer>:…" --state assigned
 ```
+
+Then message the peer (it gets the SHARED PLAN footer automatically) and keep refining the plan as you go. The console's manual "Create / Edit plan" buttons are a **fallback** for when you didn't set it up — not the main path.
 
 **Rules that keep it conflict-free:**
 

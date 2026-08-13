@@ -4,6 +4,11 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Collaboration layer — the shared plan is now born with the connection (ADR-018)
+
+- **Reverses the earlier "create the plan manually, after the fact" model.** Now the moment two agent sessions connect, the first agent↔agent message **auto-creates a seeded shared plan** — lead = the initiator, body seeded with the request itself — so alignment exists from message one and the delivery already carries the SHARED PLAN footer. Real using surfaced that a manual, post-hoc "Create shared plan" button had the order backwards: alignment should be collaboration's *first* step, done by the agents, not a human afterthought.
+- The skill now makes **"align first — decompose the request into the plan"** the opening move of any real collaboration (proportional to the work: a one-off ask gets a one-line goal, a real feature gets a full breakdown). The console's manual Create/Edit buttons stay as a **fallback**. It's a hard mechanism (the doc always exists) plus a soft one (the lead fills it in), since writing goals/division needs the agent to think — the daemon only seeds the raw request. See ADR-018 and spec §7.
+
 ### Web console — create/edit the shared plan, clearer status, per-recipient compose
 
 - **Create & edit a shared plan from the console.** A conversation with no doc shows a **➕ Shared plan** button (pick who leads + write the plan); once it exists, an **Edit plan** button on the panel lets the operator revise it. New endpoints `POST /api/collab/:id/create` and `POST /api/collab/:id/plan`. No more dropping to the CLI just to start a doc.

@@ -343,6 +343,52 @@ describe('collab-doc envelope footer (Phase 4)', () => {
   });
 });
 
+describe('collab auto-create on connection (ADR-018)', () => {
+  const collabStub = () => {
+    const docs = new Map<string, { lead: string; body?: string }>();
+    return {
+      docs,
+      exists: (id: string) => docs.has(id),
+      ensure: async (input: { conversationId: string; lead: string; body?: string }) => {
+        if (!docs.has(input.conversationId)) docs.set(input.conversationId, { lead: input.lead, body: input.body });
+        return docs.get(input.conversationId);
+      },
+    };
+  };
+  const okAdapter = () => fakeAdapter('codex', () => ({ ok: true, output: '' }));
+
+  it('seeds a plan on the first agent↔agent message (lead = sender, body = request) and adds the footer', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = okAdapter();
+    const collab = collabStub();
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: "let's wire the auth refresh flow" });
+    await dispatchOnce({ mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY, collab });
+    const doc = collab.docs.get(m.conversationId);
+    expect(doc?.lead).toBe('@claude:backend refactor'); // the initiator
+    expect(doc?.body).toContain("let's wire the auth refresh flow"); // seeded with the request
+    expect(adapter.calls[0]?.envelope).toContain('--- SHARED PLAN ---'); // footer now present
+  });
+
+  it('does not auto-create for a user→agent message', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = okAdapter();
+    const collab = collabStub();
+    mailbox.send({ from: { agent: 'user', sessionId: 'cli' }, to: CODEX_B, text: 'hi' });
+    await dispatchOnce({ mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY, collab });
+    expect(collab.docs.size).toBe(0);
+  });
+
+  it('never overwrites an existing doc', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = okAdapter();
+    const collab = collabStub();
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'first' });
+    collab.docs.set(m.conversationId, { lead: '@someone:else', body: 'existing plan' });
+    await dispatchOnce({ mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY, collab });
+    expect(collab.docs.get(m.conversationId)).toEqual({ lead: '@someone:else', body: 'existing plan' });
+  });
+});
+
 describe('non-retryable delivery failures', () => {
   it('a result with retry:false goes straight to dead (no wasteful re-run of a turn that already ran)', async () => {
     const mailbox = createMailbox(createDb(':memory:'));
