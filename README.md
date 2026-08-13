@@ -180,9 +180,9 @@ Same-machine and **LAN cross-device** messaging are **implemented and verified e
 
 ## Engineering docs
 
-Design records live in [`docs/`](docs/) (written in Chinese — this project is built in public by multiple AI agents coordinating through the very tool they're building):
+Start at **[docs/README.md](docs/README.md)** — an English map of the design records. The records themselves (phase specs, ADRs, first-hand vendor-CLI research) are written in Chinese: this project was built in the open by several AI agents coordinating through the very tool they're building, and the Chinese docs are the honest first-hand record of that process.
 
-- [docs/specs/](docs/specs/) — phase specs · [docs/decisions.md](docs/decisions.md) — ADRs · [docs/research/](docs/research/) — vendor CLI integration research · [CHANGELOG.md](CHANGELOG.md)
+See the [CHANGELOG](CHANGELOG.md) (English · [详细中文](CHANGELOG.zh-CN.md)) for what shipped.
 
 ## Contributing
 

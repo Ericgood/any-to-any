@@ -138,9 +138,9 @@ anytoany 完全跑在**你自己的机器、你自己的局域网**上——无�
 
 ## 工程文档
 
-设计记录在 [`docs/`](docs/)（中文——本项目由多个 AI agent 共享同一工作区公开协作开发，用的正是它们在构建的这个工具）：
+设计记录在 [`docs/`](docs/)（中文——本项目由多个 AI agent 共享同一工作区公开协作开发，用的正是它们在构建的这个工具；英文导航见 [docs/README.md](docs/README.md)）：
 
-- [docs/specs/](docs/specs/) 阶段规格 · [docs/decisions.md](docs/decisions.md) 决策 ADR · [docs/research/](docs/research/) 各家 CLI 接入调研 · [CHANGELOG.md](CHANGELOG.md)
+- [docs/specs/](docs/specs/) 阶段规格 · [docs/decisions.md](docs/decisions.md) 决策 ADR · [docs/research/](docs/research/) 各家 CLI 接入调研 · [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)（详细中文）· [CHANGELOG.md](CHANGELOG.md)（English）
 
 ## 参与贡献
 
