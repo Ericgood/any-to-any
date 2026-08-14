@@ -33,6 +33,23 @@ export interface CollabTask {
   note?: string;
   /** ISO-8601 timestamp of the last state change. */
   updated: string;
+  // ── Self-driving loop (ADR-020) — all optional; absent ⇒ not auto-driven ──
+  /** true = "execute" task the daemon keeps nudging forward; absent/false =
+   *  "design" round-trip that stops after a reply. Only the lead sets this. */
+  autoRun?: boolean;
+  /** ISO-8601 of the first auto-run tick — the 1h wall-clock backstop base. */
+  startedAt?: string;
+  /** ISO-8601 of the last auto-run tick — paces the scheduler. */
+  lastTickAt?: string;
+  /** Consecutive auto-run ticks that produced no new concrete product. */
+  stallCount?: number;
+  /** Fingerprint of the last observed product (worker progress + step) — a
+   *  change means real forward motion; identical means a stall. */
+  productFingerprint?: string;
+  /** Fingerprint of the last BLOCKED reason, to detect the same wall being hit. */
+  blockerFingerprint?: string;
+  /** Consecutive ticks blocked on the same wall (→ escalate, don't burn rounds). */
+  blockerRepeat?: number;
 }
 
 export interface ProgressSection {

@@ -857,7 +857,8 @@ collab
   .requiredOption('--state <state>', `one of: ${TASK_STATES.join(', ')}`)
   .option('--step <n/m>', 'progress by product, e.g. 2/4')
   .option('--note <text>', 'free note (e.g. what a blocked task waits on)')
-  .action(async (conversationId: string, opts: { as: string; id: string; owner: string; state: string; step?: string; note?: string }) => {
+  .option('--auto', 'execute task: the self-driving loop keeps nudging it forward until done or truly stuck (ADR-020). Omit for a design/round-trip task that is not auto-driven.')
+  .action(async (conversationId: string, opts: { as: string; id: string; owner: string; state: string; step?: string; note?: string; auto?: boolean }) => {
     if (!TASK_STATES.includes(opts.state as TaskState)) {
       console.error(`error: invalid state "${opts.state}" — use one of: ${TASK_STATES.join(', ')}`);
       process.exit(1);
@@ -869,10 +870,11 @@ collab
       updated: new Date().toISOString(),
       ...(opts.step ? { step: opts.step } : {}),
       ...(opts.note ? { note: opts.note } : {}),
+      ...(opts.auto ? { autoRun: true } : {}),
     };
     try {
       await createCollabStore().upsertTask(conversationId, normalizeLabel(opts.as), task);
-      console.log(`task ${opts.id} → ${opts.state}${opts.step ? ` (${opts.step})` : ''}`);
+      console.log(`task ${opts.id} → ${opts.state}${opts.step ? ` (${opts.step})` : ''}${opts.auto ? ' [auto-run]' : ''}`);
     } catch (e) {
       console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);

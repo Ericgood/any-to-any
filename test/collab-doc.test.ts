@@ -151,6 +151,32 @@ describe('collab doc — serialize/parse round-trip', () => {
     expect(round).toEqual(doc);
   });
 
+  it('round-trips a task carrying self-driving (auto-run) fields (ADR-020)', () => {
+    let doc = createDoc({ conversationId: 'c', lead: LEAD, updated: T0, body: 'x' });
+    doc = upsertTask(
+      doc,
+      LEAD,
+      task({
+        state: 'working',
+        step: '2/4',
+        autoRun: true,
+        startedAt: T1,
+        lastTickAt: T1,
+        stallCount: 1,
+        productFingerprint: 'a1b2c3',
+        blockerFingerprint: 'missing-token',
+        blockerRepeat: 2,
+        updated: T1,
+      }),
+      T1,
+    );
+    const round = parse(serialize(doc));
+    expect(round).toEqual(doc); // new fields survive the JSON front-matter round-trip
+    expect(round.tasks[0]?.autoRun).toBe(true);
+    expect(round.tasks[0]?.stallCount).toBe(1);
+    expect(round.tasks[0]?.productFingerprint).toBe('a1b2c3');
+  });
+
   it('serialize emits JSON front-matter and Progress headings', () => {
     const text = serialize(rich());
     expect(text.startsWith('---\n')).toBe(true);
