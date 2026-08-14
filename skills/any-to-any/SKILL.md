@@ -70,7 +70,9 @@ anyd collab progress <conversationId> --as "<your label>" "<what you just did + 
 anyd collab init "@<peer>:<fragment>" --as "@<you>:<fragment>"     # creates the doc, prints the conversationId
 # then, as lead, decompose the request into the plan + tasks:
 anyd collab plan <conversationId> --as "<your label>" --body "Goal: … / Division: you → …, peer → …"
-anyd collab task <conversationId> --as "<your label>" --id t1 --owner "@<peer>:…" --state assigned
+anyd collab task <conversationId> --as "<your label>" --id t1 --owner "@<peer>:…" --state assigned --auto
+#   └ add --auto for a task that takes several turns of real work: the daemon then keeps
+#     nudging its owner forward on its own (ADR-020). Omit --auto for a quick one-turn ask.
 ```
 
 Then message the peer (it gets the SHARED PLAN footer automatically) and keep refining the plan as you go. The console's manual "Create / Edit plan" buttons are a **fallback** for when you didn't set it up — not the main path.
@@ -81,6 +83,12 @@ Then message the peer (it gets the SHARED PLAN footer automatically) and keep re
 - **You append only to your own progress section** — that's why there are no write conflicts.
 - Task states: `assigned` → `working` (with `--step 2/4`) → `done`, or `blocked` (waiting on a dependency/credential/user) / `needs-decision` (needs the lead to choose) / `failed`.
 - Reversible work (write files, run tests) — just do it and log progress. Irreversible/destructive (delete data, touch production, change system state) — set the task `needs-decision` and confirm with the lead/operator first (ADR-016).
+
+**Self-driving (auto-run) — how the loop drives, and how to behave in it (ADR-020).** Once the lead marks a task `--auto`, the daemon is the clock: it keeps that task moving without the operator poking it, and judges progress by **product, not promises**.
+
+- **Worker, when a nudge arrives to continue an auto-run task:** do the next concrete chunk *this turn* and log the **product** in your progress section — `anyd collab progress <id> --as "<you>" "wrote <file> / <sha> / n/m"`. **Never reply "received / will continue" and wait** — that's exactly the stall the loop is built to catch; a round with no new product counts against you. If you genuinely can't proceed, reply `BLOCKED <exactly what's missing>`.
+- **Lead, when the loop asks you to judge** (a task logged no new product for a couple of rounds): don't rubber-stamp. Either give the worker a concrete new direction, or — if it's genuinely stuck or the approach is wrong — summarize for the operator and send it: `anyd send "@user:cli" "<goal / what's done / where it's stuck / the decision you need>" --from "<you>"`.
+- The loop **stops itself and asks the operator** when a task keeps producing nothing, or after a hard time ceiling (default 1h). You don't babysit it — you're pinged only when it's done or genuinely stuck. Destructive/irreversible steps are never auto-run; they go to `needs-decision`.
 
 **Across devices (M3):** the doc is keyed by the same `conversationId` on both machines — always use the id the lead shares, never a new one. Editing is local; sync is an explicit push (like `git push`), and the merge is convergent so pushing again is always safe:
 

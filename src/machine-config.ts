@@ -11,6 +11,15 @@ import { anytoanyHome } from './home.js';
 export interface MachineConfig {
   zcode?: { deliverMode?: string; deliverTimeoutSec?: number };
   codex?: { sandbox?: string; deliverTimeoutSec?: number };
+  /** Self-driving collaboration loop (ADR-020). All optional; safe defaults
+   *  (enabled, 60s cadence, 2 self-retries, 1h ceiling). Set enabled:false to
+   *  turn the whole auto-driver off. */
+  autorun?: {
+    enabled?: boolean;
+    tickIntervalSec?: number;
+    maxRetries?: number;
+    maxWallClockSec?: number;
+  };
 }
 
 export function defaultConfigFile(): string {

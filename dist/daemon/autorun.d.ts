@@ -1,4 +1,7 @@
 import type { CollabDoc, CollabTask } from '../collab/doc.js';
+import type { CollabStore } from '../collab/store.js';
+import type { Mailbox } from '../mailbox/mailbox.js';
+import type { SessionInfo } from '../adapters/types.js';
 /**
  * Self-driving collaboration loop — pure decision core (ADR-020).
  *
@@ -67,3 +70,42 @@ export declare function decideTick(task: CollabTask, currentFp: string, { now, c
     now: number;
     config: AutoRunConfig;
 }): AutoRunAction;
+export interface ResolvedAutoRunConfig extends AutoRunConfig {
+    enabled: boolean;
+    tickIntervalSec: number;
+}
+export declare function resolveAutoRunConfig(c?: Partial<AutoRunConfig> & {
+    enabled?: boolean;
+    tickIntervalSec?: number;
+}): ResolvedAutoRunConfig;
+export interface AutoRunEvent {
+    kind: AutoRunAction['kind'] | 'error';
+    conversationId: string;
+    taskId: string;
+    detail?: string;
+}
+export interface AutoRunOptions {
+    collab: Pick<CollabStore, 'list' | 'upsertTask'>;
+    mailbox: Pick<Mailbox, 'send' | 'listConversations'>;
+    directory: () => Promise<SessionInfo[]>;
+    isMonitored: (sessionId: string) => boolean;
+    selfDevice?: string;
+    config?: Partial<AutoRunConfig> & {
+        enabled?: boolean;
+        tickIntervalSec?: number;
+    };
+    now?: () => number;
+    onEvent?: (e: AutoRunEvent) => void;
+}
+/**
+ * One sweep over every auto-run task. Returns the number of actions taken.
+ * Pure-ish: all I/O goes through the injected `collab` / `mailbox` / `directory`
+ * / `isMonitored`, so it drives cleanly under test with in-memory stubs.
+ */
+export declare function runAutoRunOnce(opts: AutoRunOptions): Promise<number>;
+/** Start the self-driving clock: sweep every `tickIntervalSec`. Returns `stop()`. */
+export declare function startAutoRun(opts: AutoRunOptions, { intervalMs }?: {
+    intervalMs?: number;
+}): {
+    stop: () => void;
+};

@@ -262,9 +262,31 @@ program
       { intervalMs: Number.parseInt(opts.interval, 10) || 1000 },
     );
 
+    // Self-driving collaboration loop (ADR-020): the daemon is the clock that
+    // keeps execute-tagged tasks moving without the operator having to poke them.
+    const { startAutoRun } = await import('./daemon/autorun.js');
+    const { readMachineConfig } = await import('./machine-config.js');
+    const autorunCfg = readMachineConfig().autorun;
+    const autorun = startAutoRun({
+      collab,
+      mailbox,
+      directory,
+      isMonitored: (sid) => isMonitored(sid),
+      ...(lan ? { selfDevice: lan.selfDevice } : {}),
+      ...(autorunCfg ? { config: autorunCfg } : {}),
+      onEvent: (e) => {
+        console.log(
+          `[${new Date().toISOString()}] autorun ${e.kind} ${e.conversationId.slice(0, 8)}/${e.taskId}${e.detail ? ` — ${e.detail}` : ''}`,
+        );
+        if (e.kind !== 'error') web?.notifyChange();
+      },
+    });
+    console.log(`self-driving loop: ${autorunCfg?.enabled === false ? 'off' : 'on'} (ADR-020)`);
+
     const shutdown = () => {
       console.log('anyd daemon stopping');
       running.stop();
+      autorun.stop();
       lan?.registry.stop();
       web?.close();
       process.exit(0);

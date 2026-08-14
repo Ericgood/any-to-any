@@ -13,6 +13,15 @@ export interface MachineConfig {
         sandbox?: string;
         deliverTimeoutSec?: number;
     };
+    /** Self-driving collaboration loop (ADR-020). All optional; safe defaults
+     *  (enabled, 60s cadence, 2 self-retries, 1h ceiling). Set enabled:false to
+     *  turn the whole auto-driver off. */
+    autorun?: {
+        enabled?: boolean;
+        tickIntervalSec?: number;
+        maxRetries?: number;
+        maxWallClockSec?: number;
+    };
 }
 export declare function defaultConfigFile(): string;
 export declare function readMachineConfig(file?: string): MachineConfig;
