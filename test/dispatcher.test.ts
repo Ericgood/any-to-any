@@ -429,3 +429,81 @@ describe('non-retryable delivery failures', () => {
     expect(mailbox.getMessage(m.id)?.status).toBe('dead'); // not 'failed' (which would retry)
   });
 })
+
+// ADR-020 Piece 0: a message to the human (@user:cli) is the escalation channel the
+// self-driving loop leans on — it must NEVER dead-letter. Local user replies already
+// land in the inbox (the mailbox IS the human's inbox); this hardens the cross-device
+// path so a reply home with relay unavailable falls back to the local inbox instead of
+// dying (2 of the 5 historical dead letters were `@user:cli`).
+describe('dispatchOnce — @user is a never-dead sink (ADR-020 escalation channel)', () => {
+  const USER_CLI = { agent: 'user', sessionId: 'cli' };
+  let mailbox: Mailbox;
+  beforeEach(() => {
+    mailbox = createMailbox(createDb(':memory:'));
+  });
+
+  it('local reply to the human lands in the inbox even with no user session in the directory', async () => {
+    const m = mailbox.send({ from: CODEX_B, to: USER_CLI, text: 'BLOCKED need a decision' });
+    const ok = await dispatchOnce({ mailbox, adapters: new Map(), directory: async () => DIRECTORY });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+
+  it('cross-device reply to the human falls back to the local inbox when relay is unconfigured (never dead)', async () => {
+    const m = mailbox.send({ from: CODEX_B, to: { ...USER_CLI, device: 'macbook' }, text: 'stalled — your call' });
+    const events: string[] = [];
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => DIRECTORY,
+      selfDevice: 'mini', // ≠ target 'macbook' → relay route; no relay configured
+      onEvent: (e) => events.push(`${e.kind}:${e.detail ?? ''}`),
+    });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered'); // NOT dead/failed
+    expect(events.some((e) => e.startsWith('delivered'))).toBe(true);
+  });
+
+  it('cross-device reply to the human falls back to the local inbox when relay fails (never dead)', async () => {
+    const m = mailbox.send({ from: CODEX_B, to: { ...USER_CLI, device: 'macbook' }, text: 'need input' });
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => DIRECTORY,
+      selfDevice: 'mini',
+      relay: async () => ({ ok: false, error: 'peer unreachable' }),
+    });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+
+  it('still relays a cross-device reply home when relay IS available (best path preserved)', async () => {
+    const m = mailbox.send({ from: CODEX_B, to: { ...USER_CLI, device: 'macbook' }, text: 'fyi' });
+    let relayedTo = '';
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map(),
+      directory: async () => DIRECTORY,
+      selfDevice: 'mini',
+      relay: async (device) => {
+        relayedTo = device;
+        return { ok: true };
+      },
+    });
+    expect(ok).toBe(true);
+    expect(relayedTo).toBe('macbook');
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+
+  it('regression: a cross-device NON-user target still fails when relay is unconfigured', async () => {
+    const m = mailbox.send({ from: CLAUDE_A, to: { ...CODEX_B, device: 'macbook' }, text: 'work' });
+    const ok = await dispatchOnce({
+      mailbox,
+      adapters: new Map([['codex', fakeAdapter('codex', () => ({ ok: true, output: '' }))]]),
+      directory: async () => DIRECTORY,
+      selfDevice: 'mini',
+    });
+    expect(ok).toBe(true);
+    expect(mailbox.getMessage(m.id)?.status).toBe('failed'); // unchanged behavior
+  });
+});

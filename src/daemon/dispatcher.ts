@@ -59,14 +59,31 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
   // local inbox). Only a LOCAL user reply is a mailbox-is-the-inbox delivery.
   const route = routeForMessage(claimed, opts.selfDevice ?? '');
   if (route.kind === 'relay') {
-    if (!opts.relay) return fail(`target device "${route.device}" requires LAN relay (not configured)`);
+    // A message to the human must never dead-letter — it is the operator's
+    // escalation channel (ADR-020: the self-driving loop asks the operator here
+    // when it stalls). Relay home when we can; if relay is unavailable or fails,
+    // fall back to THIS machine's inbox (visible in the local console) instead of
+    // losing it. Non-user targets keep the normal fail→retry→dead behaviour.
+    const toUser = claimed.to.agent === 'user';
+    const userSink = (detail: string): true => {
+      const delivered = opts.mailbox.markDelivered(claimed.id);
+      emit({ kind: 'delivered', message: delivered, detail });
+      return true;
+    };
+    if (!opts.relay) {
+      return toUser
+        ? userSink('user-inbox:relay-unconfigured')
+        : fail(`target device "${route.device}" requires LAN relay (not configured)`);
+    }
     let relayed;
     try {
       relayed = await opts.relay(route.device, claimed);
     } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e));
+      return toUser ? userSink('user-inbox:relay-error') : fail(e instanceof Error ? e.message : String(e));
     }
-    if (!relayed.ok) return fail(relayed.error ?? `relay to ${route.device} failed`);
+    if (!relayed.ok) {
+      return toUser ? userSink('user-inbox:relay-failed') : fail(relayed.error ?? `relay to ${route.device} failed`);
+    }
     const delivered = opts.mailbox.markDelivered(claimed.id);
     emit({ kind: 'delivered', message: delivered, detail: `relayed-to:${route.device}` });
     return true;
