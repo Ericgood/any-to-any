@@ -1,6 +1,19 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-08-14 — 自驱协作循环：发条 + 法官 + 看产出定生死（ADR-020）
+
+- 真实事故（会话 62f1741f，21 条 / 13h）：Eric 派 codex 实现后端，codex 搭完架子干等、只报「审计完成 2-3 小时」，俩小时零产出；#15 招认「只处理了消息同步、未按 ETA 继续执行」；Eric 只能人肉催 + 亲自接手。回合制投递 = 醒来干 5 分钟再睡，两条消息之间没东西驱动续跑
+- 用户设计：让它们不停校准，主力（lead）做判断，重复多轮无结果就停下来问任务发起者（操作者本人）；门槛取「精一点」——先自试 K=2 圈，真卡才升级
+- 落地（ADR-020 六块积木，先 spec 后码）：
+  - Piece 0 `@user:cli` 永不死信 —— 升级通道焊死：跨设备回信 relay 挂了回退本机 inbox（全库 5 死信里 2 条是它）
+  - Piece 1 CollabTask 加 `autoRun` 模式 + 追踪字段（浅拷贝解析零改序列化）；CLI `collab task --auto`
+  - Piece 2 决策内核（纯函数 `decideTick`）：看产出（worker 进度段有没有长新条目）→ advance / 自试 / 交给 lead 判 / 1h 硬顶
+  - Piece 2/3/4 daemon 接线（`runAutoRunOnce` / `startAutoRun`）：扫 auto-run 任务 → 解析 owner → 跳过跨机 / 被 monitor → 执行 nudge / judge / 升级；以 lead 身份回写 bookkeeping；`config.autorun` 默认 on / 60s / K2 / 1h，机主可一键关
+  - Piece 5 skill：worker 收 nudge 直接产出别只回「收到」，lead 被叫判时给方向或写总结升级
+- TDD +17（P0 5 + P1 1 + 内核 11）+ 接线 10 集成 = 全量 266 全绿
+- 诚实边界：产物指纹是启发式（v1 信 worker 写的、逼它写具体产物）；「你在 Codex 界面实时看它跑」仍不行（#28259 是 Codex 的锅，看网页控制台）；跨设备 auto-run、结构化 ETA 跳票、governor 独立复核产物真伪留 backlog
+
 ## 2026-08-13 — codex 投递超时机主可配 + 超时不再无脑重试
 
 - 真实事故：@claude→codex 的消息反复 `exited 124`（超时）——目标 Codex 确实收到并开始跑那一轮，但重活超过 5 分钟硬上限被杀，anyd 当失败每隔几分钟重试，每次又重跑同一个超长回合（重复干活）。截图里 agent 自称「回合不结束消息进不去」是误判，真因是超时循环
