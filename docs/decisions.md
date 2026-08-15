@@ -246,3 +246,30 @@ Codex 侧不分层（exec resume 已全验证）。
 - worker 是否也需「督」还是只等 nudge:本设计里 governor 主动 nudge、worker 每次 nudge = 一拍;若 worker 自己也 idle 不接 nudge,靠硬顶 + 升级兜。
 
 细化(tick 调度算法、产物指纹的具体取法、blocker 指纹与 ETA 跳票的判定、config 键名与默认值)留待 **spec**(greenlight 后写)。
+
+## ADR-021 跨 App 实时可见:靠 agent 自己的嘴(自循环里 pull+叙述)surface,而非外部注入;双通用窗口(Claude 驾驶舱 + 网页控制台)+ 每家按天花板自动提醒(2026-08-16,真实痛点 + 用户点破机制 + 三家调研)
+
+**背景 / 为什么**:真实痛点(闪电说安卓,Codex↔Claude 协作):操作者判断不了 Codex「还在干活 / 卡住 / 干完」,只能读 git commit 时间戳猜——黑盒。设计过程里我(Claude)一开始把方向框错了两次,被用户连续纠正:
+- ① 我提「做个 daemon 侧活性徽章」——用户否:**会误导**(daemon 只知道「anytoany 在不在驱动一个 turn」,**不知道 agent 在不在干活**;若 agent 忙着操作者手打的活,徽章显「idle」就是赤裸误导)。**砍掉。**
+- ② 我把方向框成「改造 Codex/Kimi 界面、让外部把消息注入进去可见」——用户否:**根本不是改造界面**。是用 agent **本来就有**的「干活时时不时往外冒话」的机制,让它在**自己的回合循环里 pull 一下、把消息用自己的嘴念出来**。
+
+**关键洞察(用户点破,定全局)**:surface 的正确机制**不是「外部把 turn 塞进 App」**(那条撞 [#28259](https://github.com/openai/codex/issues/28259)、官方相关请求已 closed,是死路),而是**「agent 自己的输出永远渲染」**——它自己跑 `anyd pull`/`monitor`、自己念结果,天生可见;#28259 只坑外部注入的 turn。**所以 surface 免费**,真正只剩一件:怎么让它**不用人提醒、自己周期性去 pull**。三家调研(见 research)确认了各家这条的天花板。
+
+**决策**:
+1. **surface 机制统一钉为「agent 在自己循环里 pull + 叙述」**(非外部注入)。这本是 ADR-019 monitor 的本意,本 ADR 把它立成明确原则:**不追求「外部塞 turn 进 App 且可见」,而是让 agent 用自己的嘴。**
+2. **两个通用窗口是「透明」的主答案**(agent 无关、稳):
+   - **Claude Code 当驾驶舱**——架构上唯一 UI 能可靠自显跨 agent 消息的,「你只看 Claude 指挥」是主路径(用户原判断,现有证据背书)。
+   - **网页控制台 `127.0.0.1:7433`**——通用实时窗口,不管底下是 Codex/Kimi/谁、哪台机,全在这实时显示,免疫各家 App 毛病。
+3. **每家按天花板做「自动提醒自己去 pull」**(让它不用人催,细节见 research §2/§3):
+   - **Claude**:本来就会(prompt hook + UI 渲染),不动。
+   - **OpenCode**:插件(开机自挂 watcher + `tui.appendPrompt/submitPrompt` 真推进可见对话,或外部 daemon POST)。**唯一能真「自动冒进对话」的一家**;**缓做**,等真有人拿 OpenCode 当主力再落地。
+   - **Kimi**:`SessionStart` 挂 monitor + **真·60s `SessionHeartbeat` → 桌面通知**(半自动:叮你 → 你敲一句 → 显示)。原生、便宜,**值得先做**。
+   - **Codex**:`SessionStart` hook 塞「立刻去跑 `anyd monitor`」指令 **[待实测,见下]**;否则维持 agent 软循环叙述 + 观察面走控制台。
+4. **接受软 / 不完美**(用户明确:「偶尔飘、偶尔漏不重要,它把这个动作完成了就行」)。不追求 100%。
+5. **明确不做**:① 不硬凿 Codex/Kimi 的 UI 让外部注入可见(#28259 架构封死,官方 `codex inject`/`/cron` 已 closed-not-planned);② 不做会误导的 daemon 活性徽章(见背景①);③ Codex `app-server --remote` 共享 daemon 那条(要求非常规起法、仍 #28259 lag)不作常规路径。
+
+**与既有 ADR 关系**:建在 **ADR-019(monitor)** 之上——本 ADR 把 monitor 的 surface 机制钉成原则,补齐「每家怎么自动提醒自己 pull」,并立起双通用窗口;同时承接把上一轮 delivery 活性徽章砍掉的结论(#5②)。
+
+**待验证(唯一没底的点)**:Codex 的 `SessionStart` hook `additionalContext` 能否在**无用户输入**时就触发一个 model turn 去启动 monitor。做一次性实测(临时 hook + 观察,验完删)——结果决定 Codex 那格是「⚠️ 自动」还是「只能软循环 + 控制台兜底」。
+
+细节(Kimi 心跳通知怎么写、OpenCode 插件形态、Codex 实测步骤、各家出处)见 [research-crossapp-live-visibility.md](../research/research-crossapp-live-visibility.md);落地 spec 待 greenlight 后写。
