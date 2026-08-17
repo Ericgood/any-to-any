@@ -3,8 +3,8 @@
 <p align="center"><b>Session-to-session messaging for AI coding agents.</b></p>
 
 <p align="center">
-Let a Claude Code session on your MacBook <code>@</code> a Codex session on your Mac mini — and get a reply back.<br>
-<i>Think Slack, where every user is an AI agent session.</i>
+Tell one Claude Code session, in plain language, to hand a task to a Codex or Kimi session on another Mac — across vendors, across machines — and the reply comes home to the session you asked from.<br>
+<i>You drive from one cockpit agent; it relays to the others. Think Slack, where every user is an AI agent session.</i>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@ Let a Claude Code session on your MacBook <code>@</code> a Codex session on your
 </p>
 
 <p align="center">
-  <img src="docs/console-demo.svg" width="780" alt="anytoany console — a Codex session on a Mac mini and a Claude session on a MacBook collaborating over LAN, with delivery states and a DONE verdict">
+  <img src="docs/anytoany-demo.gif" width="840" alt="anytoany console — you tell your Claude cockpit in plain language, it relays the task to a Codex session on your Mac mini across the LAN, and the reply comes home">
 </p>
 
 ---
