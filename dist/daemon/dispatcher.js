@@ -3,10 +3,12 @@ import { renderEnvelope, extractReply } from '../envelope.js';
 const label = (s, fallbackAgent, fallbackId) => s ? `@${s.agent}:${s.title}` : `@${fallbackAgent}:${fallbackId.slice(0, 8)}`;
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts) {
-    // skip local targets that are live-monitoring — they pull messages themselves
-    const claimed = opts.mailbox.claimNextPending(opts.isMonitored
-        ? { skip: (toSession, toDevice) => !toDevice && opts.isMonitored(toSession) }
-        : undefined);
+    // skip local targets that surface messages themselves — a live-monitoring session
+    // (pulls via `anyd monitor`) or an interactively-open Claude session (pulls via its
+    // prompt hook). Resume-delivering to either just injects invisible/duplicate turns
+    // and false-fails (ADR-023); leave the message pending for them to pull.
+    const skipLocal = (toSession, toDevice) => !toDevice && ((opts.isMonitored?.(toSession) ?? false) || (opts.isSessionLive?.(toSession) ?? false));
+    const claimed = opts.mailbox.claimNextPending(opts.isMonitored || opts.isSessionLive ? { skip: skipLocal } : undefined);
     if (!claimed)
         return false;
     const emit = (event) => opts.onEvent?.(event);

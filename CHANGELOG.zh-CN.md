@@ -1,6 +1,13 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-09-05 — 别往活会话 headless resume：假阴性让「Codex 消息传不过去」（ADR-023）
+
+- 真实事故（盯着实时看）：codex 一直往一个 Claude 会话（MuselyStudio 开发）派活，每条都显示 dead/failed，「Codex 的消息根本传不过去」。但 grep 目标 transcript 反证：那条 dead 消息 id 出现 **10 次**——注入的 turn 物理上早落地了（还被 3 次重试重复注入）。换第二个小会话（762KB）同样失败、stderr 还是空的。共同点不是 transcript 大小、也不是某个钩子，而是：**两个目标会话当时都正被交互进程开着。**
+- 根因：`claude -p --resume` 先把消息作为一轮跑完落盘，**收尾才触发 post-turn 钩子**；往一个人正开着的会话 resume，`claude -p` 照样退出非 0（大会话 SessionEnd 啃 495MB → 超时 cancel;小会话直接退出 1、空 stderr）。anytoany 纯看退出码 → 假失败 → 重试 3 次（**往你正在用的会话重复灌 turn**）→ dead。叠加 #28259（活会话 UI 不刷新），驾驶舱看着「没到」，其实到了 3 遍。
+- 修复（两层）：**① 主治**——dispatcher **跳过对「交互开着的活会话」的 resume 投递**（`ps` 认 `--resume=<uuid>` 交互形式,我们投递是 `--resume <uuid>` 空格形式,不误伤），留 pending 交给会话自己的 pull hook（和 monitored 会话同机制）。只会更好：活会话本来 resume 进去也看不见（#28259），现在零重复、零假 dead。**② 兜底**——对**已关闭**会话,退出非 0 但只坏在 post-turn 钩子（Stop/SessionEnd/SubagentStop）且有 output → 判 delivered，不重试（空 stdout 仍失败,交 ADR-022）。**附带**——headless auth 过期（not logged in / OAuth expired）返回清晰可操作错误 + 不重试;注意重登桌面 App ≠ 刷新 CLI headless token。
+- 验证（全实测）：TDD 红→绿（session-liveness / dispatcher / adapter-deliver），**全量 276 全绿**；dist 冒烟（退出码 4/4 + 真实 ps 认出活会话）；**真·daemon 端到端**（活会话 pending 探针→留 pending/0 尝试/不 resume）；**线上实证**（修后 codex→活会话两条 delivered、attempts=0、走 pull，即便 CLI OAuth 已过期仍送达）。daemon 已重启（pid 828→35653→42984）生效。
+
 ## 2026-09-04 — 投递失败不再丢消息：pull hook 兜底恢复死信（ADR-022）
 
 - 真实事故：Claude Code（PixJelly，会话 69e63370）↔ Zcode 协作，Zcode **正常回了** `DONE b04583b pushed…`，但回信经 `claude -p --resume` 投进那个**正开着、95MB 的 Claude 会话**时失败（`exited 1`），重试 3 次判 dead → 彻底丢。用户看到的是「Zcode 一直不回复」，实为**回信死在回程**。全库 **8 条死信全是同一个 `resume exited 1`**，系统性。

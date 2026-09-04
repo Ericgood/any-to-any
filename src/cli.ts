@@ -240,6 +240,7 @@ program
 
     const { startDispatcher } = await import('./daemon/dispatcher.js');
     const { isMonitored } = await import('./daemon/monitor.js');
+    const { isSessionLive } = await import('./daemon/session-liveness.js');
     const running = startDispatcher(
       {
         mailbox,
@@ -247,6 +248,7 @@ program
         directory,
         collab,
         isMonitored: (sid) => isMonitored(sid),
+        isSessionLive: (sid) => isSessionLive(sid),
         ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
         onEvent: (e) => {
           const m = e.message;

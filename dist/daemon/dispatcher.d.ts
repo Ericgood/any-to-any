@@ -35,6 +35,12 @@ export interface DispatcherOptions {
      *  own turn; the dispatcher must NOT resume-deliver to it (which would create an
      *  invisible headless turn). Such messages stay pending for the monitor to pull. */
     isMonitored?: (sessionId: string) => boolean;
+    /** A local Claude session open in an interactive process must also NOT be
+     *  resume-delivered to: the injected turn lands but `claude -p` exits non-zero
+     *  (a post-turn hook chokes, or the shared session errors), so anytoany false-
+     *  fails and retries — re-injecting duplicate turns into the session the operator
+     *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023). */
+    isSessionLive?: (sessionId: string) => boolean;
 }
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export declare function dispatchOnce(opts: DispatcherOptions): Promise<boolean>;

@@ -6,6 +6,32 @@ const UUID_JSONL_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 /** Max bytes read per session file; large transcripts are sampled head + tail. */
 const CHUNK = 256 * 1024;
 const TITLE_MAX = 80;
+/**
+ * Post-turn lifecycle hooks (Stop / SessionEnd / SubagentStop) fire AFTER the
+ * turn's work has run and been persisted to the transcript. A non-zero exit whose
+ * failure is one of these does NOT mean the message failed to deliver — the turn
+ * already ran. Verified 2026-09-05 (ADR-023): a user's SessionEnd hook choking on
+ * a 495MB transcript ("Hook cancelled") made `claude -p` exit 1, so anytoany
+ * false-failed and retried 3× — re-injecting duplicates — before dead-lettering
+ * messages that had physically landed 10× in the target transcript.
+ */
+const POST_TURN_HOOK_FAILURE_RE = /\b(?:Stop|SessionEnd|SubagentStop) hook\b[^\n]*\bfailed\b/;
+function isPostTurnHookFailure(stderr) {
+    return POST_TURN_HOOK_FAILURE_RE.test(stderr);
+}
+/**
+ * CLI-level auth failures: the headless `claude` login expired or was never done.
+ * These never self-heal by retrying — the operator must sign the CLI back in — so
+ * we stop retrying and return a clear, actionable error instead of a cryptic
+ * "exited 1". (Verified 2026-09-05: a Codex→Claude delivery surfaced "OAuth session
+ * expired and could not be refreshed"; re-logging into the desktop app does not
+ * necessarily refresh the CLI token. Live sessions are unaffected — they receive via
+ * the pull hook inside their own already-authenticated process, not headless resume.)
+ */
+function isAuthFailure(stdout, stderr) {
+    const combined = `${stdout}\n${stderr}`;
+    return /not logged in/i.test(stdout) || /oauth[^\n]{0,40}expired/i.test(combined);
+}
 /** System-wrapped user turns (command caveats etc.) are not usable as titles. */
 const NON_TITLE_PREFIXES = ['<local-command-caveat>', 'Caveat:', '<command-name>', '<system-reminder>'];
 function usableTitle(text) {
@@ -106,11 +132,25 @@ export function createClaudeAdapter(options = {}) {
                 cwd: session.cwd,
                 timeoutMs,
             });
-            if (code !== 0) {
-                return { ok: false, error: `claude -p --resume exited ${code}: …${stderr.slice(-500)}` };
+            // Auth failures don't self-heal by retrying — surface a clear, non-retryable
+            // hint (checked regardless of exit code). ADR-008/ADR-023.
+            if (isAuthFailure(stdout, stderr)) {
+                return {
+                    ok: false,
+                    retry: false,
+                    error: 'claude CLI auth expired / not logged in — run `claude` and sign in to restore headless delivery ' +
+                        '(live sessions still receive via the pull hook; only resume to a CLOSED session needs this). See ADR-008.',
+                };
             }
-            if (stdout.includes('Not logged in')) {
-                return { ok: false, error: 'claude CLI not logged in (run `claude` once to unlock auto-delivery, see ADR-008)' };
+            if (code !== 0) {
+                // Only a post-turn lifecycle hook failed (e.g. SessionEnd choking on a huge
+                // transcript) and the turn still produced output → the message WAS delivered
+                // and persisted; treat as success rather than retrying (which duplicates the
+                // injected turn) or dead-lettering it. ADR-023.
+                if (isPostTurnHookFailure(stderr) && stdout.trim().length > 0) {
+                    return { ok: true, output: stdout };
+                }
+                return { ok: false, error: `claude -p --resume exited ${code}: …${stderr.slice(-500)}` };
             }
             return { ok: true, output: stdout };
         },

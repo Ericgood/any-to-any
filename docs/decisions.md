@@ -290,3 +290,27 @@ Codex 侧不分层（exec resume 已全验证）。
 **边界 / 诚实**:这是**收件侧恢复**(兜底),不改投递本身;daemon 仍会重试 3 次再判 dead(浪费几次 resume,但**数据不丢**了)。更深的优化——**别对正开着的 Claude 会话做 headless resume**(改走 hook)、以及**超大(95MB)会话 resume 会崩**——各自单独治,列 backlog。
 
 **验证**:TDD 红→绿(`prompt-hook.test.ts` 复现死信 → 确认 `collectInbox` 恢复 + 标记已读 + 不重复);全量 **267** 全绿;并对**编译后的 dist** 复现原事故(zcode→claude,3 次 `resume exited 1` → dead → pull 捞回原文),4 项断言全过。
+
+## ADR-023 别往活会话 headless resume:退出码假阴性 → 明明送达却判 dead(2026-09-05,真实事故 Codex↔Claude/MuselyStudio)
+
+**背景 / 真实事故**:用户盯着 Codex ↔ Claude 实时协作(MuselyStudio 分工对齐),发现 codex → `claude:43ac91` 的消息一直显示 dead/failed,「**Codex 的消息根本传不过去**」。查库:`194b9bb4`(codex→claude:43ac91)**dead**,attempts 3,错误 `claude -p --resume exited 1: …SessionEnd hook [node ~/.claude/scripts/hooks/session-end.js] failed: Hook cancelled`;上一条 `41b2f06c` 同样的错,但已被 **ADR-022** 从 dead 捞回成 delivered。
+
+**铁证(不猜,直接查 transcript)**:`43ac91` 会话文件 **495MB**,且进程 `17651` 此刻正 `--resume=43ac91…`(用户正在用的活会话)。grep 这个 495MB transcript:消息 id `194b9bb4` 出现 **10 次**、`41b2f06c` **10 次**、正文片段「MuselyStudio 开发并明确分工」**7 次**——**那几轮物理上真的跑了、真的写进了 transcript(还因 3 次重试被重复注入)**。所以 `dead` 是假的:消息其实**送达了**。
+
+**根因**:`claude -p --resume` 先把消息作为一轮跑完、落盘,**收尾才触发用户的 post-turn 生命周期钩子(SessionEnd)**。`session-end.js` 要解析整份 transcript,在 495MB 上超过钩子超时 → 「Hook cancelled」→ `claude -p` 退出码 1。而 anytoany 的 claude adapter **纯用退出码判成败**(`claude.ts:129`)→ 假阴性 → 重试 3 次(**重复注入**)→ dead。叠加 [#28259](https://github.com/openai/codex/issues/28259)(活会话 UI 不刷新)+ DB 显 dead,操作者看到的就是「传不过去」,其实到了 3 次。
+
+**第二例坐实了更深的真相(换二号会话仍失败)**:用户改发另一个 Claude 会话 `1157e30d`(「musely_studio 二号」)——**还是 dead**。但这个会话**只有 762KB(不大)**,错误是 `claude -p --resume exited 1: …` **后面 stderr 全空**(无 SessionEnd 字样)。grep 二号 transcript:消息 `46e5ed09` 同样出现 **10 次**——**又是送达了、跑了、被重复注入 3 遍,却退出 1**。共同点不是「大 transcript」也不是「SessionEnd 钩子」,而是:**两个会话当时都正被交互进程开着(`--resume=<id>`)**。结论:**往一个「正开着的活会话」做 headless `claude -p --resume`,turn 会落地(投递其实成功),但 `claude -p` 就是退出非 0**——大会话表现为 SessionEnd 超时,小会话表现为空 stderr 退出 1。退出码对「resume 进活会话」这条路根本不可信。
+
+**决策(两层,标本兼治)**:
+
+**Layer 1 —— 主治:活会话不再 headless resume,留给它自己的 pull hook(治 Problem B)。** 既然「resume 进活会话」这条路退出码不可信、还重复注入,那就**根本别走**。新增 `src/daemon/session-liveness.ts`:`liveClaudeSessions()` 扫 `ps`,认出**交互进程的 `--resume=<uuid>`(带等号)**——而我们自己的投递是 `--resume <uuid>`(空格),天然不误伤;带 2s TTL 缓存供热路径同步调用;`ps` 不可用则返回空集、回退原投递(不阻塞)。dispatcher 的 `claimNextPending` skip **扩一格**:本机目标只要 `isMonitored`(跑 monitor)**或** `isSessionLive`(交互开着)就跳过 resume、**留 pending**。于是活会话由它自己的 UserPromptSubmit pull hook 在下次 prompt 时收进去(和 monitored 会话同机制,见 monitor.ts 顶注释)。**这只会更好、不伤自动化**:活会话过去就算 resume 进去也因 #28259 看不见、还假失败+重复注入 3 遍;改成跳过后可见性不变(下次 prompt pull 显示),但零重复、零假 dead。真·无人自动化的会话不是「交互开着」的,不受影响。
+
+**Layer 2 —— 兜底:关闭的会话若 resume 跑完、只坏在 post-turn 钩子,判 delivered(治假阴性余量)。** 对**已关闭**的会话仍走 resume;若退出码非 0 但**失败仅来自 post-turn 生命周期钩子(Stop/SessionEnd/SubagentStop)且那一轮产出了 output** → 判 `delivered`(`claude.ts` 加 `isPostTurnHookFailure(stderr)` + `stdout.trim()` 护栏)。保守护栏:**stdout 为空 → 仍判失败**(交给 ADR-022 兜底),不硬吞。
+
+**附带 —— auth 失败给人话**:headless 撞到 CLI 登录过期(`not logged in` / `OAuth … expired`)时,`claude.ts` 的 `isAuthFailure()` 返回**清晰可操作错误 + `retry:false`**(不做无谓 3 次重试)。真实事故触发:codex 诊断 resume 报「OAuth session expired and could not be refreshed」;注意**重登桌面 App ≠ 刷新 CLI headless token**,两者分开。活会话不受影响——pull hook 跑在会话自己已认证的进程里,不需要 headless CLI 登录。
+
+**与既有 ADR 的关系**:与 **ADR-022** 同症状家族(「回信/消息不可见地没回来」),但**每次根因不同**——ADR-019/021 `isMonitored` 是雏形(只覆盖跑 monitor 的会话),本 ADR 的 Layer 1 把它**推广到所有交互开着的活会话**;ADR-022 是「死了之后兜底捞回」,本 ADR 是「从源头别假死/别乱投」。先例:codex adapter 早已把超时(exit 124)当「the turn already ran」终态处理。
+
+**验证(全部实测)**:① TDD 红→绿——`adapter-deliver.test.ts`(SessionEnd/Stop 判 delivered、真实 resume 错仍失败、空 stdout 不硬吞、OAuth 过期→非重试 auth 错)、`session-liveness.test.ts`(纯解析:认交互 `--resume=`、不误伤 `-p --resume`、多会话、空输入)、`dispatcher.test.ts`(活会话→跳过→留 pending);**全量 276 全绿**。② 对**编译后 dist** 冒烟:退出码修 4/4 + `isSessionLive` 对真实 `ps` 认出一号 43ac9165=true、随机 uuid=false。③ **真·daemon 端到端**:往活会话(本会话 c6b11b58)插 pending 探针 → daemon **留 pending、0 尝试、不 resume** → 清理无残留。④ **线上实证**:重启后 codex→一号(活)两条 `c9928424`/`4bf240a8` = **delivered、attempts=0、无 error**(走 pull,非 resume;对比修前 194b9bb4 attempts=3/transcript 重复 10 次),即便当时 CLI OAuth 已过期仍送达。**daemon 已重启**(pid 828→35653→42984)——本修复在 daemon 投递路径,不重启不生效(区别于 ADR-022 在每次新起的 hook 进程)。
+
+**Backlog**:① `session-end.js` 给 transcript 解析封顶(别啃 495MB);② 查 musely 会话为何胀到 495MB;③ `isSessionLive` 目前靠 `ps`(macOS/Linux),Windows 回退原路径——后续若上 Windows 需另找信号;④ Claude CLI headless OAuth 过期与桌面 App 登录不同步,属上游,anytoany 只能报清楚 + 靠 Layer 1 绕开。

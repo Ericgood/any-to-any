@@ -405,6 +405,21 @@ describe('live-monitor coordination', () => {
     expect(mailbox.getMessage(m.id)?.status).toBe('pending'); // the monitor will pull it live
   });
 
+  it('does NOT resume-deliver to an interactively-open (live) session — leaves it pending (ADR-023)', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi codex' });
+    const did = await dispatchOnce({
+      mailbox,
+      adapters: new Map([[adapter.agent, adapter]]),
+      directory: async () => DIRECTORY,
+      isSessionLive: (sid) => sid === CODEX_B.sessionId,
+    });
+    expect(did).toBe(false); // skipped — nothing delivered via resume
+    expect(adapter.calls).toHaveLength(0); // the live session was NOT headlessly resumed
+    expect(mailbox.getMessage(m.id)?.status).toBe('pending'); // its own pull hook surfaces it
+  });
+
   it('still resume-delivers to a session that is not monitoring', async () => {
     const mailbox = createMailbox(createDb(':memory:'));
     const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));

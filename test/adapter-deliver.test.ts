@@ -76,6 +76,69 @@ describe('claude deliver contract', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/not logged in/i);
   });
+
+  // Real incident 2026-09-05: a headless delivery hit "OAuth session expired and
+  // could not be refreshed". Auth failures don't self-heal by retrying — report a
+  // clear, non-retryable hint instead of a cryptic "exited 1" (ADR-023).
+  it('maps an expired-OAuth headless failure to a clear, non-retryable auth error', async () => {
+    const { exec } = mockExec({
+      code: 1,
+      stdout: '{"result":"OAuth session expired and could not be refreshed"}',
+      stderr: '',
+    });
+    const adapter = createClaudeAdapter({ exec });
+    const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
+    expect(r.ok).toBe(false);
+    expect(r.retry).toBe(false);
+    expect(r.error).toMatch(/auth|sign in|logged in/i);
+  });
+
+  // Regression (ADR-023, verified 2026-09-05): a SessionEnd hook choking on a
+  // 495MB transcript dead-lettered messages that had PHYSICALLY landed in the
+  // transcript. `claude -p` runs the turn, persists it, THEN fires the user's
+  // post-turn lifecycle hooks; if one is cancelled the process exits non-zero —
+  // but the message was already delivered. Retrying just re-injects duplicates.
+  it('treats a post-turn SessionEnd hook failure as delivered — the turn already ran', async () => {
+    const { exec } = mockExec({
+      code: 1,
+      stdout: 'Understood — pausing shared-file edits and reading the collab doc.',
+      stderr: 'SessionEnd hook [node ~/.claude/scripts/hooks/session-end.js] failed: Hook cancelled',
+    });
+    const adapter = createClaudeAdapter({ exec });
+    const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain('pausing shared-file edits');
+  });
+
+  it('treats a post-turn Stop hook failure as delivered too', async () => {
+    const { exec } = mockExec({
+      code: 1,
+      stdout: 'done',
+      stderr: 'Stop hook [node ~/.claude/scripts/hooks/stop.js] failed: exited 2',
+    });
+    const adapter = createClaudeAdapter({ exec });
+    const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
+    expect(r.ok).toBe(true);
+  });
+
+  it('still fails on a real non-zero exit with no post-turn hook (e.g. resume error)', async () => {
+    const { exec } = mockExec({ code: 1, stderr: 'Error: could not resume session — not found', stdout: '' });
+    const adapter = createClaudeAdapter({ exec });
+    const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/exited 1/);
+  });
+
+  it('does not mask a hook failure that produced no turn output (cannot confirm delivery)', async () => {
+    const { exec } = mockExec({
+      code: 1,
+      stdout: '',
+      stderr: 'SessionEnd hook [node ~/.claude/scripts/hooks/session-end.js] failed: Hook cancelled',
+    });
+    const adapter = createClaudeAdapter({ exec });
+    const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe('codex per-machine sandbox escalation', () => {

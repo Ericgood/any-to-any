@@ -32,6 +32,12 @@ export interface DispatcherOptions {
    *  own turn; the dispatcher must NOT resume-deliver to it (which would create an
    *  invisible headless turn). Such messages stay pending for the monitor to pull. */
   isMonitored?: (sessionId: string) => boolean;
+  /** A local Claude session open in an interactive process must also NOT be
+   *  resume-delivered to: the injected turn lands but `claude -p` exits non-zero
+   *  (a post-turn hook chokes, or the shared session errors), so anytoany false-
+   *  fails and retries — re-injecting duplicate turns into the session the operator
+   *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023). */
+  isSessionLive?: (sessionId: string) => boolean;
 }
 
 const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: string): string =>
@@ -39,11 +45,14 @@ const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: st
 
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
-  // skip local targets that are live-monitoring — they pull messages themselves
+  // skip local targets that surface messages themselves — a live-monitoring session
+  // (pulls via `anyd monitor`) or an interactively-open Claude session (pulls via its
+  // prompt hook). Resume-delivering to either just injects invisible/duplicate turns
+  // and false-fails (ADR-023); leave the message pending for them to pull.
+  const skipLocal = (toSession: string, toDevice: string | null): boolean =>
+    !toDevice && ((opts.isMonitored?.(toSession) ?? false) || (opts.isSessionLive?.(toSession) ?? false));
   const claimed = opts.mailbox.claimNextPending(
-    opts.isMonitored
-      ? { skip: (toSession, toDevice) => !toDevice && opts.isMonitored!(toSession) }
-      : undefined,
+    opts.isMonitored || opts.isSessionLive ? { skip: skipLocal } : undefined,
   );
   if (!claimed) return false;
   const emit = (event: DispatchEvent) => opts.onEvent?.(event);
