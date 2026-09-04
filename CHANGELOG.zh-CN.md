@@ -1,6 +1,15 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-09-04 — 投递失败不再丢消息：pull hook 兜底恢复死信（ADR-022）
+
+- 真实事故：Claude Code（PixJelly，会话 69e63370）↔ Zcode 协作，Zcode **正常回了** `DONE b04583b pushed…`，但回信经 `claude -p --resume` 投进那个**正开着、95MB 的 Claude 会话**时失败（`exited 1`），重试 3 次判 dead → 彻底丢。用户看到的是「Zcode 一直不回复」，实为**回信死在回程**。全库 **8 条死信全是同一个 `resume exited 1`**，系统性。
+- 根因：dead-letter 假设「投不进 = 丢」。但 Claude/Codex/Kimi 都有 `anyd` 的 prompt-hook + `anyd pull` 拉取兜底；`collectInbox`（hook 与 pull 共用）只 surface `pending`、**读不到 `dead`**，白白绕过兜底 → 消息没了。
+- 修：`mailbox.inbox` 加 `undeliveredOnly`（读 `dead`）+ `take` 允许 `dead→delivered`；`collectInbox` 在 pending 之后**也 surface 死信**（标「曾投递失败、现在补看，没丢」），标记已读、去重、不重复。→ 投递失败的消息在收件方**下次 prompt / `anyd pull` 时自动被捞回**；已积压的 8 条也会被同一机制自动捞回。
+- 承接 ADR-020 Piece 0（`@user:cli` 永不死信）同一哲学：**投不进 ≠ 丢**。
+- 边界：收件侧恢复（兜底），不改投递本身；daemon 仍重试 3 次再判 dead（浪费几次 resume 但不丢数据）。「别对正开着的 Claude 会话做 headless resume」「超大会话 resume 崩」列 backlog。
+- 验证：TDD 红→绿（prompt-hook.test.ts 复现死信→确认恢复+标记已读+不重复）+ 全量 **267** 全绿 + 对**编译后 dist** 复现原事故（zcode→claude 3 次 `resume exited 1`→dead→pull 捞回原文），4 断言全过。
+
 ## 2026-08-14 — 自驱协作循环：发条 + 法官 + 看产出定生死（ADR-020）
 
 - 真实事故（会话 62f1741f，21 条 / 13h）：Eric 派 codex 实现后端，codex 搭完架子干等、只报「审计完成 2-3 小时」，俩小时零产出；#15 招认「只处理了消息同步、未按 ETA 继续执行」；Eric 只能人肉催 + 亲自接手。回合制投递 = 醒来干 5 分钟再睡，两条消息之间没东西驱动续跑

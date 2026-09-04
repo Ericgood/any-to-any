@@ -4,6 +4,13 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Failed deliveries no longer vanish — the pull hook recovers dead-lettered messages (ADR-022)
+
+- **Real incident.** A Claude Code session (PixJelly) and a Zcode session were collaborating; Zcode replied `DONE b04583b pushed…`, but delivering that reply back via `claude -p --resume` into a *live, 95 MB* Claude session failed (`exited 1`), retried 3×, and dead-lettered — gone. From the operator's side it looked like "Zcode never replied." Across the whole mailbox, **all 8 dead letters were the same `resume exited 1`** — systemic, not a fluke; the target session file was 95 MB and still being written, so the session was open, not gone.
+- **Root cause.** Dead-lettering assumed "undeliverable = lost." But Claude/Codex/Kimi all have a reliable pull fallback (the prompt-hook + `anyd pull`), and `collectInbox` only surfaced `pending` messages — never `dead` — so a message the daemon gave up on bypassed the very fallback that could still deliver it.
+- **Fix.** `mailbox.inbox` gains `undeliveredOnly` (reads `status='dead'`) and its `take` now marks `dead → delivered`; `collectInbox` (shared by the prompt-hook and `anyd pull`) now also surfaces dead-lettered messages addressed to the session — flagged "this failed to deliver live; here it is, nothing lost" — marked seen, deduped, no repeat. A cross-agent message that fails headless delivery is now **recovered automatically on the recipient's next prompt / pull** instead of lost; the 8 already-stuck messages recover the same way. Same philosophy as ADR-020 Piece 0 (`@user:cli` never dead): undeliverable ≠ lost.
+- Honest scope: recipient-side recovery — the daemon still retries 3× before dead-lettering (a few wasted resumes, no data loss). Deeper fixes (don't headless-resume a *live* Claude session; huge sessions failing resume) are tracked separately. Verified TDD red→green, full suite 267 green, and reproduced against the compiled dist.
+
 ### Self-driving collaboration loop — the daemon keeps execute-tasks moving on its own (ADR-020)
 
 - **Fixes the failure real use kept hitting.** A worker handed a multi-hour task did one slice ("scaffolded, audited the contract — ETA 2-3h") and then *stalled* — turn-based delivery wakes a session for one ~5-minute headless turn and nothing drives it between messages, so the operator had to chase it and finally take the task over (conversation `62f1741f`; the worker later admitted "I only processed message-sync, didn't continue executing per the ETA"). Now the always-on daemon is the clock: for a task the lead tags `--auto`, it keeps nudging the owner forward until the work is done or genuinely stuck.

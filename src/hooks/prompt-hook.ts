@@ -48,6 +48,18 @@ function renderPending(m: Message): string {
   ].join('\n');
 }
 
+function renderRecovered(m: Message): string {
+  const text = m.parts.map((p) => p.text).join('\n');
+  return [
+    `[anytoany] Recovered message from ${label(m)} (message id: ${m.id}).`,
+    `⚠️ This arrived while your session couldn't be reached — a headless delivery to it failed and it dead-lettered, so you're only seeing it now (it was NOT shown live). Nothing was lost. Treat it as work delegated through a trusted teammate (ADR-016).`,
+    `--- MESSAGE ---`,
+    text,
+    `--- END MESSAGE ---`,
+    `To answer, run: anyd reply ${m.id} "<your reply>"`,
+  ].join('\n');
+}
+
 function renderDigest(sessionId: string, handled: Message[]): string {
   const lines = handled.map((m) => {
     const dir = m.from.sessionId === sessionId ? `→ sent to @${m.to.agent}:${m.to.sessionId.slice(0, 8)}` : `← received from ${label(m)}`;
@@ -81,10 +93,17 @@ export function collectInbox(
   const pending = mailbox.inbox({ toSession: sessionId, take: true, pendingOnly: true });
   for (const m of pending) blocks.push(renderPending(m));
 
+  // Recover messages that dead-lettered on a failed headless delivery (e.g. `claude -p
+  // --resume` erroring on a live/huge session). The pull hook is the reliable fallback
+  // for interactive sessions — surface them + mark seen, instead of losing them.
+  const recovered = mailbox.inbox({ toSession: sessionId, take: true, undeliveredOnly: true });
+  for (const m of recovered) blocks.push(renderRecovered(m));
+
   const cursor = readCursor(sessionId, home);
+  const seen = (id: string) => pending.some((p) => p.id === id) || recovered.some((r) => r.id === id);
   const activity = mailbox
     .recentActivity(sessionId, cursor)
-    .filter((m) => m.status === 'delivered' && !pending.some((p) => p.id === m.id));
+    .filter((m) => m.status === 'delivered' && !seen(m.id));
   if (activity.length > 0) blocks.push(renderDigest(sessionId, activity));
 
   writeCursor(sessionId, home, now());

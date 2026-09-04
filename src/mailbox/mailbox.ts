@@ -57,6 +57,9 @@ export interface InboxQuery {
   all?: boolean;
   /** Only strictly-pending messages — excludes 'delivering' (dispatcher-owned) and 'failed'. */
   pendingOnly?: boolean;
+  /** Only messages that dead-lettered (headless delivery gave up). The pull hook's
+   *  fallback: surface a failed push so it's recovered, not lost. `take` marks them delivered. */
+  undeliveredOnly?: boolean;
 }
 
 export interface Mailbox {
@@ -246,7 +249,8 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
     inbox(query: InboxQuery = {}): Message[] {
       const clauses: string[] = [];
       const params: unknown[] = [];
-      if (query.pendingOnly) clauses.push(`status = 'pending'`);
+      if (query.undeliveredOnly) clauses.push(`status = 'dead'`);
+      else if (query.pendingOnly) clauses.push(`status = 'pending'`);
       else if (!query.all) clauses.push(`status IN ('pending', 'delivering', 'failed')`);
       if (query.toSession) {
         clauses.push('to_session = ?');
@@ -260,7 +264,7 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
       if (query.take && messages.length > 0) {
         const ts = now();
         const mark = db.prepare(
-          `UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ? AND status IN ('pending', 'delivering', 'failed')`,
+          `UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ? AND status IN ('pending', 'delivering', 'failed', 'dead')`,
         );
         for (const m of messages) mark.run(ts, m.id);
       }

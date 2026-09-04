@@ -135,4 +135,28 @@ describe('collectInbox (shared by hook and `anyd pull`)', () => {
     nowMs += 1000;
     expect(collectInbox(mailbox, sid, { home, now: () => nowMs })).toBeNull(); // nothing new now
   });
+
+  it('recovers a message that dead-lettered on failed headless delivery, marks it seen, no repeat', () => {
+    const sid = `recover-${nowMs}`;
+    // a reply addressed to this session that fails headless delivery 3x → dead
+    // (root cause: `claude -p --resume` can fail on a live/huge session; the daemon
+    // gives up and dead-letters, and the message would otherwise be lost forever)
+    const m = mailbox.send({ from: CLAUDE_A, to: { agent: 'codex', sessionId: sid }, text: 'DONE b04583b pushed' });
+    for (let i = 0; i < 3; i++) {
+      mailbox.claimNextPending();
+      mailbox.markFailed(m.id, 'claude -p --resume exited 1');
+      nowMs += 31_000;
+    }
+    expect(mailbox.getMessage(m.id)?.status).toBe('dead');
+
+    // the pull hook is the reliable fallback for interactive sessions — it must still
+    // surface the dead-lettered message and mark it seen, instead of losing it
+    const text = collectInbox(mailbox, sid, { home, now: () => nowMs });
+    expect(text).toContain('DONE b04583b pushed');
+    expect(text).toMatch(/couldn'?t be delivered|never reached|recovered|failed to push/i);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered'); // recovered = seen
+
+    nowMs += 1000;
+    expect(collectInbox(mailbox, sid, { home, now: () => nowMs })).toBeNull(); // not repeated
+  });
 });

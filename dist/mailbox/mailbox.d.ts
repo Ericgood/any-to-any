@@ -49,6 +49,9 @@ export interface InboxQuery {
     all?: boolean;
     /** Only strictly-pending messages — excludes 'delivering' (dispatcher-owned) and 'failed'. */
     pendingOnly?: boolean;
+    /** Only messages that dead-lettered (headless delivery gave up). The pull hook's
+     *  fallback: surface a failed push so it's recovered, not lost. `take` marks them delivered. */
+    undeliveredOnly?: boolean;
 }
 export interface Mailbox {
     send(input: SendInput): Message;

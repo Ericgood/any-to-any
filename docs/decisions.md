@@ -273,3 +273,20 @@ Codex 侧不分层（exec resume 已全验证）。
 **待验证(唯一没底的点)**:Codex 的 `SessionStart` hook `additionalContext` 能否在**无用户输入**时就触发一个 model turn 去启动 monitor。做一次性实测(临时 hook + 观察,验完删)——结果决定 Codex 那格是「⚠️ 自动」还是「只能软循环 + 控制台兜底」。
 
 细节(Kimi 心跳通知怎么写、OpenCode 插件形态、Codex 实测步骤、各家出处)见 [research-crossapp-live-visibility.md](../research/research-crossapp-live-visibility.md);落地 spec 待 greenlight 后写。
+
+## ADR-022 投递失败不再丢消息:收件方 pull hook 兜底恢复死信(2026-09-04,真实事故 Claude↔Zcode)
+
+**背景 / 真实事故**:用户让 Claude Code(PixJelly,会话 `69e63370`)↔ Zcode 协作。Zcode **正常回了** `DONE b04583b pushed…`,但这条回信要经 `claude -p --resume` 投进那个**正开着、95MB 的 Claude 会话**时失败(`exited 1`),重试 3 次 → 判 **dead** → 彻底消失。用户看到的是「Zcode 一直不回复」,实际是**回信死在了投递回程上**。查全库:**8 条死信全是同一个 `resume exited 1`**——系统性,不是偶发。目标会话文件在磁盘上 95MB、事故后仍在写,证明**会话没关**,是「往一个正开着的 / 超大的 Claude 会话做 headless resume 塞消息」失败。
+
+**根因**:dead-letter 机制假设「投不进 = 丢了」。但 Claude / Codex / Kimi 都装了 `anyd` 的 **prompt-hook + `anyd pull`** 这个可靠的**拉取兜底**;可 `collectInbox`(hook 与 pull 共用)只 surface `pending`、**读不到 `dead`**,于是消息被判死后白白绕过了兜底——就没了。
+
+**决策**:**失败投递不再是终点,收件方的 pull hook 兜底恢复它。**
+1. `mailbox.inbox` 新增 `undeliveredOnly`(读 `status='dead'`),且 `take` 允许 `dead → delivered`。
+2. `collectInbox`(prompt-hook + `anyd pull` 共用)在 surface pending 之后**也 surface 死信**(标注「⚠️ 这条曾投递失败、现在才补给你看,没丢」),标记已读、去重、不重复。
+3. 于是:一条 headless 投递失败的跨 agent 消息,会在**收件方下次 prompt / `anyd pull`** 时**自动被捞回**,而不是消失。已积压的 8 条死信也会被同一机制在各自会话下次活动时自动捞回。
+
+**与既有 ADR 的关系**:承接 **ADR-020 Piece 0**(`@user:cli` 永不死信)的同一哲学——**「投不进 ≠ 丢」**——从「给操作者的信」推广到「给任何有 pull 兜底的会话的信」。
+
+**边界 / 诚实**:这是**收件侧恢复**(兜底),不改投递本身;daemon 仍会重试 3 次再判 dead(浪费几次 resume,但**数据不丢**了)。更深的优化——**别对正开着的 Claude 会话做 headless resume**(改走 hook)、以及**超大(95MB)会话 resume 会崩**——各自单独治,列 backlog。
+
+**验证**:TDD 红→绿(`prompt-hook.test.ts` 复现死信 → 确认 `collectInbox` 恢复 + 标记已读 + 不重复);全量 **267** 全绿;并对**编译后的 dist** 复现原事故(zcode→claude,3 次 `resume exited 1` → dead → pull 捞回原文),4 项断言全过。

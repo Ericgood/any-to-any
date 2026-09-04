@@ -117,7 +117,9 @@ export function createMailbox(db, opts = {}) {
         inbox(query = {}) {
             const clauses = [];
             const params = [];
-            if (query.pendingOnly)
+            if (query.undeliveredOnly)
+                clauses.push(`status = 'dead'`);
+            else if (query.pendingOnly)
                 clauses.push(`status = 'pending'`);
             else if (!query.all)
                 clauses.push(`status IN ('pending', 'delivering', 'failed')`);
@@ -132,7 +134,7 @@ export function createMailbox(db, opts = {}) {
             const messages = rows.map(rowToMessage);
             if (query.take && messages.length > 0) {
                 const ts = now();
-                const mark = db.prepare(`UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ? AND status IN ('pending', 'delivering', 'failed')`);
+                const mark = db.prepare(`UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ? AND status IN ('pending', 'delivering', 'failed', 'dead')`);
                 for (const m of messages)
                     mark.run(ts, m.id);
             }
