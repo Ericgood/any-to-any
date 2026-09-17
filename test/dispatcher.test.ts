@@ -420,6 +420,26 @@ describe('live-monitor coordination', () => {
     expect(mailbox.getMessage(m.id)?.status).toBe('pending'); // its own pull hook surfaces it
   });
 
+  // ADR-024: an external agent (a desktop App's assistant, e.g. 闪电说) has no
+  // headless channel at all — it registers and pulls. Its mail must sit pending,
+  // never be claimed and dead-lettered for want of a delivery adapter.
+  it('does NOT deliver to a registered external (pull-only) session — stays pending, attempts 0', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));
+    const m = mailbox.send({ from: CLAUDE_A, to: { agent: 'sds', sessionId: 'shandianshuo-abc' }, text: 'hi sds' });
+    const did = await dispatchOnce({
+      mailbox,
+      adapters: new Map([[adapter.agent, adapter]]),
+      directory: async () => DIRECTORY,
+      isPullOnly: (sid) => sid === 'shandianshuo-abc',
+    });
+    expect(did).toBe(false);
+    expect(adapter.calls).toHaveLength(0);
+    const stored = mailbox.getMessage(m.id);
+    expect(stored?.status).toBe('pending');
+    expect(stored?.attempts).toBe(0); // never claimed → no retry/dead-letter churn
+  });
+
   it('still resume-delivers to a session that is not monitoring', async () => {
     const mailbox = createMailbox(createDb(':memory:'));
     const adapter = fakeAdapter('codex', () => ({ ok: true, output: '' }));

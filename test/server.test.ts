@@ -327,3 +327,173 @@ describe('peer endpoints', () => {
     expect(queued[0]?.to.device).toBeUndefined(); // local target on this side
   });
 });
+
+// ADR-024: 闪电说 (`sds`) and other desktop-App agents cannot run `anyd` — their
+// assistant shell has a minimal PATH and a sandbox that blocks writes to
+// ~/.anytoany. They talk to the daemon over loopback HTTP instead.
+describe('console server — external agent endpoints (Phase 5 / ADR-024)', () => {
+  const PORT_X = 17435;
+  const baseX = `http://127.0.0.1:${PORT_X}`;
+  const SDS = { agent: 'sds', sessionId: 'shandianshuo-abc' };
+
+  let mailbox: Mailbox;
+  let server: RunningServer;
+  let home: string;
+
+  beforeAll(() => {
+    home = mkdtempSync(join(tmpdir(), 'anytoany-srv-ext-'));
+    mailbox = createMailbox(createDb(':memory:'));
+    server = startConsoleServer({
+      mailbox,
+      directory: async () => DIRECTORY,
+      port: PORT_X,
+      changePollMs: 60_000,
+      registryHome: home,
+    });
+  });
+  afterAll(() => {
+    server.close();
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  const inbox = (body: unknown) =>
+    fetch(baseX + '/api/inbox', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('POST /api/register makes an external agent addressable', async () => {
+    const r = await fetch(baseX + '/api/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...SDS, title: '闪电说助手', cwd: '/w/sds' }),
+    });
+    expect(r.status).toBe(201);
+    const { session } = (await r.json()) as { session: { agent: string; title: string; lastSeenAt: number } };
+    expect(session.agent).toBe('sds');
+    expect(session.title).toBe('闪电说助手');
+    expect(session.lastSeenAt).toBeGreaterThan(0);
+  });
+
+  // The daemon caches its directory (30s TTL). Without this, a just-registered
+  // agent is unaddressable until the cache expires and the first reply to it
+  // fails with a confusing "not_found" — observed for real on 2026-09-17.
+  it('invalidates the caller directory cache on register, so the agent is addressable at once', async () => {
+    const seen: string[] = [];
+    const p = 17437;
+    const s = startConsoleServer({
+      mailbox: createMailbox(createDb(':memory:')),
+      directory: async () => DIRECTORY,
+      port: p,
+      changePollMs: 60_000,
+      registryHome: home,
+      invalidateDirectory: () => seen.push('invalidated'),
+    });
+    try {
+      await fetch(`http://127.0.0.1:${p}/api/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agent: 'sds', sessionId: 'cache-probe' }),
+      });
+      expect(seen).toEqual(['invalidated']);
+
+      // …and a rejected registration must not drop the cache
+      await fetch(`http://127.0.0.1:${p}/api/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agent: 'claude', sessionId: 'nope' }),
+      });
+      expect(seen).toEqual(['invalidated']);
+    } finally {
+      s.close();
+    }
+  });
+
+  it('POST /api/register rejects a reserved agent name', async () => {
+    const r = await fetch(baseX + '/api/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent: 'claude', sessionId: 'x' }),
+    });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { error: string }).error).toMatch(/reserved/i);
+  });
+
+  it('POST /api/inbox with register:true registers and pulls in one call', async () => {
+    const m = mailbox.send({ from: CODEX_B, to: SDS, text: 'codex 回信：改完了' });
+
+    const r = await inbox({ ...SDS, register: true, title: '闪电说助手' });
+    expect(r.status).toBe(201);
+    const body = (await r.json()) as { count: number; text: string | null; messages: Array<{ id: string }> };
+
+    expect(body.count).toBe(1);
+    expect(body.text).toContain('改完了');
+    expect(body.messages[0]?.id).toBe(m.id);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered'); // taken
+  });
+
+  it('POST /api/inbox is empty on the second call — messages are taken, not re-served', async () => {
+    const body = (await (await inbox({ ...SDS, register: true })).json()) as { count: number; text: string | null };
+    expect(body.count).toBe(0);
+    expect(body.text).toBeNull();
+  });
+
+  it('POST /api/inbox rejects a missing session id', async () => {
+    expect((await inbox({ agent: 'sds' })).status).toBe(400);
+  });
+
+  it('POST /api/send accepts an external agent as the sender, so replies route home', async () => {
+    const r = await fetch(baseX + '/api/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: '@codex:frontend', from: SDS, text: '去把 X 改了' }),
+    });
+    expect(r.status).toBe(201);
+    const { message } = (await r.json()) as { message: { from: { agent: string } } };
+    expect(message.from.agent).toBe('sds');
+  });
+});
+
+// The unfiltered directory is 4000+ sessions / ~850KB on a real machine — fine
+// for the console, unusable inside an LLM turn. Filters are additive: with no
+// query params the response must be byte-identical to before.
+describe('console server — /api/sessions filtering (Phase 5)', () => {
+  const PORT_F = 17436;
+  const baseF = `http://127.0.0.1:${PORT_F}`;
+  let server: RunningServer;
+
+  beforeAll(() => {
+    server = startConsoleServer({
+      mailbox: createMailbox(createDb(':memory:')),
+      directory: async () => DIRECTORY,
+      port: PORT_F,
+      changePollMs: 60_000,
+    });
+  });
+  afterAll(() => server.close());
+
+  const get = async (qs: string) =>
+    ((await (await fetch(baseF + '/api/sessions' + qs)).json()) as { sessions: SessionInfo[] }).sessions;
+
+  it('returns the full directory unchanged when no filters are given', async () => {
+    expect(await get('')).toEqual(DIRECTORY);
+  });
+
+  it('filters by agent', async () => {
+    const s = await get('?agent=codex');
+    expect(s.map((x) => x.agent)).toEqual(['codex']);
+  });
+
+  it('filters by a case-insensitive title or cwd substring', async () => {
+    expect((await get('?q=FRONT')).map((x) => x.title)).toEqual(['frontend']);
+    expect((await get('?q=/w/a')).map((x) => x.title)).toEqual(['backend']);
+    expect(await get('?q=nothing-matches')).toEqual([]);
+  });
+
+  it('truncates with limit, and ignores a nonsense limit', async () => {
+    expect(await get('?limit=1')).toHaveLength(1);
+    expect(await get('?limit=abc')).toHaveLength(2);
+    expect(await get('?limit=0')).toHaveLength(2);
+  });
+});

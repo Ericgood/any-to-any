@@ -60,3 +60,20 @@ Phase 1 M0-M6 全部完成：81 测试全绿（覆盖率 92.7/80/98.4），Codex
 **开放问题（边做边定）**：推进调度归谁 · 大文档 token 成本（只传 diff？）· lead 失活转交 · 跨机一致性收敛 · 与各家原生 subagent 的边界
 
 **明确不做（本阶段）**：多 lead / 实时协同编辑 / >2 方复杂 room / 跨厂商 streaming 监督 / 暂停对方 turn / 自动 merge
+
+---
+
+## Phase 5 外部 agent 接入（2026-09-17 开工，spec: docs/specs/phase5-external-agents.md，决策 ADR-024）
+
+> 一句话：让没有 CLI 投递通道的 GUI agent（首个是闪电说 `sds`）通过「注册身份 + 拉取收件 + HTTP 走 daemon」变成一等目标。用户诉求是拿闪电说当总驾驶舱去调 Claude Code / Codex。
+
+- [ ] S1 注册表 `src/registry/external.ts`（镜像 monitor.ts；TTL 7 天；保留名校验）
+- [ ] S2 目录可见 `src/adapters/registered.ts` + CLI 拆 `directoryAdapters()` / `defaultAdapters()`
+- [ ] S3 dispatcher `isPullOnly` skip（复用 ADR-023 Layer 1 机制，消息恒 pending/attempts=0）
+- [ ] S4 daemon HTTP：`POST /api/inbox`（register+pull 一次搞定）、`POST /api/register`、`GET /api/sessions` 加 `q/agent/limit` 过滤
+- [ ] S5 CLI `anyd register` / `unregister` / `list` 标注
+- [ ] S6 `src/daemon/external-notify.ts`（对方零自驱，不补这块回信到了用户不知道）
+- [ ] S7 `anyd setup sds`（默认 dry-run，写 SKILL.md + skills-state.json + AGENTS.md 标记块，可 uninstall）
+- [ ] S8 CHANGELOG ×2 + README 兼容性表 + build + 提交
+
+**关键约束（源码查证，别再重新推导）**：闪电说助手 shell 的 PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin` 且是非交互 bash（不读 .zshrc）→ 跑不了 `anyd`；沙箱 `workspace-write` 挡 `~/.anytoany` 写入但**不挡网络** → 走 curl 调 daemon；助手**零自驱**（无 cron/timer）→ 收信只能是「下次开口时取回」，不承诺秒级。

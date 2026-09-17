@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
 import { createKimiAdapter } from './adapters/kimi.js';
+import { createRegisteredAdapter } from './adapters/registered.js';
 import { createZcodeAdapter } from './adapters/zcode.js';
 import { serialize as serializeCollab, TASK_STATES } from './collab/doc.js';
 import { createCollabStore } from './collab/store.js';
@@ -14,16 +15,24 @@ import { createDb } from './mailbox/db.js';
 import { createMailbox } from './mailbox/mailbox.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
+/** Adapters that can actually RECEIVE a headless delivery (the dispatcher's map). */
 const defaultAdapters = () => [
     createClaudeAdapter(),
     createCodexAdapter(),
     createZcodeAdapter(),
     createKimiAdapter(),
 ];
+/**
+ * Everything ADDRESSABLE: the delivery adapters plus registered external agents
+ * (ADR-024). External sessions are listing-only — they have no `deliver`, so they
+ * must never enter the dispatcher's `Map<string, DeliveryAdapter>`; they receive
+ * by pulling instead (`anyd pull`, or POST /api/inbox for desktop Apps).
+ */
+const directoryAdapters = () => [...defaultAdapters(), createRegisteredAdapter()];
 const openMailbox = () => createMailbox(createDb());
 /** Resolve an @-target into a concrete session, printing candidates on failure. */
 async function resolveOrExit(target) {
-    const { sessions } = await listAllSessions(defaultAdapters());
+    const { sessions } = await listAllSessions(directoryAdapters());
     const r = resolveTarget(target, sessions);
     if (r.ok) {
         return { agent: r.session.agent, sessionId: r.session.sessionId, title: r.session.title };
@@ -93,9 +102,14 @@ program
     const port = Number.parseInt(opts.port, 10) || 7433;
     let cache = null;
     const ttl = Number.parseInt(opts.directoryTtl, 10) || 30_000;
+    const invalidateDirectory = () => {
+        cache = null;
+    };
     const localDirectory = async () => {
         if (!cache || Date.now() - cache.at > ttl) {
-            const { sessions, errors } = await listAllSessions(adapters);
+            // directoryAdapters(), not `adapters`: registered external agents must be
+            // addressable (so replies to them resolve) but must NOT be deliverable.
+            const { sessions, errors } = await listAllSessions(directoryAdapters());
             for (const e of errors)
                 console.error(`warning: ${e.agent} scan failed: ${e.error.message}`);
             cache = { at: Date.now(), sessions };
@@ -202,6 +216,7 @@ program
             directory,
             collab,
             port,
+            invalidateDirectory,
             ...(lan
                 ? {
                     peering: {
@@ -218,6 +233,7 @@ program
     const { startDispatcher } = await import('./daemon/dispatcher.js');
     const { isMonitored } = await import('./daemon/monitor.js');
     const { isSessionLive } = await import('./daemon/session-liveness.js');
+    const { isRegisteredSession, listRegistered } = await import('./registry/external.js');
     const running = startDispatcher({
         mailbox,
         adapters: new Map(adapters.map((a) => [a.agent, a])),
@@ -225,6 +241,7 @@ program
         collab,
         isMonitored: (sid) => isMonitored(sid),
         isSessionLive: (sid) => isSessionLive(sid),
+        isPullOnly: (sid) => isRegisteredSession(sid),
         ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
         onEvent: (e) => {
             const m = e.message;
@@ -237,6 +254,17 @@ program
             }
         },
     }, { intervalMs: Number.parseInt(opts.interval, 10) || 1000 });
+    // External agents are pull-only, so their mail never emits a 'delivered'
+    // event and the notifier above never fires for them. A desktop App like 闪电说
+    // also has no self-drive — nothing wakes it until the user speaks. So this
+    // is the only signal the operator gets that a reply arrived (ADR-024).
+    const { startExternalInboxNotifier } = await import('./daemon/external-notify.js');
+    const externalNotifier = startExternalInboxNotifier({
+        mailbox,
+        listRegistered: () => listRegistered(),
+        notifier,
+        onNotify: (session, messageId) => console.log(`[${new Date().toISOString()}] external-inbox ${messageId.slice(0, 8)} waiting for @${session.agent}:${session.title} — notified`),
+    });
     // Self-driving collaboration loop (ADR-020): the daemon is the clock that
     // keeps execute-tagged tasks moving without the operator having to poke them.
     const { startAutoRun } = await import('./daemon/autorun.js');
@@ -260,6 +288,7 @@ program
         console.log('anyd daemon stopping');
         running.stop();
         autorun.stop();
+        externalNotifier.stop();
         lan?.registry.stop();
         web?.close();
         process.exit(0);
@@ -327,13 +356,15 @@ program
     .description('Deliver all queued messages once, then exit (no daemon needed)')
     .action(async () => {
     const adapters = defaultAdapters();
-    const { sessions } = await listAllSessions(adapters);
+    const { sessions } = await listAllSessions(directoryAdapters());
+    const { isRegisteredSession } = await import('./registry/external.js');
     const { dispatchOnce } = await import('./daemon/dispatcher.js');
     const opts = {
         mailbox: openMailbox(),
         adapters: new Map(adapters.map((a) => [a.agent, a])),
         directory: async () => sessions,
         collab: createCollabStore(),
+        isPullOnly: (sid) => isRegisteredSession(sid),
         onEvent: (e) => console.log(`${e.kind} ${e.message.id.slice(0, 8)}${e.detail ? ` — ${e.detail}` : ''}`),
     };
     let n = 0;
@@ -471,17 +502,24 @@ program
     .option('--json', 'output as JSON')
     .option('--limit <n>', 'max sessions to show (0 = all)', '20')
     .action(async (opts) => {
-    const { sessions, errors } = await listAllSessions(defaultAdapters());
+    const { sessions, errors } = await listAllSessions(directoryAdapters());
     const limit = Number.parseInt(opts.limit, 10) || 0;
     const shown = limit > 0 ? sessions.slice(0, limit) : sessions;
     if (opts.json) {
         console.log(JSON.stringify({ sessions: shown, total: sessions.length, errors: errors.map((e) => ({ agent: e.agent, message: e.error.message })) }, null, 2));
         return;
     }
+    const { isRegisteredSession } = await import('./registry/external.js');
     for (const s of shown) {
         const id = s.sessionId.slice(0, 8);
         const prefix = s.device ? `@${s.device}/` : '@';
-        console.log(`${prefix}${s.agent}:${s.title}  [${id}]  (${formatRelativeTime(s.lastActiveAt)}, ${shortenHome(s.cwd)})`);
+        // External agents receive by pulling, never by headless resume (ADR-024).
+        const notes = [
+            formatRelativeTime(s.lastActiveAt),
+            ...(s.cwd ? [shortenHome(s.cwd)] : []),
+            ...(!s.device && isRegisteredSession(s.sessionId) ? ['external, pull-only'] : []),
+        ];
+        console.log(`${prefix}${s.agent}:${s.title}  [${id}]  (${notes.join(', ')})`);
     }
     if (sessions.length > shown.length) {
         console.log(`… ${sessions.length - shown.length} more (use --limit 0 for all)`);
@@ -489,6 +527,90 @@ program
     for (const e of errors) {
         console.error(`warning: ${e.agent} scan failed: ${e.error.message}`);
     }
+});
+program
+    .command('register')
+    .description('Register an external agent session (a desktop App assistant) so it becomes addressable')
+    .requiredOption('--agent <name>', 'agent name, e.g. sds (lowercase, not a built-in name)')
+    .requiredOption('--session <id>', 'the session id the app reports for itself')
+    .option('--title <title>', 'human-readable name used for @-target matching')
+    .option('--cwd <dir>', 'project directory, if the app has one')
+    .action((opts) => {
+    void (async () => {
+        const { register } = await import('./registry/external.js');
+        try {
+            const s = register({
+                agent: opts.agent,
+                sessionId: opts.session,
+                ...(opts.title ? { title: opts.title } : {}),
+                ...(opts.cwd ? { cwd: opts.cwd } : {}),
+            });
+            console.log(`registered @${s.agent}:${s.title}  [${s.sessionId}]`);
+            console.log('it is pull-only — it receives via `anyd pull` or POST /api/inbox, never a headless resume');
+        }
+        catch (e) {
+            console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+            process.exitCode = 1;
+        }
+    })();
+});
+program
+    .command('unregister')
+    .description('Forget an external agent session')
+    .requiredOption('--agent <name>', 'agent name')
+    .requiredOption('--session <id>', 'session id')
+    .action((opts) => {
+    void (async () => {
+        const { unregister } = await import('./registry/external.js');
+        unregister(opts.agent, opts.session);
+        console.log(`unregistered @${opts.agent}:${opts.session}`);
+    })();
+});
+program
+    .command('connect')
+    .description('Wire a desktop App up to anytoany (currently: sds = 闪电说)')
+    .argument('<app>', 'which app to connect — "sds"')
+    .option('--apply', 'actually write the files (default: preview only)')
+    .option('--uninstall', 'remove what this command installed')
+    .option('--app-home <dir>', 'override the app data directory')
+    .option('--port <port>', 'daemon port the app should call', '7433')
+    .action((app, opts) => {
+    void (async () => {
+        if (app !== 'sds') {
+            console.error(`error: unknown app "${app}" — supported: sds (闪电说)`);
+            process.exitCode = 1;
+            return;
+        }
+        const { resolveSdsPaths, planSdsInstall, planSdsUninstall, applyChanges } = await import('./integrations/sds.js');
+        const paths = resolveSdsPaths(opts.appHome ? { appHome: opts.appHome } : {});
+        const port = Number.parseInt(opts.port, 10) || 7433;
+        let changes;
+        try {
+            changes = opts.uninstall ? planSdsUninstall(paths) : planSdsInstall(paths, { port });
+        }
+        catch (e) {
+            console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+            process.exitCode = 1;
+            return;
+        }
+        console.log(`闪电说 data dir: ${shortenHome(paths.appHome)}`);
+        console.log(`workspace:      ${shortenHome(paths.workspace)}`);
+        console.log('');
+        for (const c of changes) {
+            console.log(`  ${c.action.padEnd(9)} ${shortenHome(c.path)}`);
+            console.log(`            ↳ ${c.note}`);
+        }
+        console.log('');
+        if (!opts.apply) {
+            console.log('preview only — nothing was written. Re-run with --apply to write these changes.');
+            return;
+        }
+        applyChanges(changes);
+        console.log(opts.uninstall ? 'removed.' : 'installed.');
+        if (!opts.uninstall) {
+            console.log('Restart 闪电说 (or just start a new message) and say 「有我的消息吗」 to test it.');
+        }
+    })();
 });
 program
     .command('send')
@@ -576,7 +698,7 @@ program
     }
     else {
         const cwd = opts.cwd ?? process.cwd();
-        const { sessions } = await listAllSessions(defaultAdapters());
+        const { sessions } = await listAllSessions(directoryAdapters());
         const matches = sessions.filter((s) => s.cwd === cwd);
         if (matches.length === 0) {
             if (!opts.quiet) {
@@ -636,7 +758,7 @@ program
     }
     else {
         const cwd = opts.cwd ?? process.cwd();
-        const { sessions } = await listAllSessions(defaultAdapters());
+        const { sessions } = await listAllSessions(directoryAdapters());
         const matches = sessions.filter((s) => s.cwd === cwd);
         if (matches.length === 0) {
             console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);

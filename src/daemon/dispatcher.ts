@@ -38,6 +38,11 @@ export interface DispatcherOptions {
    *  fails and retries — re-injecting duplicate turns into the session the operator
    *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023). */
   isSessionLive?: (sessionId: string) => boolean;
+  /** A registered EXTERNAL agent session (ADR-024) — a desktop App's assistant
+   *  such as 闪电说, which anytoany has no delivery adapter for. It pulls its own
+   *  mail over the daemon's HTTP inbox, so its messages must stay pending rather
+   *  than be claimed and dead-lettered for want of an adapter. */
+  isPullOnly?: (sessionId: string) => boolean;
 }
 
 const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: string): string =>
@@ -46,13 +51,17 @@ const label = (s: SessionInfo | undefined, fallbackAgent: string, fallbackId: st
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
   // skip local targets that surface messages themselves — a live-monitoring session
-  // (pulls via `anyd monitor`) or an interactively-open Claude session (pulls via its
-  // prompt hook). Resume-delivering to either just injects invisible/duplicate turns
-  // and false-fails (ADR-023); leave the message pending for them to pull.
+  // (pulls via `anyd monitor`), an interactively-open Claude session (pulls via its
+  // prompt hook), or a registered external agent (pulls over HTTP). Resume-delivering
+  // to the first two injects invisible/duplicate turns and false-fails (ADR-023); the
+  // third has no headless channel at all (ADR-024). Leave the message pending.
   const skipLocal = (toSession: string, toDevice: string | null): boolean =>
-    !toDevice && ((opts.isMonitored?.(toSession) ?? false) || (opts.isSessionLive?.(toSession) ?? false));
+    !toDevice &&
+    ((opts.isMonitored?.(toSession) ?? false) ||
+      (opts.isSessionLive?.(toSession) ?? false) ||
+      (opts.isPullOnly?.(toSession) ?? false));
   const claimed = opts.mailbox.claimNextPending(
-    opts.isMonitored || opts.isSessionLive ? { skip: skipLocal } : undefined,
+    opts.isMonitored || opts.isSessionLive || opts.isPullOnly ? { skip: skipLocal } : undefined,
   );
   if (!claimed) return false;
   const emit = (event: DispatchEvent) => opts.onEvent?.(event);

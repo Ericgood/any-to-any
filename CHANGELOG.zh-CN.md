@@ -1,6 +1,19 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-09-17 — 桌面 App 也能当一等 agent：闪电说（`sds`）注册式接入 + 拉取型收件（ADR-024）
+
+- 需求：用户要把**闪电说助手当总驾驶舱**，用它去调 Claude Code / Codex。它已经会自己敲命令发消息，但 anytoany 根本不认识它——只能冒用 `@user:cli`，**别人回的信没地址可去**。
+- 调研口径：不猜装机产物，直接拉 GitHub 最新分支 `codex/dsh-assistant-ui-v0.8`（= 装机版 0.7.9-beta.1.11）逐条查源码。**查出的三条硬约束直接推翻了原定的「让助手跑 `anyd` 命令」方案**：① 助手 shell 继承 App 的最小 GUI PATH（`/usr/bin:/bin:/usr/sbin:/sbin`）、非交互 bash 且 `$SHELL` 被剥离（不读 `.zshrc`）——`anyd` 压根摸不到（本机实测它在 `~/.npm-global/bin`，连 homebrew 路径都不是）；② 沙箱 `workspace-write` 挡住对 `~/.anytoany` 的写入（会弹审批），但**读文件/网络/进程可见性完全不限**；③ 助手**零自驱**——没有 cron、没有 timer、没有后台任务，不等用户开口它绝不动。
+- **结论：走 `curl` 调本机 daemon，不走 CLI。** 三条约束一次全绕开，而且**对用户有没有把权限调到 Full access 免疫**——两种档位都能跑，不用教用户改设置。
+- 通用抽象「**外部 agent**」（不为闪电说做特例，任何没有投递适配器的 GUI agent 都能接）：**注册表** `~/.anytoany/registered/`（一 session 一文件，照抄 monitor.ts；TTL 7 天；`user`/`claude`/`codex`/`kimi`/`zcode` 为保留名）→ **目录可见**（`@sds:…` 可解析、`anyd list` 标 `external, pull-only`）→ **拉取型投递**（dispatcher 的 skip 从 `isMonitored`/`isSessionLive` 扩一格到 `isPullOnly`，消息恒 `pending`、`attempts=0`，不再白白重试三次再死信）。
+- 新接口：`POST /api/inbox`（注册+续期+收信一次搞定，内部复用 `collectInbox()`，ADR-022 的死信恢复白拿）、`POST /api/register`、`GET /api/sessions` 加 `q`/`agent`/`limit` 过滤（实测不过滤是 4338 条 / 865KB / 5 秒，塞进 agent 的一轮里是灾难）。
+- **补了通知**：拉取型消息永不被 claim → 不触发 `delivered` 事件 → 原有通知器不响；而 App 自己又醒不过来。所以这条 macOS 通知是用户唯一能知道「回信到了」的信号。
+- `anyd connect sds`：默认只预览，`--apply` 才写，`--uninstall` 可回滚。写三样进 App 自己的数据目录——SKILL.md、技能开关（**手动放进去的技能默认是禁用的**，不写这个键会静默失效）、`AGENTS.md` 的标记块（块外内容逐字保留）。实测安装后 `skills-state.json` 10 键→11 键，只多我们这一个，其余零改动。
+- **真机验证全过**：模拟助手的精确环境（`env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin` + 非交互 bash）确认 `anyd` 确实找不到、而 `curl` 通；Claude Code 发 `@sds` → 立刻解析 → 消息在活 daemon 下跑满 6 秒仍是 `pending`/`attempts=0` → macOS 通知按时弹（日志有据）→ 助手环境里拉回 count=1、发件人正确 → 二次拉取为空。
+- **两个真机才暴露的 bug，已修**：① 心跳式重复注册若不带 title 会把已有 title 冲掉（日志里看到 `@sds:sds` 才发现）——改成只覆盖真正传了的字段；② daemon 的目录缓存 30 秒，**刚注册的 agent 有半分钟寻址不到**，第一条回信会莫名 `not_found`——注册成功即让缓存失效。
+- **不做的（查证后明确放弃）**：推送注入——remote RPC 端口随机、token 只在 stdout 出现一次从不落盘；ACP 那条路根本没有 `dsh` 命令，且同 DSH_HOME 会被 App 自己的 stale-runtime 清理器反杀。**口径也说实话**：发是即时的，收发生在用户下次开口时，不承诺秒级。
+
 ## 2026-09-05 — 别往活会话 headless resume：假阴性让「Codex 消息传不过去」（ADR-023）
 
 - 真实事故（盯着实时看）：codex 一直往一个 Claude 会话（MuselyStudio 开发）派活，每条都显示 dead/failed，「Codex 的消息根本传不过去」。但 grep 目标 transcript 反证：那条 dead 消息 id 出现 **10 次**——注入的 turn 物理上早落地了（还被 3 次重试重复注入）。换第二个小会话（762KB）同样失败、stderr 还是空的。共同点不是 transcript 大小、也不是某个钩子，而是：**两个目标会话当时都正被交互进程开着。**

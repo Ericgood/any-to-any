@@ -19,6 +19,12 @@ export interface ConsoleServerOptions {
   collab?: CollabStore;
   /** Poll interval for external mailbox writers (CLI in another process). */
   changePollMs?: number;
+  /** Root for the external-agent registry (ADR-024); defaults to ~. Injectable for tests. */
+  registryHome?: string;
+  /** Drop the caller's directory cache. Called when an external agent registers,
+   *  so it is addressable immediately instead of after the cache TTL — otherwise
+   *  the first reply to a just-registered agent fails with a confusing not_found. */
+  invalidateDirectory?: () => void;
   /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
   peering?: {
     selfDevice: string;
@@ -62,6 +68,28 @@ function isSessionRef(v: unknown): v is SessionRef {
     typeof (v as SessionRef).agent === 'string' &&
     typeof (v as SessionRef).sessionId === 'string'
   );
+}
+
+/**
+ * Optional narrowing for GET /api/sessions. The unfiltered directory is 4000+
+ * sessions (~850KB) on a real machine — fine for the console, unusable inside an
+ * agent's turn. With no query params the response is unchanged.
+ */
+function filterSessions(sessions: SessionInfo[], params: URLSearchParams): SessionInfo[] {
+  const agent = params.get('agent');
+  const q = params.get('q');
+  const rawLimit = Number.parseInt(params.get('limit') ?? '', 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : null;
+
+  let out = sessions;
+  if (agent) out = out.filter((s) => s.agent === agent.toLowerCase());
+  if (q) {
+    const needle = q.toLowerCase();
+    out = out.filter(
+      (s) => s.title.toLowerCase().includes(needle) || s.cwd.toLowerCase().includes(needle),
+    );
+  }
+  return limit === null ? out : out.slice(0, limit);
 }
 
 /** Local-only web console: REST + SSE + static UI, bound to 127.0.0.1. */
@@ -187,7 +215,69 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
       return;
     }
     if (req.method === 'GET' && path === '/api/sessions') {
-      json(res, 200, { sessions: await opts.directory() });
+      json(res, 200, { sessions: filterSessions(await opts.directory(), url.searchParams) });
+      return;
+    }
+    // ADR-024: external agents (desktop Apps like 闪电说) cannot run `anyd` — a
+    // minimal PATH plus a sandbox that blocks writes to ~/.anytoany. They register
+    // and pull over loopback HTTP instead, which the sandbox does not restrict.
+    if (req.method === 'POST' && (path === '/api/register' || path === '/api/inbox')) {
+      const body = (await readBody(req)) as {
+        agent?: string;
+        sessionId?: string;
+        title?: string;
+        cwd?: string;
+        register?: boolean;
+      };
+      const isInbox = path === '/api/inbox';
+      if (typeof body.sessionId !== 'string' || !body.sessionId.trim()) {
+        json(res, 400, { error: 'expected {agent, sessionId, title?, cwd?}' });
+        return;
+      }
+      const { register, listRegistered } = await import('../registry/external.js');
+      const homeOpt = opts.registryHome ? { home: opts.registryHome } : {};
+
+      // /api/register always registers; /api/inbox only when asked — so one call
+      // can register, refresh lastSeenAt and collect mail together.
+      if (!isInbox || body.register) {
+        if (typeof body.agent !== 'string') {
+          json(res, 400, { error: 'expected {agent, sessionId, title?, cwd?}' });
+          return;
+        }
+        let session;
+        try {
+          session = register(
+            {
+              agent: body.agent,
+              sessionId: body.sessionId,
+              ...(body.title ? { title: body.title } : {}),
+              ...(body.cwd ? { cwd: body.cwd } : {}),
+            },
+            homeOpt,
+          );
+        } catch (e) {
+          json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+          return;
+        }
+        opts.invalidateDirectory?.();
+        if (!isInbox) {
+          broadcast();
+          json(res, 201, { session, registered: listRegistered(homeOpt).length });
+          return;
+        }
+      }
+
+      // Reuses the pull-hook collector, so external agents inherit dead-letter
+      // recovery (ADR-022) for free. `text` is render-ready for the agent to read out.
+      const { collectInbox } = await import('../hooks/prompt-hook.js');
+      const messages = opts.mailbox.inbox({ toSession: body.sessionId, all: true });
+      const before = new Set(messages.filter((m) => m.status === 'delivered').map((m) => m.id));
+      const text = collectInbox(opts.mailbox, body.sessionId, homeOpt);
+      const collected = opts.mailbox
+        .inbox({ toSession: body.sessionId, all: true })
+        .filter((m) => m.status === 'delivered' && !before.has(m.id));
+      broadcast();
+      json(res, 201, { count: collected.length, text, messages: collected });
       return;
     }
     if (req.method === 'GET' && path === '/api/peers') {

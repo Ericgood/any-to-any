@@ -41,6 +41,11 @@ export interface DispatcherOptions {
      *  fails and retries — re-injecting duplicate turns into the session the operator
      *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023). */
     isSessionLive?: (sessionId: string) => boolean;
+    /** A registered EXTERNAL agent session (ADR-024) — a desktop App's assistant
+     *  such as 闪电说, which anytoany has no delivery adapter for. It pulls its own
+     *  mail over the daemon's HTTP inbox, so its messages must stay pending rather
+     *  than be claimed and dead-lettered for want of an adapter. */
+    isPullOnly?: (sessionId: string) => boolean;
 }
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export declare function dispatchOnce(opts: DispatcherOptions): Promise<boolean>;

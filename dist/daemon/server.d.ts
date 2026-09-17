@@ -10,6 +10,12 @@ export interface ConsoleServerOptions {
     collab?: CollabStore;
     /** Poll interval for external mailbox writers (CLI in another process). */
     changePollMs?: number;
+    /** Root for the external-agent registry (ADR-024); defaults to ~. Injectable for tests. */
+    registryHome?: string;
+    /** Drop the caller's directory cache. Called when an external agent registers,
+     *  so it is addressable immediately instead of after the cache TTL — otherwise
+     *  the first reply to a just-registered agent fails with a confusing not_found. */
+    invalidateDirectory?: () => void;
     /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
     peering?: {
         selfDevice: string;

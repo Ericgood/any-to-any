@@ -4,11 +4,15 @@ const label = (s, fallbackAgent, fallbackId) => s ? `@${s.agent}:${s.title}` : `
 /** Claim and deliver a single message. Returns false when nothing was pending. */
 export async function dispatchOnce(opts) {
     // skip local targets that surface messages themselves — a live-monitoring session
-    // (pulls via `anyd monitor`) or an interactively-open Claude session (pulls via its
-    // prompt hook). Resume-delivering to either just injects invisible/duplicate turns
-    // and false-fails (ADR-023); leave the message pending for them to pull.
-    const skipLocal = (toSession, toDevice) => !toDevice && ((opts.isMonitored?.(toSession) ?? false) || (opts.isSessionLive?.(toSession) ?? false));
-    const claimed = opts.mailbox.claimNextPending(opts.isMonitored || opts.isSessionLive ? { skip: skipLocal } : undefined);
+    // (pulls via `anyd monitor`), an interactively-open Claude session (pulls via its
+    // prompt hook), or a registered external agent (pulls over HTTP). Resume-delivering
+    // to the first two injects invisible/duplicate turns and false-fails (ADR-023); the
+    // third has no headless channel at all (ADR-024). Leave the message pending.
+    const skipLocal = (toSession, toDevice) => !toDevice &&
+        ((opts.isMonitored?.(toSession) ?? false) ||
+            (opts.isSessionLive?.(toSession) ?? false) ||
+            (opts.isPullOnly?.(toSession) ?? false));
+    const claimed = opts.mailbox.claimNextPending(opts.isMonitored || opts.isSessionLive || opts.isPullOnly ? { skip: skipLocal } : undefined);
     if (!claimed)
         return false;
     const emit = (event) => opts.onEvent?.(event);

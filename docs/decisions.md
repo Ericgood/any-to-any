@@ -314,3 +314,35 @@ Codex 侧不分层（exec resume 已全验证）。
 **验证(全部实测)**:① TDD 红→绿——`adapter-deliver.test.ts`(SessionEnd/Stop 判 delivered、真实 resume 错仍失败、空 stdout 不硬吞、OAuth 过期→非重试 auth 错)、`session-liveness.test.ts`(纯解析:认交互 `--resume=`、不误伤 `-p --resume`、多会话、空输入)、`dispatcher.test.ts`(活会话→跳过→留 pending);**全量 276 全绿**。② 对**编译后 dist** 冒烟:退出码修 4/4 + `isSessionLive` 对真实 `ps` 认出一号 43ac9165=true、随机 uuid=false。③ **真·daemon 端到端**:往活会话(本会话 c6b11b58)插 pending 探针 → daemon **留 pending、0 尝试、不 resume** → 清理无残留。④ **线上实证**:重启后 codex→一号(活)两条 `c9928424`/`4bf240a8` = **delivered、attempts=0、无 error**(走 pull,非 resume;对比修前 194b9bb4 attempts=3/transcript 重复 10 次),即便当时 CLI OAuth 已过期仍送达。**daemon 已重启**(pid 828→35653→42984)——本修复在 daemon 投递路径,不重启不生效(区别于 ADR-022 在每次新起的 hook 进程)。
 
 **Backlog**:① `session-end.js` 给 transcript 解析封顶(别啃 495MB);② 查 musely 会话为何胀到 495MB;③ `isSessionLive` 目前靠 `ps`(macOS/Linux),Windows 回退原路径——后续若上 Windows 需另找信号;④ Claude CLI headless OAuth 过期与桌面 App 登录不同步,属上游,anytoany 只能报清楚 + 靠 Layer 1 绕开。
+
+## ADR-024 外部 agent 接入：注册式身份 + 拉取型投递 + 走 HTTP 不走 CLI（2026-09-17，闪电说桌面端源码调研 + 用户拍板）
+
+**背景 / 诉求**：用户希望把桌面 App **闪电说**（Shandianshuo，DeepSeek-Harness SDK 驱动的 AI 助手）当成总驾驶舱，用它去调 Claude Code / Codex 等所有 agent。它今天已经会自己敲 `anyd send`，但 anytoany 根本不认识它——`anyd list` 里只有 claude/codex/zcode/kimi，于是它只能冒用 `@user:cli` 当发件人，**别人回的信没有地址可去**。
+
+**调研口径**：不看装机产物猜，直接拉 GitHub 最新分支 `codex/dsh-assistant-ui-v0.8`（= 装机版 0.7.9-beta.1.11）逐条查源码。查出的三条硬约束**推翻了原定的「让助手跑 `anyd` 命令」方案**：
+
+1. **PATH 陷阱**：助手 shell 的环境由 `env_sanitizer.rs:89-93` 的 `sanitize_shell_env` 产出，它**只做减法、从不添加或重写 PATH**，直接继承 Finder/launchd 给 App 的 `/usr/bin:/bin:/usr/sbin:/sbin`。同仓库 `codex_runtime.rs:1980-1989` 专门给 Codex CLI 补了 `/opt/homebrew/bin`、`/usr/local/bin`，测试注释 `codex_runtime.rs:5497` 直说「GUI PATH omits /usr/local/bin」——**团队知道这个坑，但只给 Codex 修了，没给 DSH 修**。而且 `SHELL` 在剥离名单里（`env_sanitizer.rs:60`），跑的是非交互 `bash`，**不读用户 `.zshrc`**。本机实测 `anyd` 在 `~/.npm-global/bin/anyd`——既不在 PATH，也不是 homebrew 路径，写死绝对路径同样不可移植。
+2. **沙箱**：`cordis.patch.yml:106-113` 设 `sandbox-policy: workspace-write` + `approval: ask`。语义见产品自己的设计文档 `docs/proposals/assistant-shell-sandbox-and-approval.md:9-19`：**只管文件写入边界，不限制文件读取、网络访问和进程可见性**。`anyd send/pull` 要写 `~/.anytoany/mailbox.db`（workspace 之外）→ 触发升级审批 → 无人值守泡汤。
+3. **零自驱**：全仓库唯一的循环定时器是 `dsh_runtime.rs:1065` 的 500ms 进程存活探测，skills 的 `watchFile` 只失效缓存。**没有 cron、没有后台任务、没有轮询接口**——助手 100% 等用户开口才动。
+
+**决策一：走 HTTP 调本机 daemon，不走 `anyd` 命令。** `curl` 在 `/usr/bin/curl`（最小 PATH 里一定有），网络**不受沙箱管**，daemon 在沙箱外持有数据库。这个设计对「用户有没有把权限切到 `danger-full-access`」**免疫**——两种档位都能跑，不必教用户改设置。附带收益：不吃 node 启动开销、不受 CLI 版本错位影响（见 ADR-023 附录的 OAuth 事故）。
+
+**决策二：抽象成「外部 agent」，不为闪电说做特例。** 任何 anytoany 没有投递适配器的 GUI/App agent 都走同一条路，闪电说只是第一个用户。三层：
+
+- **注册表** `~/.anytoany/registered/<agent>-<safeId>.json`，一 session 一文件，照抄 `src/daemon/monitor.ts` 的心跳文件模式。TTL 7 天（注册是长期身份，不是 monitor 那种 10 秒活跃心跳）；保留名 `user`/`claude`/`codex`/`kimi`/`zcode` 拒绝注册。
+- **目录可见**：`src/adapters/registered.ts` 是个纯 `AgentAdapter`（**只有 `listSessions()`，没有 `deliver`**），并进 session 目录后 `@sds:xxx` 可解析、`anyd list` 看得见、回信有地址。它**不能**进 dispatcher 的 `Map<string, DeliveryAdapter>`，故 CLI 侧拆出 `directoryAdapters()` 与 `defaultAdapters()` 两个入口。
+- **拉取型投递**：dispatcher 的 skip 从 `isMonitored || isSessionLive` 扩一格到 `|| isPullOnly`，消息**停在 pending**，由对方主动来取。**完全复用 ADR-023 Layer 1 的机制**——不新造概念。
+
+**决策三：补「新消息通知」，因为对方零自驱。** 拉取型 session 的消息永不被 claim → 不触发 `onEvent` → 现有通知器（只在 `delivered` 时响，`cli.ts:257`）**不会响**，回信到了用户完全不知道。新增 `src/daemon/external-notify.ts` 轮询注册 session 的 pending 并发 macOS 通知；启动时先把存量 pending 塞进已通知集合，避免重启重播积压。
+
+**为什么不做推送注入（往运行中的助手塞消息）**：逐条查证后五条通道全废——① remote RPC `ws://127.0.0.1:<port>/api/remote.mux` 的端口是 `--port 0` 随机分配（`dsh_runtime.rs:1685`），token 只在 stdout 出现一行、被 Rust 解析后**从不落盘**（`:2928-2950`），日志只记端口不记 token（`:1908`），ready 后 stdout 直接丢弃（`:1906`）——外部进程没有合法拿到凭据的途径，硬走只能扫端口+偷 WKWebView cookie，那是攻击行为；② ACP `dsh --profile acp` 根本**没有 `dsh` 这个命令**（可执行文件是单文件二进制 `deepseek-harness-sdk-runtime-macos-arm64`，`manifest.json:15`），且同 DSH_HOME 会被 `reap_stale_runtime`（`:2086-2098`）反杀；③ headless profile 只能开新 session，而 UI 会强制把会话拉回固定那一个（`client.js:499-501`）；④ Inbox / SubagentRuntime 是 DSH 二进制内部机制，产品侧零引用；⑤ **不存在类 Claude Code hooks 的钩子机制**。
+
+**为什么不做原生 session 扫描适配器**：助手**只有一个固定 session**且被强制钉死（`client.js:499-501`），**标题永远为空**（`cordis.patch.yml:5-6` 显式 `session-title-llm: disabled`，注释写明「产品只暴露一个固定根 Session，不需要自动标题」），真实磁盘 id 还不等于环境变量给的基 id——要过 `$DSH_HOME/product-migrations/<base>-workspace-active.json` 二次解析（`history.js:143,216`）。注册式更简单、更稳、且通用。
+
+**「零自驱」对产品体验的真实影响（不回避）**：**发是即时的**（用户开口 → 立刻投递），**收发生在用户下次开口时**。文档口径必须写成「消息在助手下一回合被取回」，**不承诺秒级**。但这与真实用法吻合：用户说「让 Codex 去改 X」→ 立刻投出去 → 过一会回来问「怎么样了」→ 助手取回并汇报。macOS 通知补上「你不知道有信」的缺口。
+
+**接入侧三件套**（`anyd setup sds`，默认 dry-run，`--apply` 才写，`--uninstall` 可回滚）：① `<workspace>/library/skills/anytoany/SKILL.md`——注意**目录名才是权威 name**（`storage.rs:200-203`）；② `<APP_HOME>/skills/skills-state.json` 写 `"voice_assistant/anytoany": {enabled:true}`——因为**用户手动丢进去的 SKILL.md 默认是禁用的**（`storage.rs:253-256`），不写这个会静默失效；③ `<workspace>/AGENTS.md` 追加 `<!-- anytoany:begin/end -->` 标记块——**这比 skill 更可靠**：AGENTS.md 无条件进每轮上下文，skill 要靠模型判断相关性才加载；且 CN 版产品**永不写这个文件**（`assistant_workspace.rs:28-34` 的 intl 门控），是纯用户领地。workspace 路径不可硬编码，须读 `<APP_HOME>/migrations/workspace-location-v1.json` 的 `workspacePath` 覆盖（`data_paths.rs:348-368`）。
+
+**命名**：agent 名 **`sds`**（用户拍板）——三字母好打，与 codex/kimi/zcode 短名风格一致，对外开源也不暴露中文产品名。
+
+**Backlog**：① `danger-full-access` 档下 shell 是否真的完全免审批，在 DSH 闭源二进制内、源码无法证明，留待实测；② 其他 GUI agent（如 Cursor / Windsurf 桌面）可直接复用本 ADR 的外部 agent 通道；③ `GET /api/sessions` 无过滤时实测 865KB/4337 条/5 秒，本次加了 `q/agent/limit` 过滤，后续可考虑给目录扫描本身做增量。

@@ -112,8 +112,9 @@ The target session receives it, does the work, replies — and the reply lands b
 ```
 
 - **One skill, every agent** — follows the open [Agent Skills](https://code.claude.com/docs/en/skills) standard (`SKILL.md`), understood by Claude Code, Codex, Cursor, Gemini CLI and more. Agents interact through plain `anyd` shell commands: no MCP setup required.
-- **A tiny daemon (`anyd`)** — discovers every addressable session on the machine (by scanning each CLI's own session store), queues messages in a durable SQLite mailbox (ack / retry / dead-letter), and delivers them through each vendor's **official headless resume channel** (`claude -p --resume`, `codex exec resume`, `kimi -S … -p`, ZCode's bundled engine).
+- **A tiny daemon (`anyd`)** — discovers every addressable session on the machine (by scanning each CLI's own session store), queues messages in a durable SQLite mailbox (ack / retry / dead-letter), and delivers them through each vendor's **official headless resume channel** (`claude -p --resume`, `codex exec resume`, `kimi -S … -p`, ZCode's bundled engine) — or holds them for a registered external agent to pull.
 - **LAN peering, zero services** — daemons find each other via mDNS/Bonjour, pair with a shared token, and relay messages over direct LAN HTTP. Different token → HTTP 401. Nothing ever leaves your network.
+- **Desktop-App assistants too** — an agent living inside a GUI app has no headless CLI to resume into, so it *registers* itself and *pulls* its own mail over the daemon's loopback HTTP instead. `anyd connect sds` wires up [闪电说](https://github.com/shandianshuo/shandianshuo-desktop)'s assistant this way, letting you drive Claude Code and Codex from it. Sending is instant; replies arrive on its next turn (the app can't wake itself, so anytoany posts an OS notification when mail is waiting).
 - **A web console** — an IM-style view (`http://127.0.0.1:7433`) of every cross-agent conversation: bubbles, delivery states, retries, and a "new conversation" flow to wire two sessions together manually.
 
 ## Everyday commands
@@ -126,6 +127,8 @@ anyd inbox --take          # pull & ack waiting messages
 anyd pull                  # reload THIS session's messages from disk (Codex / Kimi / ZCode)
 anyd peers                 # LAN devices and pairing state
 anyd doctor                # environment self-check
+anyd register --agent sds --session <id>   # make a GUI-app agent addressable
+anyd connect sds           # wire 闪电说's assistant up (preview; --apply to write)
 anyd status / stop         # daemon state / stop
 ```
 
