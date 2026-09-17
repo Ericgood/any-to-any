@@ -10,7 +10,7 @@
 ## 文档规范（用户定，必须遵守）
 
 1. **先文档后动作**：每个重大动作（新阶段、新模块、架构调整、对外发布）动手前，先在 `docs/` 写清产品/技术文档；已有文档则先更新。
-2. **docs/ 目录分区**：`docs/research/` 调研 · `docs/specs/` 分阶段技术规格 · `docs/analysis.md` 架构分析 · `docs/decisions.md` 决策记录（ADR，编号递增）。
+2. **docs/ 目录分区**：`docs/research/` 调研 · `docs/specs/` 分阶段技术规格 · `docs/guides/` 面向用户的上手指南（可直接转发给外部用户，中文为主）· `docs/analysis.md` 架构分析 · `docs/decisions.md` 决策记录（ADR，编号递增）。
 3. **CHANGELOG.md**（仓库根，Markdown）：每次重大变更追加一条，格式 `## YYYY-MM-DD — 标题` + 要点列表。新条目加在最上方。
 4. **时间戳**：每份 docs 文档头部带 `> 创建：YYYY-MM-DD · 最后更新：YYYY-MM-DD`，改动时更新后者。
 5. **每轮工作收尾必须 commit + push 到 GitHub**——保证换设备、换 agent 都能从仓库完整跟进进度。commit 信息用 conventional commits（中文描述可）。

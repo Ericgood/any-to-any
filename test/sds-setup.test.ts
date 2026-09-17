@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyChanges,
+  detectSds,
   planSdsInstall,
   planSdsUninstall,
   removeMarkedBlock,
@@ -195,5 +196,41 @@ describe('planSdsUninstall', () => {
     const changes = planSdsUninstall(paths());
     expect(changes.every((c) => c.action === 'unchanged')).toBe(true);
     expect(() => applyChanges(changes)).not.toThrow();
+  });
+});
+
+describe('detectSds — for `anyd setup` discovery and `anyd doctor`', () => {
+  it('reports the app as absent when the data dir does not exist', () => {
+    const d = detectSds(resolveSdsPaths({ appHome: join(appHome, 'nope') }));
+    expect(d).toMatchObject({ appInstalled: false, skillInstalled: false, skillEnabled: false });
+  });
+
+  it('reports the app present but not yet connected', () => {
+    expect(detectSds(paths())).toMatchObject({
+      appInstalled: true,
+      skillInstalled: false,
+      skillEnabled: false,
+    });
+  });
+
+  it('reports fully connected after an install', () => {
+    applyChanges(install());
+    expect(detectSds(paths())).toMatchObject({
+      appInstalled: true,
+      skillInstalled: true,
+      skillEnabled: true,
+    });
+  });
+
+  // storage.rs:253-256 — the file being present is not enough; the toggle decides
+  // whether DSH ever loads it. A user who disabled it in the UI must show as off.
+  it('separates "file is there" from "actually enabled"', () => {
+    const p = paths();
+    applyChanges(install());
+    const state = JSON.parse(readFileSync(p.stateFile, 'utf8')) as Record<string, { enabled: boolean }>;
+    state['voice_assistant/anytoany'] = { enabled: false, created_at: 1 };
+    writeFileSync(p.stateFile, JSON.stringify(state), 'utf8');
+
+    expect(detectSds(p)).toMatchObject({ skillInstalled: true, skillEnabled: false });
   });
 });

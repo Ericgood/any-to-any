@@ -99,6 +99,19 @@ export async function runSetup(opts) {
     else {
         console.log('hooks skipped (--no-hook)');
     }
+    // Desktop-App agents can't take a skill the way a CLI can — they need their own
+    // data directory written to, which we never do behind the user's back. Surface
+    // the one command instead; install.sh runs `anyd setup`, so every install sees it.
+    const { resolveSdsPaths, detectSds } = await import('./integrations/sds.js');
+    const sds = detectSds(resolveSdsPaths({ home }));
+    if (sds.appInstalled && !sds.skillEnabled) {
+        console.log('\n闪电说 detected — connect its assistant so it can drive your agents:');
+        console.log('  anyd connect sds            # preview what gets written');
+        console.log('  anyd connect sds --apply    # write it');
+    }
+    else if (sds.skillEnabled) {
+        console.log('\n闪电说: connected (anyd connect sds --uninstall --apply to remove)');
+    }
     console.log('\nnext steps:');
     console.log('  anyd start     # run the delivery daemon');
     console.log('  anyd list      # see addressable sessions');

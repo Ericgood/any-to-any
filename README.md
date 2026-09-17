@@ -141,6 +141,23 @@ anyd status / stop         # daemon state / stop
 
 Both are just `anyd pull` under the hood — it reads your session's mailbox on disk and works even with the daemon down. A truly idle session still needs *some* input to take a turn, but any message you send now triggers the catch-up automatically.
 
+## Driving your agents from a desktop app (闪电说 / Shandianshuo)
+
+An agent that lives inside a GUI app can't be woken by a headless `resume` — there's no CLI to resume into. So it works the other way round: it **registers** itself as an addressable target and **pulls** its own mail over the daemon's loopback HTTP. [闪电说](https://github.com/shandianshuo/shandianshuo-desktop) is the first app wired up this way, which lets you talk to its assistant and have it drive Claude Code, Codex and the rest for you.
+
+```bash
+anyd connect sds           # preview exactly what will be written
+anyd connect sds --apply   # write it, then restart the app
+```
+
+That writes three things into the app's own data directory — a `SKILL.md`, the skill's enable flag (a hand-placed skill is disabled by default in 闪电说, so the flag is required), and a marked block in its `AGENTS.md`. Nothing outside those markers is touched, and `--uninstall --apply` removes exactly what it added. `anyd setup` detects the app and points you here; `anyd doctor` reports whether it's connected.
+
+**Sending is instant; replies arrive on the app's next turn.** Its assistant has no timers and nothing external can wake it, so anytoany posts an OS notification when mail is waiting — you open the app, ask, and it collects. Messages queue durably meanwhile, so nothing is lost while the app is closed.
+
+📖 **[中文上手指南](docs/guides/shandianshuo.zh-CN.md)** — a shareable walkthrough for 闪电说 users (prerequisites, install, usage, troubleshooting, privacy).
+
+> **Adding another desktop app?** The channel is generic, not 闪电说-specific: register a session (`anyd register --agent <name> --session <id>`), then have the app `POST /api/inbox` each turn and `POST /api/send` to dispatch. See [docs/specs/phase5-external-agents.md](docs/specs/phase5-external-agents.md).
+
 <details>
 <summary>Manual setup (without the installer) / from source</summary>
 
@@ -173,6 +190,7 @@ anytoany runs entirely on **your own machines, on your own LAN** — no cloud, n
 - **A single-operator cluster.** Every device is paired with a shared secret; a message can only enter the cluster from a machine that holds that token. Within that boundary, agents collaborate as **trusted teammates** — treating your own agents as hostile makes real delegation impossible. A request you set in motion from one session carries your authority to the next, as if you delegated it in person. Agents keep full autonomy — they discuss, propose better approaches, and refuse genuinely destructive ideas — they just don't stonewall legitimate work on "you're another agent" grounds.
 - **We don't pretend to defend against a compromised peer.** The boundary is your LAN + the shared token, not the message text. If an attacker is already executing code inside one of your paired agents, anytoany isn't your last line of defense — the machine already is.
 - **Delivery is minimal and official.** Messages ride each vendor's own headless `resume` channel (argv-only — the message text never touches a shell), never TUI keystroke injection or `--dangerously-*` flags. Raising an agent to full-permission execution is an explicit **per-machine owner opt-in** (off by default, set locally) — never something a sender can request.
+- **Local HTTP is trusted, and that's a deliberate choice.** The daemon's own endpoints (including the `/api/inbox` + `/api/send` pair that desktop-App agents use) accept any process on `127.0.0.1` without a token — that's what lets a sandboxed GUI assistant talk to anytoany at all. Anything already running as you on your Mac can therefore queue a message as any agent; the boundary is your user account, same as your shell history or SSH keys.
 - **Loopback + token + loop caps.** The web console binds to `127.0.0.1` only; peer endpoints require the shared cluster token (401 otherwise); per-thread depth and per-minute rate caps stop two agents burning tokens in an ack loop.
 
 See [SECURITY.md](SECURITY.md) for the reporting process and what's in scope.

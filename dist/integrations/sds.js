@@ -149,6 +149,16 @@ const change = (path, content, note) => {
     const action = !existed ? 'create' : readOr(path) === content ? 'unchanged' : 'update';
     return { path, action, content, note };
 };
+/** Is 闪电说 here, and is it already wired up? Drives `anyd setup`'s hint and `anyd doctor`. */
+export function detectSds(paths) {
+    const appInstalled = existsSync(paths.appHome);
+    const skillInstalled = appInstalled && existsSync(paths.skillFile);
+    return {
+        appInstalled,
+        skillInstalled,
+        skillEnabled: skillInstalled && readState(paths.stateFile)[STATE_KEY]?.enabled === true,
+    };
+}
 /** Compute the three writes without touching disk. */
 export function planSdsInstall(paths, opts = {}) {
     if (!existsSync(paths.appHome)) {

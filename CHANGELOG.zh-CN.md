@@ -12,6 +12,7 @@
 - `anyd connect sds`：默认只预览，`--apply` 才写，`--uninstall` 可回滚。写三样进 App 自己的数据目录——SKILL.md、技能开关（**手动放进去的技能默认是禁用的**，不写这个键会静默失效）、`AGENTS.md` 的标记块（块外内容逐字保留）。实测安装后 `skills-state.json` 10 键→11 键，只多我们这一个，其余零改动。
 - **真机验证全过**：模拟助手的精确环境（`env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin` + 非交互 bash）确认 `anyd` 确实找不到、而 `curl` 通；Claude Code 发 `@sds` → 立刻解析 → 消息在活 daemon 下跑满 6 秒仍是 `pending`/`attempts=0` → macOS 通知按时弹（日志有据）→ 助手环境里拉回 count=1、发件人正确 → 二次拉取为空。
 - **两个真机才暴露的 bug，已修**：① 心跳式重复注册若不带 title 会把已有 title 冲掉（日志里看到 `@sds:sds` 才发现）——改成只覆盖真正传了的字段；② daemon 的目录缓存 30 秒，**刚注册的 agent 有半分钟寻址不到**，第一条回信会莫名 `not_found`——注册成功即让缓存失效。
+- **给别人用怎么分发**：闪电说**没有技能市场也没有导入功能**（只有 UI 里手动「添加技能」），所以真正的分发单元是 **anytoany 本身** —— 技能只是 daemon 的瘦客户端，单独发出去没用。因此把发现做进流程：`anyd setup`（`install.sh` 会跑它）自动检测到闪电说就打印那一条命令；`anyd doctor` 多一行专查接入状态，并且**区分「技能文件在」和「技能真的启用了」**（手动放的技能默认禁用，这个坑必须能查出来）。另外写了可直接转发给闪电说用户的中文上手指南 `docs/guides/shandianshuo.zh-CN.md`（前提条件 / 三步装 / 怎么用 / 排错 / 隐私）。
 - **不做的（查证后明确放弃）**：推送注入——remote RPC 端口随机、token 只在 stdout 出现一次从不落盘；ACP 那条路根本没有 `dsh` 命令，且同 DSH_HOME 会被 App 自己的 stale-runtime 清理器反杀。**口径也说实话**：发是即时的，收发生在用户下次开口时，不承诺秒级。
 
 ## 2026-09-05 — 别往活会话 headless resume：假阴性让「Codex 消息传不过去」（ADR-023）

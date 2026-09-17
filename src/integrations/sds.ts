@@ -200,6 +200,24 @@ const change = (path: string, content: string, note: string): SdsChange => {
   return { path, action, content, note };
 };
 
+export interface SdsDetection {
+  appInstalled: boolean;
+  skillInstalled: boolean;
+  /** The file being present is not enough — DSH only loads a skill whose toggle is on. */
+  skillEnabled: boolean;
+}
+
+/** Is 闪电说 here, and is it already wired up? Drives `anyd setup`'s hint and `anyd doctor`. */
+export function detectSds(paths: SdsPaths): SdsDetection {
+  const appInstalled = existsSync(paths.appHome);
+  const skillInstalled = appInstalled && existsSync(paths.skillFile);
+  return {
+    appInstalled,
+    skillInstalled,
+    skillEnabled: skillInstalled && readState(paths.stateFile)[STATE_KEY]?.enabled === true,
+  };
+}
+
 /** Compute the three writes without touching disk. */
 export function planSdsInstall(paths: SdsPaths, opts: { port?: number; now?: () => number } = {}): SdsChange[] {
   if (!existsSync(paths.appHome)) {

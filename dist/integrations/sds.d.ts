@@ -43,6 +43,14 @@ export declare function upsertMarkedBlock(existing: string, body: string): strin
 /** Remove our fenced block; a document without one is returned unchanged. */
 export declare function removeMarkedBlock(existing: string): string;
 export declare function sdsSkillMarkdown(port?: number): string;
+export interface SdsDetection {
+    appInstalled: boolean;
+    skillInstalled: boolean;
+    /** The file being present is not enough — DSH only loads a skill whose toggle is on. */
+    skillEnabled: boolean;
+}
+/** Is 闪电说 here, and is it already wired up? Drives `anyd setup`'s hint and `anyd doctor`. */
+export declare function detectSds(paths: SdsPaths): SdsDetection;
 /** Compute the three writes without touching disk. */
 export declare function planSdsInstall(paths: SdsPaths, opts?: {
     port?: number;

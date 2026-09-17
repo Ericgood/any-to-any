@@ -20,6 +20,13 @@
 | [specs/phase3-zcode-adapter.md](specs/phase3-zcode-adapter.md) | ZCode (Z.ai) adapter. |
 | [specs/phase3-kimi-adapter.md](specs/phase3-kimi-adapter.md) | Kimi Code adapter. |
 | [specs/phase3-daemon-persistence.md](specs/phase3-daemon-persistence.md) | Persistent daemon via launchd. |
+| [specs/phase5-external-agents.md](specs/phase5-external-agents.md) | **External agents** — desktop-App assistants that register and pull instead of being resumed (闪电说 / `sds` is the first). |
+
+## User guides
+
+| File | What it covers |
+|---|---|
+| [guides/shandianshuo.zh-CN.md](guides/shandianshuo.zh-CN.md) | **闪电说用户上手指南**（中文，可直接转发）— prerequisites, three-step install, usage, troubleshooting, privacy. The one page to hand a 闪电说 user who wants to drive Claude Code / Codex from it. |
 
 ## Vendor CLI research (first-hand)
 

@@ -62,6 +62,22 @@ export async function runDoctor(): Promise<boolean> {
     note: skillInstalled ? '~/.claude/skills/any-to-any' : 'run: anyd setup',
   });
 
+  // Desktop-App agents (ADR-024). Only reported when the app is actually here —
+  // an absent 闪电说 is not a problem to nag about.
+  const { resolveSdsPaths, detectSds } = await import('./integrations/sds.js');
+  const sds = detectSds(resolveSdsPaths({ home }));
+  if (sds.appInstalled) {
+    checks.push({
+      name: '闪电说 assistant (external agent)',
+      ok: sds.skillEnabled,
+      note: sds.skillEnabled
+        ? 'connected — registers as @sds and pulls over HTTP'
+        : sds.skillInstalled
+          ? 'skill present but DISABLED in 闪电说 — re-run: anyd connect sds --apply'
+          : 'run: anyd connect sds --apply',
+    });
+  }
+
   let hookRegistered = false;
   try {
     const settings = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8')) as {
