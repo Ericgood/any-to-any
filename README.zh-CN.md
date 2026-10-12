@@ -111,6 +111,24 @@ anyd pair --name mini      # 可选：设备名
 
 </details>
 
+## 消息发不过去？先看 CLI 版本
+
+anytoany 投递时，用的是**全局** CLI（`claude`、`codex`）去恢复目标会话；可那个会话通常是**桌面 App** 写的，App 自带的 CLI 往往更新。旧 CLI 恢复新版本写的会话会失败，而且常常只留下一个光秃秃的 `exit 1`。所以消息入队前，anytoany 会先对一下版本：投递用的 CLI 只要**比**最后写这个会话的版本**旧**，就当场拒发：
+
+```text
+error: version_mismatch: the codex CLI anytoany delivers with (codex-cli 0.157.1) is older than the
+Codex Desktop that last wrote this session (0.162.0-alpha.17.2) … upgrade: npm i -g @openai/codex@latest
+```
+
+这条消息不会入队，发信的 agent 会被要求把错误转告你。照它给的命令升级后重发即可，一分钟内生效，不用重启 daemon：
+
+```bash
+npm i -g @anthropic-ai/claude-code@latest   # Claude Code
+npm i -g @openai/codex@latest               # Codex
+```
+
+CLI 比 App 新没问题，照常放行；正开着的活会话、自己拉信的会话不检查，因为它们不走 CLI。详见 [ADR-025](docs/decisions.md)。
+
 ## 寻址语法
 
 | 写法 | 含义 |

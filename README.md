@@ -141,6 +141,24 @@ anyd status / stop         # daemon state / stop
 
 Both are just `anyd pull` under the hood — it reads your session's mailbox on disk and works even with the daemon down. A truly idle session still needs *some* input to take a turn, but any message you send now triggers the catch-up automatically.
 
+## Messages not getting through? Check your CLI versions
+
+anytoany delivers by resuming the target session with the **global** CLI (`claude`, `codex`), but that session is usually written by the **desktop app**, which bundles its own, often newer, CLI. An older CLI can't resume a session a newer one wrote, and it tends to fail with nothing more than `exit 1`. So before queuing a message, anytoany compares versions. If the delivering CLI is **older** than whatever last wrote the target session, the send is refused on the spot:
+
+```text
+error: version_mismatch: the codex CLI anytoany delivers with (codex-cli 0.157.1) is older than the
+Codex Desktop that last wrote this session (0.162.0-alpha.17.2) … upgrade: npm i -g @openai/codex@latest
+```
+
+Nothing is queued, and the sending agent is told to pass the error on to you. Run the command it quotes, then resend; the new version is picked up within a minute, with no daemon restart:
+
+```bash
+npm i -g @anthropic-ai/claude-code@latest   # Claude Code
+npm i -g @openai/codex@latest               # Codex
+```
+
+A *newer* CLI than the app is fine and passes. Sessions that are open live, or that pull their own mail, are not checked, because they never go through the CLI. Details: [ADR-025](docs/decisions.md).
+
 ## Driving your agents from a desktop app (闪电说 / Shandianshuo)
 
 An agent that lives inside a GUI app can't be woken by a headless `resume` — there's no CLI to resume into. So it works the other way round: it **registers** itself as an addressable target and **pulls** its own mail over the daemon's loopback HTTP. [闪电说](https://github.com/shandianshuo/shandianshuo-desktop) is the first app wired up this way, which lets you talk to its assistant and have it drive Claude Code, Codex and the rest for you.
