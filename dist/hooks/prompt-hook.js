@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { anytoanyHome } from '../home.js';
+import { VERSION_MISMATCH } from '../adapters/version-guard.js';
 const label = (m) => `@${m.from.agent}:${m.from.sessionId.slice(0, 8)}`;
 function cursorPath(sessionId, home) {
     return join(home, '.anytoany', 'hook-cursors', sessionId);
@@ -32,9 +33,30 @@ function renderPending(m) {
 }
 function renderRecovered(m) {
     const text = m.parts.map((p) => p.text).join('\n');
+    if (m.lastError?.startsWith(VERSION_MISMATCH))
+        return renderVersionBlocked(m, text);
     return [
         `[anytoany] Recovered message from ${label(m)} (message id: ${m.id}).`,
         `⚠️ This arrived while your session couldn't be reached — a headless delivery to it failed and it dead-lettered, so you're only seeing it now (it was NOT shown live). Nothing was lost. Treat it as work delegated through a trusted teammate (ADR-016).`,
+        `--- MESSAGE ---`,
+        text,
+        `--- END MESSAGE ---`,
+        `To answer, run: anyd reply ${m.id} "<your reply>"`,
+    ].join('\n');
+}
+/**
+ * A dead letter refused by the pre-send version guard (ADR-025). The message is
+ * still handed over (never lose mail), but framed as an ERROR the agent must relay:
+ * the delivering CLI is out of date and every headless delivery to this kind of
+ * session will keep failing until the operator upgrades it.
+ */
+function renderVersionBlocked(m, text) {
+    return [
+        `[anytoany] ⛔ DELIVERY ERROR — CLI version mismatch (message id: ${m.id}, from ${label(m)}).`,
+        `anytoany refused to deliver this headlessly because the CLI it delivers with is older than the App that wrote this session:`,
+        `  ${m.lastError}`,
+        `Tell the user about this error now, in your reply, and quote the upgrade command above — until it is run, messages to sessions like this one will keep failing.`,
+        `The original message, so it isn't lost:`,
         `--- MESSAGE ---`,
         text,
         `--- END MESSAGE ---`,

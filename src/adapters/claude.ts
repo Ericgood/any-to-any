@@ -2,7 +2,14 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { realExec } from './exec.js';
+import { checkCliVersion, createVersionProbe } from './version-guard.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
+
+const CLAUDE_GUARD = {
+  cli: 'claude',
+  app: 'Claude Code (desktop App)',
+  upgrade: 'npm i -g @anthropic-ai/claude-code@latest',
+};
 
 const UUID_JSONL_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/;
@@ -49,6 +56,7 @@ interface ClaudeAdapterOptions {
 interface ParsedLine {
   type?: string;
   cwd?: string;
+  version?: string;
   customTitle?: string;
   message?: { content?: unknown };
 }
@@ -115,8 +123,10 @@ async function readSession(path: string, mtimeMs: number, size: number): Promise
   let cwd = '';
   let lastCustomTitle: string | undefined;
   let firstUserText: string | undefined;
+  let writerVersion: string | undefined;
   for (const line of lines) {
     if (!cwd && typeof line.cwd === 'string') cwd = line.cwd;
+    if (typeof line.version === 'string') writerVersion = line.version; // last writer wins
     if (line.type === 'custom-title' && typeof line.customTitle === 'string') {
       lastCustomTitle = line.customTitle;
     }
@@ -133,6 +143,7 @@ async function readSession(path: string, mtimeMs: number, size: number): Promise
     title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
     cwd,
     lastActiveAt: mtimeMs,
+    ...(writerVersion ? { writerVersion } : {}),
   };
 }
 
@@ -140,9 +151,12 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): Deliver
   const projectsDir = options.projectsDir ?? join(homedir(), '.claude', 'projects');
   const exec = options.exec ?? realExec;
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
+  const probeVersion = createVersionProbe(exec, 'claude');
+  const preflight = (session: SessionInfo) => checkCliVersion(probeVersion, CLAUDE_GUARD, session.writerVersion);
 
   return {
     agent: 'claude',
+    preflight,
 
     // Verified 2026-08-05: -p --resume keeps the session id stable but REQUIRES
     // running from the session's project cwd (spec §9 R1). Needs CLI login —
@@ -151,6 +165,9 @@ export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): Deliver
       if (!session.cwd) {
         return { ok: false, error: 'claude delivery requires the session cwd (unknown for this session)' };
       }
+      // An older CLI can't resume what a newer App wrote — refuse loudly, don't retry (ADR-025).
+      const mismatch = await preflight(session);
+      if (mismatch) return { ok: false, retry: false, error: mismatch };
       const { stdout, stderr, code } = await exec('claude', ['-p', '--resume', session.sessionId, envelope], {
         cwd: session.cwd,
         timeoutMs,

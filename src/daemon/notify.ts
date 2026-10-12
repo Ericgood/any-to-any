@@ -3,9 +3,14 @@ import { spawn } from 'node:child_process';
 export interface Notifier {
   /** Notify the user that a session got new cross-agent traffic. Throttled per session. */
   sessionActivity(agent: string, sessionTitle: string, sessionId: string, direction: 'received' | 'replied'): void;
+  /** Loud alert: delivery to `agent` was refused because its CLI is out of date (ADR-025). */
+  versionMismatch(agent: string, detail: string): void;
 }
 
 const THROTTLE_MS = 60_000;
+/** One mismatch alert per agent per window — it stays broken until upgraded, no need to nag per message. */
+const MISMATCH_THROTTLE_MS = 10 * 60_000;
+const DETAIL_MAX = 220;
 
 /** Post a macOS notification (no-op elsewhere or when disabled). */
 function postNotification(title: string, body: string): void {
@@ -23,8 +28,20 @@ function postNotification(title: string, body: string): void {
 
 export function createNotifier(opts: { enabled: boolean; now?: () => number } = { enabled: true }): Notifier {
   const lastPerSession = new Map<string, number>();
+  const lastMismatchPerAgent = new Map<string, number>();
   const now = opts.now ?? Date.now;
   return {
+    versionMismatch(agent, detail) {
+      if (!opts.enabled) return;
+      const ts = now();
+      if (ts - (lastMismatchPerAgent.get(agent) ?? -Infinity) < MISMATCH_THROTTLE_MS) return;
+      lastMismatchPerAgent.set(agent, ts);
+      const upgrade = /upgrade: (.+?) —/.exec(detail)?.[1];
+      postNotification(
+        `anytoany — ${agent} CLI out of date, message NOT delivered`,
+        upgrade ? `Run: ${upgrade}` : detail.slice(0, DETAIL_MAX),
+      );
+    },
     sessionActivity(agent, sessionTitle, sessionId, direction) {
       if (!opts.enabled) return;
       const ts = now();

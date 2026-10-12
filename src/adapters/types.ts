@@ -12,6 +12,9 @@ export interface SessionInfo {
   cwd: string;
   /** Last activity, epoch ms. */
   lastActiveAt: number;
+  /** CLI/App version that last wrote the session, when the transcript records it.
+   *  Compared against the delivering CLI before a headless resume (ADR-025). */
+  writerVersion?: string;
 }
 
 export interface AgentAdapter {
@@ -32,6 +35,9 @@ export interface DeliveryResult {
 export interface DeliveryAdapter extends AgentAdapter {
   /** Inject an envelope into the target session (resume-based in Phase 1). */
   deliver(session: SessionInfo, envelope: string): Promise<DeliveryResult>;
+  /** Cheap pre-send check (no turn is run): null = deliverable, else a
+   *  human-facing error, e.g. `version_mismatch: …` (ADR-025). */
+  preflight?(session: SessionInfo): Promise<string | null>;
 }
 
 /** Injectable subprocess runner so adapter contract tests never spawn real CLIs. */

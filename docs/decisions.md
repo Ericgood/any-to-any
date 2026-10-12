@@ -346,3 +346,28 @@ Codex 侧不分层（exec resume 已全验证）。
 **命名**：agent 名 **`sds`**（用户拍板）——三字母好打，与 codex/kimi/zcode 短名风格一致，对外开源也不暴露中文产品名。
 
 **Backlog**：① `danger-full-access` 档下 shell 是否真的完全免审批，在 DSH 闭源二进制内、源码无法证明，留待实测；② 其他 GUI agent（如 Cursor / Windsurf 桌面）可直接复用本 ADR 的外部 agent 通道；③ `GET /api/sessions` 无过滤时实测 865KB/4337 条/5 秒，本次加了 `q/agent/limit` 过滤，后续可考虑给目录扫描本身做增量。
+
+## ADR-025 发信前先对版本号：CLI 比写会话的 App 旧 → 直接报错，不排队、不悄悄兜底（2026-10-12，真实事故 + 用户拍板）
+
+**背景 / 真实事故**：2026-10-12 20:34 codex → 本机 Claude 桌面会话的消息 `d00591bc` 连投 3 次 `claude -p --resume exited 1`，**stderr 全空**，进死信；之后收件方 pull hook（ADR-022）把它捞了回来——于是用户看到的是「信最后到了」，而真正的病（全局 CLI 2.1.287 落后于桌面 App 2.1.295）被兜底**盖住了**，直到另一个 agent 手动比对 `claude --version` 才发现。同日排查发现 Codex 侧同样错位：Codex Desktop 写会话用 `0.162.0-alpha.17.2`，anytoany 投递调的全局 `codex` 是 `0.157.1`。
+
+**用户诉求（原话要点）**：发之前检查版本号；不一致就**直接报错提醒**，不要直接把信收回来——让问题暴露出来、触发修复（升级）。
+
+**版本号从哪来（均为本机实测）**：
+- Claude：会话 jsonl 每行带 `"version":"2.1.295"`，取**最后一个**（最近一次写入者）；CLI 侧 `claude --version` → `2.1.296 (Claude Code)`。
+- Codex：rollout 首行 `session_meta.payload.cli_version`；CLI 侧 `codex --version` → `codex-cli 0.157.1`。**坑（真机跑出来的，单测抓不到）**：`cli_version` 只在线程**创建时**写一次，之后每轮都不记版本——3 个月前建的「musely 上线发布员」线程至今写着 `0.144.2`，可每天写它的是 Codex Desktop `0.162.0-alpha.17.2`。只看自身记录会让最活跃的老线程全部漏检。**解法**：把所有 rollout 的「originator + cli_version + 创建时间」当作目击样本，一个会话的写入者版本 = 同 originator 在其最后活跃时刻之前出现过的最高版本（且不低于自身记录）。CLI 建的线程（originator `codex-tui`）不被 Desktop 的版本绑架；7 月后再没动过的线程保留自己的版本。
+
+**判定规则：CLI 的 `major.minor.patch` 严格小于会话写入者 → 拦截**。其余（CLI 更新、或仅预发布后缀不同）放行。为什么不是「不相等就拦」：CLI 比 App 新是常态且无害（今天本机就是 CLI 2.1.296 > App 2.1.295，严格相等会把所有投递误杀）；出事的方向只有「旧 CLI 去 resume 新版本写的会话」。预发布后缀（`-alpha.17.2`）不参与比较，所以装上 npm `latest`（0.162.1）就能解开 0.162.0-alpha 的会话。版本号解析不出（字段缺失、CLI 不在 PATH）→ 不拦，交给原有投递报错。
+
+**三道关**：
+1. **发信时（主关）**：`POST /api/send`、`/api/messages` 解析出本机目标后先跑 preflight；不过 → `409 {code:'version_mismatch', error}`，**消息不入库**，`anyd send` 打印错误并 exit 1。发信 agent 当场看到「CLI 太旧 + 升级命令」，转告用户。活会话 / monitor / 外部 pull-only 目标跳过检查（它们不走 headless CLI，版本无关）。远端目标由对端 daemon 在投递时检查（第 2 关）。
+2. **投递时（兜底）**：adapter 的 `deliver()` 先跑同一 preflight，错位 → `retry:false` 直接 dead（不再白重试 3 次），并弹 macOS 通知（按 agent 节流）。覆盖「入队后 App 升级了」「LAN 中转」「daemon 离线时 CLI 直写 mailbox」这些绕过第 1 关的路径。
+3. **收件方兜底改口径**：ADR-022 的 pull hook 仍会把死信交给收件会话（不丢信），但 `lastError` 是 `version_mismatch` 时，横幅明说「这条信是因为 CLI 版本落后被拦下的，请提醒用户运行 <升级命令>」，不再是含糊的「couldn't be reached」。
+
+**CLI 版本探测缓存 60 秒**：每次投递都 spawn `--version` 太浪费，永久缓存又会让用户升级后还被拦；60 秒内升级即生效，不用重启 daemon。
+
+**不做的**：不自动升级 CLI（改用户全局环境是机主的决定）；不改 Kimi/ZCode（没有同类错位证据）。
+
+**验证（全部实测）**：① TDD 红→绿，新增 `version-guard.test.ts`（解析/比较/探测缓存/originator 推断）、`version-guard-adapters.test.ts`（两家扫描器记录写入者、错位时 `deliver` 不起回合直接终态失败）、`server.test.ts`（409 + 不入库，`/api/send` 与 `/api/messages` 两个入口）、`prompt-hook.test.ts`（错位死信横幅）、`notify.test.ts`（按 agent 10 分钟节流）；全量 369 绿。② 对编译后 dist 跑本机真实会话：Codex 三条最活跃线程全部判错位（0.157.1 < 0.162.0-alpha），Claude 判通过（CLI 2.1.296 ≥ App 2.1.295）；用假 `--version`=2.1.287 重放 10-12 事故会话 `7506d124` → `retry:false` 的 `version_mismatch`，且**没有起回合**。③ 真 daemon（launchd 重启）端到端：`anyd send "@codex:sunoprompt日常开发任务复活" …` → 打印错误、exit 1，mailbox 计数 677 → 677（**未入库**）。
+
+**附带发现（不在本 ADR 范围）**：9-22 以来投 Codex 的 45 次失败里绝大多数是 `thread-store conflict: thread … already has an active writer`——Codex Desktop 正开着该线程，与 ADR-023 的 Claude 活会话同构，需要 Codex 侧的活会话探测，另开任务。

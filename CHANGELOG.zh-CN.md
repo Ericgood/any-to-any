@@ -1,6 +1,16 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-12 — 发信前先对版本号：CLI 比 App 旧就直接报错，不再悄悄进死信再被兜底捞回（ADR-025）
+
+- 事故：codex → Claude 桌面会话的 `d00591bc` 连投 3 次 `exit 1`、stderr 全空，进死信后又被 ADR-022 的 pull hook 捞回——**信「到了」，病（全局 CLI 2.1.287 落后 App 2.1.295）被盖住**。同日查出 Codex 也错位：全局 `codex` 0.157.1 < Codex Desktop 0.162.0-alpha。
+- 用户诉求：发之前查版本，不一致直接报错提醒，别把信悄悄收回来——让问题暴露、触发升级。
+- **发信时拦**：`/api/send`、`/api/messages` 对本机目标先 preflight；CLI 的 `major.minor.patch` 严格小于会话写入者 → `409 version_mismatch`（含双方版本与升级命令），**不入库**；`anyd send` 打印错误、exit 1。CLI 更新/只差预发布后缀 → 放行（今天就是 CLI 2.1.296 > App 2.1.295，严格相等会误杀）。活会话 / monitor / 外部 pull-only 目标豁免（不走 CLI）。
+- **投递时兜底**：adapter 起回合前同样检查，错位 → `retry:false` 直接 dead + macOS 弹窗（每 agent 10 分钟一次）。
+- **收件方改口径**：错位死信仍交给收件会话（不丢信），但横幅改成「⛔ DELIVERY ERROR」，要求 agent 立刻转告用户并照抄升级命令。skill 同步写明：遇 `version_mismatch` 告诉用户、别重试、别绕路。
+- **真机才跑出来的坑**：Codex 的 `cli_version` 只在线程创建时记一次（3 个月前的线程至今写 0.144.2，实际每天被 0.162 写）。改为按 originator 推断：同一 `Codex Desktop` 在该线程最后活跃前出现过的最高版本。
+- 验证：全量 369 绿；dist 对真实会话——Codex 三条活跃线程判错位、Claude 判通过；重放 10-12 事故（假 2.1.287）→ 拦截且不起回合；真 daemon 端到端 `anyd send @codex:…` → exit 1、mailbox 677→677。
+
 ## 2026-09-17 — 桌面 App 也能当一等 agent：闪电说（`sds`）注册式接入 + 拉取型收件（ADR-024）
 
 - 需求：用户要把**闪电说助手当总驾驶舱**，用它去调 Claude Code / Codex。它已经会自己敲命令发消息，但 anytoany 根本不认识它——只能冒用 `@user:cli`，**别人回的信没地址可去**。

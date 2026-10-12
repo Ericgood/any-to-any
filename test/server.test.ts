@@ -497,3 +497,54 @@ describe('console server — /api/sessions filtering (Phase 5)', () => {
     expect(await get('?limit=0')).toHaveLength(2);
   });
 });
+
+// ADR-025: an older delivering CLI can't resume a session a newer App wrote. The
+// sender must learn that at send time — not have the message silently queued,
+// dead-lettered and later "recovered" with the cause hidden.
+describe('console server — pre-send version guard (ADR-025)', () => {
+  const PORT_V = 17442;
+  const baseV = `http://127.0.0.1:${PORT_V}`;
+  const MISMATCH = 'version_mismatch: codex CLI 0.157.1 is older than Codex Desktop (0.162.0)';
+  let server: RunningServer;
+  let mailbox: Mailbox;
+  const checked: string[] = [];
+
+  beforeAll(() => {
+    mailbox = createMailbox(createDb(':memory:'));
+    server = startConsoleServer({
+      mailbox,
+      directory: async () => DIRECTORY,
+      port: PORT_V,
+      changePollMs: 60_000,
+      preflight: async (s) => {
+        checked.push(s.sessionId);
+        return s.agent === 'codex' ? MISMATCH : null;
+      },
+    });
+  });
+  afterAll(() => server.close());
+
+  const post = (path: string, body: unknown) =>
+    fetch(baseV + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('POST /api/send rejects with 409 version_mismatch and queues NOTHING', async () => {
+    const r = await post('/api/send', { target: '@codex:frontend', text: 'hi' });
+    expect(r.status).toBe(409);
+    const body = (await r.json()) as { code?: string; error?: string };
+    expect(body.code).toBe('version_mismatch');
+    expect(body.error).toBe(MISMATCH);
+    expect(mailbox.inbox({ toSession: CODEX_B.sessionId, all: true })).toHaveLength(0);
+  });
+
+  it('POST /api/messages (web console) is guarded the same way', async () => {
+    const r = await post('/api/messages', { from: CLAUDE_A, to: CODEX_B, text: 'hi' });
+    expect(r.status).toBe(409);
+    expect(mailbox.inbox({ toSession: CODEX_B.sessionId, all: true })).toHaveLength(0);
+  });
+
+  it('a compatible target is queued as before', async () => {
+    const r = await post('/api/send', { target: '@claude:backend', text: 'hi' });
+    expect(r.status).toBe(201);
+    expect(checked).toContain(CLAUDE_A.sessionId);
+  });
+});

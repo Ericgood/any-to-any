@@ -16,6 +16,10 @@ export interface ConsoleServerOptions {
      *  so it is addressable immediately instead of after the cache TTL — otherwise
      *  the first reply to a just-registered agent fails with a confusing not_found. */
     invalidateDirectory?: () => void;
+    /** Pre-send check for a LOCAL target (ADR-025): non-null = refuse the send with
+     *  409 and queue nothing, so the sender sees e.g. a CLI version mismatch now —
+     *  instead of a silent dead letter whose cause the pull-hook recovery hides. */
+    preflight?: (session: SessionInfo) => Promise<string | null>;
     /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
     peering?: {
         selfDevice: string;

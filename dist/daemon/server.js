@@ -5,6 +5,10 @@ import { dirname, join } from 'node:path';
 import { parse as parseCollabDoc } from '../collab/doc.js';
 import { tokenFingerprint } from '../cluster/token.js';
 const require = createRequire(import.meta.url);
+/** Machine-readable code from a preflight error's `<code>: …` prefix. */
+function preflightCode(error) {
+    return /^([a-z_]+):/.exec(error)?.[1] ?? 'preflight_failed';
+}
 function json(res, status, body) {
     const payload = JSON.stringify(body);
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -374,6 +378,12 @@ export function startConsoleServer(opts) {
             if (r.session.device)
                 to.device = r.session.device;
             const from = isSessionRef(body.from) ? body.from : { agent: 'user', sessionId: 'cli' };
+            // remote targets are checked by the owning daemon at delivery time
+            const refused = !to.device && opts.preflight ? await opts.preflight(r.session) : null;
+            if (refused) {
+                json(res, 409, { error: refused, code: preflightCode(refused), resolvedTarget: r.session });
+                return;
+            }
             const m = opts.mailbox.send({ from, to, text: body.text, via: 'cli' });
             broadcast();
             json(res, 201, { message: m, resolvedTarget: r.session });
@@ -384,6 +394,15 @@ export function startConsoleServer(opts) {
             if (!isSessionRef(body.from) || !isSessionRef(body.to) || typeof body.text !== 'string' || !body.text.trim()) {
                 json(res, 400, { error: 'expected {from:{agent,sessionId}, to:{agent,sessionId}, text, conversationId?}' });
                 return;
+            }
+            if (!body.to.device && opts.preflight) {
+                const to = body.to;
+                const target = (await opts.directory()).find((s) => !s.device && s.agent === to.agent && s.sessionId === to.sessionId);
+                const refused = target ? await opts.preflight(target) : null;
+                if (refused) {
+                    json(res, 409, { error: refused, code: preflightCode(refused) });
+                    return;
+                }
             }
             const m = opts.mailbox.send({
                 from: body.from,

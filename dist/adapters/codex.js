@@ -3,6 +3,8 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
+import { checkCliVersion, createVersionProbe, inferWriterVersion } from './version-guard.js';
+const CODEX_GUARD = { cli: 'codex', app: 'Codex Desktop', upgrade: 'npm i -g @openai/codex@latest' };
 const CODEX_SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 /** Owner-configured per-turn budget (heavy tasks outgrow the 300s default). */
 function loadCodexTimeoutMs(configFile) {
@@ -71,11 +73,18 @@ export function createCodexAdapter(options = {}) {
     const exec = options.exec ?? realExec;
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     const configFile = options.configFile ?? defaultConfigFile();
+    const probeVersion = createVersionProbe(exec, 'codex');
+    const preflight = (session) => checkCliVersion(probeVersion, CODEX_GUARD, session.writerVersion);
     return {
         agent: 'codex',
+        preflight,
         // Verified 2026-08-05: exec resume carries full history, is cwd-independent,
         // and tolerates concurrent resumes of the same thread (spec §9 R2).
         async deliver(session, envelope) {
+            // An older CLI can't resume what a newer Codex Desktop wrote — refuse loudly (ADR-025).
+            const mismatch = await preflight(session);
+            if (mismatch)
+                return { ok: false, retry: false, error: mismatch };
             // Sandbox stays on codex's own default unless the MACHINE OWNER opted
             // into a specific policy (never the sending agent). We never use the
             // --dangerously-bypass-* flag; danger-full-access is a sandbox tier the
@@ -126,7 +135,8 @@ export function createCodexAdapter(options = {}) {
                     newestRollout.set(m[1], { rel, sessionId: m[1] });
                 }
             }
-            const sessions = [];
+            const found = [];
+            const samples = [];
             for (const { rel, sessionId } of newestRollout.values()) {
                 const path = join(sessionsDir, rel);
                 try {
@@ -136,6 +146,12 @@ export function createCodexAdapter(options = {}) {
                     const meta = JSON.parse(first);
                     if (meta.type !== 'session_meta')
                         continue;
+                    const own = typeof meta.payload?.cli_version === 'string' ? meta.payload.cli_version : undefined;
+                    const originator = typeof meta.payload?.originator === 'string' ? meta.payload.originator : undefined;
+                    const createdAt = meta.payload?.timestamp ? Date.parse(meta.payload.timestamp) : NaN;
+                    // every rollout's creation is a sighting of its originator's version (ADR-025)
+                    if (own && originator && !Number.isNaN(createdAt))
+                        samples.push({ originator, version: own, at: createdAt });
                     // multi-agent sub-agent threads reject direct input (app-server -32600) —
                     // they are parent-driven and must not be addressable
                     if (meta.payload?.parent_thread_id || meta.payload?.thread_source === 'subagent')
@@ -146,19 +162,28 @@ export function createCodexAdapter(options = {}) {
                     const st = await stat(path);
                     // index updated_at can be weeks stale (the desktop app doesn't bump it);
                     // the rollout file mtime moves on every turn — trust whichever is newer
-                    sessions.push({
-                        agent: 'codex',
-                        sessionId,
-                        title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
-                        cwd,
-                        lastActiveAt: Math.max(idx?.updatedAtMs ?? 0, st.mtimeMs),
+                    found.push({
+                        info: {
+                            agent: 'codex',
+                            sessionId,
+                            title: title.length > TITLE_MAX ? `${title.slice(0, TITLE_MAX)}…` : title,
+                            cwd,
+                            lastActiveAt: Math.max(idx?.updatedAtMs ?? 0, st.mtimeMs),
+                        },
+                        ...(own ? { own } : {}),
+                        ...(originator ? { originator } : {}),
                     });
                 }
                 catch {
                     // unreadable rollout — skip rather than fail the whole scan
                 }
             }
-            return sessions;
+            // cli_version is recorded once, at thread creation; the live writer of an old
+            // thread is whatever its originator runs now — infer it across all rollouts
+            return found.map(({ info, own, originator }) => {
+                const writerVersion = inferWriterVersion(own, originator, info.lastActiveAt, samples);
+                return writerVersion ? { ...info, writerVersion } : info;
+            });
         },
     };
 }

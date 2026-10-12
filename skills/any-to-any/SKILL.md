@@ -19,6 +19,7 @@ anyd send "@codex:frontend refactor" "your message here" --from "@claude:<your s
 
 - Target syntax: `@<agent>` (most recent session), `@<agent>:<fragment>` (fragment matches session id prefix, title substring, or project dir name), `@<device>/<agent>[:<fragment>]` for sessions on another paired LAN device (e.g. `@mini/codex:frontend`). `anyd list` shows remote sessions with their device prefix when the daemon is running.
 - If the target is ambiguous, anyd prints candidates — show them to the user and ask which one they mean.
+- If `anyd send` fails with **`version_mismatch`**, the message was **not** sent: the CLI anytoany delivers with is older than the App that writes the target session, so delivery would fail. **Tell the user right away and quote the upgrade command from the error** (e.g. `npm i -g @openai/codex@latest`). Don't retry, and don't route around it via another session — it will keep failing until the CLI is upgraded (ADR-025).
 4. Tell the user the message is queued (include the message id). Delivery is asynchronous (seconds when the daemon is running).
 
 ## Receiving

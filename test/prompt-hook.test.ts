@@ -159,4 +159,20 @@ describe('collectInbox (shared by hook and `anyd pull`)', () => {
     nowMs += 1000;
     expect(collectInbox(mailbox, sid, { home, now: () => nowMs })).toBeNull(); // not repeated
   });
+  it('a version-mismatch dead letter is surfaced as an ERROR to relay, not a quiet recovery (ADR-025)', () => {
+    const sid = `vmismatch-${nowMs}`;
+    const m = mailbox.send({ from: CLAUDE_A, to: { agent: 'codex', sessionId: sid }, text: 'video fix shipped' });
+    mailbox.claimNextPending();
+    mailbox.markFailed(
+      m.id,
+      'version_mismatch: the codex CLI anytoany delivers with (codex-cli 0.157.1) is older than the Codex Desktop that last wrote this session (0.162.0-alpha.17.2). … upgrade: npm i -g @openai/codex@latest …',
+      { terminal: true },
+    );
+    const text = collectInbox(mailbox, sid, { home, now: () => nowMs }) ?? '';
+    expect(text).toContain('video fix shipped'); // still not lost
+    expect(text).toMatch(/version mismatch/i);
+    expect(text).toContain('npm i -g @openai/codex@latest'); // the fix, verbatim
+    expect(text).toMatch(/tell the (user|operator)/i); // the agent must relay it
+    expect(text).not.toMatch(/Nothing was lost/); // not the soothing generic banner
+  });
 });

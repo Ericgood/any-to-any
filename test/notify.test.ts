@@ -27,4 +27,21 @@ describe('notifier', () => {
     n.sessionActivity('codex', 'x', 's9', 'received');
     expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
+  it('alerts on a CLI version mismatch once per agent per 10 minutes (ADR-025)', () => {
+    vi.mocked(spawn).mockClear();
+    let nowMs = 5_000_000;
+    const n = createNotifier({ enabled: true, now: () => nowMs });
+    n.versionMismatch('codex', 'version_mismatch: codex CLI 0.157.1 … upgrade: npm i -g @openai/codex@latest');
+    n.versionMismatch('codex', 'again'); // throttled — same agent
+    n.versionMismatch('claude', 'version_mismatch: claude …'); // other agent — allowed
+    const expected = process.platform === 'darwin' ? 2 : 0;
+    expect(vi.mocked(spawn).mock.calls.length).toBe(expected);
+    if (expected) {
+      const script = String(vi.mocked(spawn).mock.calls[0]?.[1]?.[1]);
+      expect(script).toContain('npm i -g @openai/codex@latest');
+    }
+    nowMs += 10 * 60_000 + 1;
+    n.versionMismatch('codex', 'later');
+    expect(vi.mocked(spawn).mock.calls.length).toBe(process.platform === 'darwin' ? 3 : 0);
+  });
 });

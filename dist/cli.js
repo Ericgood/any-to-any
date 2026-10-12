@@ -208,6 +208,18 @@ program
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
     const collab = createCollabStore();
+    const { isMonitored } = await import('./daemon/monitor.js');
+    const { isSessionLive } = await import('./daemon/session-liveness.js');
+    const { isRegisteredSession, listRegistered } = await import('./registry/external.js');
+    const adapterByAgent = new Map(adapters.map((a) => [a.agent, a]));
+    // ADR-025: refuse a send at once when headless delivery would run an older CLI
+    // than the App that wrote the target session. Targets that pull their own mail
+    // (live / monitored / external) never go through the CLI, so they're exempt.
+    const preflight = async (s) => {
+        if (isMonitored(s.sessionId) || isSessionLive(s.sessionId) || isRegisteredSession(s.sessionId))
+            return null;
+        return (await adapterByAgent.get(s.agent)?.preflight?.(s)) ?? null;
+    };
     let web = null;
     if (opts.web || lan) {
         const { startConsoleServer } = await import('./daemon/server.js');
@@ -217,6 +229,7 @@ program
             collab,
             port,
             invalidateDirectory,
+            preflight,
             ...(lan
                 ? {
                     peering: {
@@ -231,12 +244,10 @@ program
         console.log(`web console: http://127.0.0.1:${web.port}`);
     }
     const { startDispatcher } = await import('./daemon/dispatcher.js');
-    const { isMonitored } = await import('./daemon/monitor.js');
-    const { isSessionLive } = await import('./daemon/session-liveness.js');
-    const { isRegisteredSession, listRegistered } = await import('./registry/external.js');
+    const { VERSION_MISMATCH } = await import('./adapters/version-guard.js');
     const running = startDispatcher({
         mailbox,
-        adapters: new Map(adapters.map((a) => [a.agent, a])),
+        adapters: adapterByAgent,
         directory,
         collab,
         isMonitored: (sid) => isMonitored(sid),
@@ -248,6 +259,9 @@ program
             const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.device ?? 'local'}/${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
             console.log(line);
             web?.notifyChange();
+            if (e.kind === 'failed' && e.detail?.startsWith(VERSION_MISMATCH)) {
+                notifier.versionMismatch(m.to.agent, e.detail);
+            }
             if (e.kind === 'delivered' && !m.to.device) {
                 const title = cache?.sessions.find((s) => s.sessionId === m.to.sessionId)?.title ?? m.to.sessionId.slice(0, 8);
                 notifier.sessionActivity(m.to.agent, title, m.to.sessionId, 'received');

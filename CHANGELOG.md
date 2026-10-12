@@ -4,6 +4,16 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Check CLI versions before sending — an out-of-date CLI is now a loud error, not a silent dead letter (ADR-025)
+
+Headless delivery resumes a session with the *global* CLI, but the session is usually written by the desktop App, which bundles its own, newer one. On 2026-10-12 a Codex→Claude message failed three times with a bare `exit 1` and an empty stderr: the global `claude` was 2.1.287 and the App was 2.1.295. The ADR-022 pull hook then quietly recovered it, so the message "arrived" and the cause stayed hidden. The same day, the global `codex` (0.157.1) turned out to be behind Codex Desktop (0.162.0-alpha).
+
+- **Refused at send time**: `POST /api/send` and `/api/messages` run a preflight on local targets. If the delivering CLI's `major.minor.patch` is *older* than the session's writer, the send gets `409 {code: "version_mismatch"}` naming both versions and the exact upgrade command, and **nothing is queued**. `anyd send` prints the error and exits 1. A newer CLI, or a difference only in the prerelease tag, passes, because that direction resumes fine (today's CLI 2.1.296 > App 2.1.295). Live, monitored and pull-only targets are exempt: they never go through the CLI.
+- **Backstop at delivery**: the claude/codex adapters run the same check before spawning a turn. A mismatch is terminal (`retry:false`, no triple retry) and pops a macOS alert, throttled to once per agent per 10 minutes.
+- **Recipient side**: a version-mismatch dead letter is still handed over, so no mail is lost. It now arrives framed as a `DELIVERY ERROR` the agent must relay, upgrade command included, instead of the soothing "couldn't be reached".
+- **Where the versions come from**: Claude records `version` on every transcript line, and the last one is used. Codex records `cli_version` only once, at thread creation (a three-month-old thread still says 0.144.2). Its writer is therefore inferred as the highest version the same originator (`Codex Desktop`) was seen running at or before the thread's last activity. Only running against real sessions exposed this; the unit tests had passed.
+- `--version` is probed with a 60s cache, so an upgrade takes effect without restarting the daemon. The skill now tells agents to surface a `version_mismatch` to the user rather than retry.
+
 ### Desktop-App agents join as first-class targets — 闪电说 (`sds`) via register + pull over HTTP (ADR-024)
 
 Until now every agent anytoany could address had a headless CLI to resume into. A desktop App's built-in assistant has none — so it could send (by borrowing `@user:cli`) but nobody could ever reply to it. Phase 5 adds a generic **external agent** channel; 闪电说 is its first user, and the point is to let it act as a cockpit that drives Claude Code, Codex and the rest.
