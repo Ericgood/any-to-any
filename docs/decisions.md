@@ -388,4 +388,6 @@ Codex 侧不分层（exec resume 已全验证）。
 
 **与既有 ADR 的关系**：ADR-023 Layer 1 的 Codex 版；ADR-022 的死信兜底继续兜住第 2 层；ADR-025 的「活会话豁免版本检查」随之对 Codex 生效（这些线程本就不走全局 CLI）。
 
+**验证（全部实测）**：① TDD 红→绿——`session-liveness.test.ts`（真实 `lsof -F n` 输出解析、孤儿锁文件不算活、无锁文件不 spawn、目录缺失/`lsof` 失败回退空集、2s TTL）、`adapter-deliver.test.ts`（日志原文 stderr → `codex_thread_busy` 终态、其余非 0 退出仍可重试）；先 7 红，全量 **377 绿**。② 编译后 dist 在 launchd 同款最小 PATH 下跑真实数据：认出 8 个被 Desktop 持有的线程（含日志里最近冲突的 `019f5bf9`=true），历史冲突但已关的 `01a06b64`=false，随机 uuid=false。③ **真 daemon 端到端 A/B**（`launchctl kickstart -k`，pid 15685）：自己对假线程 `0ff1ce00-a026-…` 的锁文件加 flock 持有 → 插 pending 探针 → 8 秒（8 个轮询周期）后 **pending、attempts=0、日志 0 行**；释放锁（对照组）→ 下一拍立即被 claim（`target session not found`，假线程本就不在目录里）——证明跳过确由写锁信号驱动。探针与锁文件已清理，无残留；全程没碰用户真实线程。
+
 **Backlog**：① 真正的实时送达应走 Codex app-server（`~/.codex/app-server-control/app-server-control.sock` / `ipc.sock`）在 Desktop 进程内起回合，见 docs/research；② `CODEX_HOME` 自定义的机器：adapter 现在也写死 `~/.codex`，两处一起改；③ Windows 无 `lsof`，回退原路径。
