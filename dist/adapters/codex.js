@@ -5,6 +5,9 @@ import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
 import { checkCliVersion, createVersionProbe, inferWriterVersion } from './version-guard.js';
 const CODEX_GUARD = { cli: 'codex', app: 'Codex Desktop', upgrade: 'npm i -g @openai/codex@latest' };
+/** Error-code prefix for a thread another Codex process is writing to (ADR-026). */
+export const THREAD_BUSY = 'codex_thread_busy';
+const ACTIVE_WRITER = /already has an active writer/;
 const CODEX_SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access']);
 /** Owner-configured per-turn budget (heavy tasks outgrow the 300s default). */
 function loadCodexTimeoutMs(configFile) {
@@ -104,6 +107,17 @@ export function createCodexAdapter(options = {}) {
                     ok: false,
                     retry: false,
                     error: `codex exec resume timed out after ${Math.round(turnTimeoutMs / 1000)}s — the turn ran but exceeded the budget. Raise codex.deliverTimeoutSec in ~/.anytoany/config.json, or open the session to see its progress. …${stderr.slice(-300)}`,
+                };
+            }
+            if (code !== 0 && ACTIVE_WRITER.test(stderr)) {
+                // The thread is open in another Codex process (Codex Desktop) holding its
+                // writer lock. Normally the dispatcher skips such threads (ADR-026); this is
+                // the race / no-lsof fallback. The turn never ran, and the holder is a
+                // long-lived App, so retrying in seconds would only hit the same lock.
+                return {
+                    ok: false,
+                    retry: false,
+                    error: `${THREAD_BUSY}: codex thread ${session.sessionId} is open in another Codex process (usually Codex Desktop), which holds its writer lock — headless resume was refused and the message was NOT delivered. It will surface through the thread's prompt hook the next time the user sends it a message.`,
                 };
             }
             if (code !== 0) {

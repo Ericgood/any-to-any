@@ -204,3 +204,32 @@ describe('codex per-turn timeout (owner-configurable) & timeout handling', () =>
     expect(r.error).toMatch(/timed out/i);
   });
 })
+
+describe('codex thread held by another writer (ADR-026)', () => {
+  // verbatim tail of a real 2026-10-12 daemon.log failure
+  const ACTIVE_WRITER_STDERR = [
+    '2026-10-12T07:44:47.547500Z ERROR codex_core::session::session: failed to initialize thread persistence: thread-store conflict: thread 019f5bf9-e99a-7503-8faf-eba4e9949715 already has an active writer',
+    '2026-10-12T07:44:47.547597Z ERROR codex_core::session: Failed to create session: thread-store conflict: thread 019f5bf9-e99a-7503-8faf-eba4e9949715 already has an active writer',
+    'Error: thread/resume: thread/resume failed: thread 019f5bf9-e99a-7503-8faf-eba4e9949715 already has an active writer (code -32600)',
+  ].join('\n');
+
+  it('is a terminal, clearly-worded failure — not retried 3× against a lock a long-lived App holds', async () => {
+    const { exec } = mockExec({ stderr: ACTIVE_WRITER_STDERR, code: 1 });
+    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const r = await adapter.deliver(session({ sessionId: '019f5bf9-e99a-7503-8faf-eba4e9949715' }), 'E');
+    expect(r.ok).toBe(false);
+    expect(r.retry).toBe(false);
+    expect(r.error).toMatch(/^codex_thread_busy:/);
+    expect(r.error).toMatch(/019f5bf9-e99a-7503-8faf-eba4e9949715/);
+    expect(r.error).toMatch(/Codex Desktop/);
+    expect(r.error).toMatch(/not delivered/i);
+  });
+
+  it('other non-zero exits stay retryable', async () => {
+    const { exec } = mockExec({ stderr: 'Error: network hiccup', code: 1 });
+    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const r = await adapter.deliver(session({}), 'E');
+    expect(r.ok).toBe(false);
+    expect(r.retry).toBeUndefined();
+  });
+});

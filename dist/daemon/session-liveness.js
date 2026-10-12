@@ -1,4 +1,7 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 /**
  * Detect Claude sessions that are currently open in an INTERACTIVE process, so the
  * dispatcher does not headless-`claude -p --resume` into them (ADR-023).
@@ -50,8 +53,63 @@ export function liveClaudeSessions(now = Date.now) {
     cache = { at: t, ids };
     return ids;
 }
-/** Is this session open in an interactive Claude process right now? */
+/*
+ * Codex twin (ADR-026). A Codex thread open in Codex Desktop refuses a headless
+ * `codex exec resume` outright: "thread-store conflict: thread <id> already has an
+ * active writer" — the turn never runs, so the 3 retries were pure noise before the
+ * message dead-lettered. Upstream (codex-rs/rollout/src/writer_lock.rs) every writer
+ * flock()s `<CODEX_HOME>/thread-writer-locks/<thread_id>.lock` and deletes the file
+ * when it lets go; a crashed writer can leave an orphan file behind. So a thread is
+ * live when its lock file exists AND some process holds it open — asked of `lsof`,
+ * which is read-only. We never try the flock ourselves: holding it even for an
+ * instant could make the user's own Codex Desktop fail to open that thread.
+ */
+const THREAD_LOCK = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.lock$/;
+/** Pure: thread ids whose writer lock appears as an open file in `lsof -F n` output. */
+export function parseCodexLockHolders(lsofOutput) {
+    const ids = new Set();
+    for (const line of lsofOutput.split('\n')) {
+        if (!line.startsWith('n'))
+            continue;
+        const match = THREAD_LOCK.exec(line);
+        if (match?.[1])
+            ids.add(match[1]);
+    }
+    return ids;
+}
+const lsofHolders = (paths) => 
+// exits 1 when none of the files is open — that's an answer, not an error
+spawnSync('lsof', ['-F', 'n', '--', ...paths], { encoding: 'utf8', timeout: 4_000 }).stdout ?? '';
+/** Build a cached probe for Codex threads that currently have a live writer. */
+export function createCodexLiveness(options = {}) {
+    const lockDir = options.lockDir ?? join(homedir(), '.codex', 'thread-writer-locks');
+    const holders = options.holders ?? lsofHolders;
+    const ttlMs = options.ttlMs ?? TTL_MS;
+    let cached = null;
+    return (now = Date.now) => {
+        const t = now();
+        if (cached && t - cached.at < ttlMs)
+            return cached.ids;
+        let ids = new Set();
+        try {
+            const locks = readdirSync(lockDir)
+                .filter((name) => THREAD_LOCK.test(name))
+                .map((name) => join(lockDir, name));
+            // the common case — no Codex thread open — costs a readdir, not a spawn
+            if (locks.length > 0)
+                ids = parseCodexLockHolders(holders(locks));
+        }
+        catch {
+            // no Codex home / no lsof / not permitted — treat as "nothing known live"
+        }
+        cached = { at: t, ids };
+        return ids;
+    };
+}
+/** Codex thread ids currently held by a writer (typically Codex Desktop's app-server). */
+export const liveCodexThreads = createCodexLiveness();
+/** Is this session open in an interactive Claude process, or held by a Codex writer, right now? */
 export function isSessionLive(sessionId, now = Date.now) {
-    return liveClaudeSessions(now).has(sessionId);
+    return liveClaudeSessions(now).has(sessionId) || liveCodexThreads(now).has(sessionId);
 }
 //# sourceMappingURL=session-liveness.js.map

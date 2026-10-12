@@ -1,6 +1,13 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-12 — Codex 活线程不再 headless resume：读 Codex 自己的写锁，跳过、留 pending（ADR-026）
+
+- 实证：`daemon.log` 投 Codex 的 190 次失败里 126 次是 `thread-store conflict: thread <id> already has an active writer`——42 条消息、5 个线程，**每条都重试满 3 次后进死信**。Codex Desktop 开着线程，headless resume 抢不到写锁，turn 根本没起来。ADR-023 的 Codex 孪生。
+- **信号读上游源码定的**：`codex-rs/rollout/src/writer_lock.rs`——写入者对 `~/.codex/thread-writer-locks/<id>.lock` 加 `flock`，释放时删文件，崩溃可能留孤儿。判定 = 锁文件存在 **且** 被进程打开着（`lsof`，只读、约 75ms、无锁文件时不 spawn、2s 缓存）。实测 8 个锁全被 Codex Desktop 的 app-server（pid 1220）持有。**不自己试锁**——瞬间持锁就可能让用户那边打不开线程。
+- **主治**：`isSessionLive` 覆盖 Codex → dispatcher 跳过、留 pending，由线程自己的 `UserPromptSubmit` hook 在下次开口时取走；ADR-025 版本 preflight 也随之豁免（不走全局 CLI）。
+- **兜底**：竞态 / 无 `lsof` 时仍撞锁 → `retry:false` 终态，错误改人话 `codex_thread_busy: … open in another Codex process (usually Codex Desktop) … NOT delivered …`，不再原样甩 stderr 尾巴、白重试 3 次。
+
 ## 2026-10-12 — 发信前先对版本号：CLI 比 App 旧就直接报错，不再悄悄进死信再被兜底捞回（ADR-025）
 
 - 事故：codex → Claude 桌面会话的 `d00591bc` 连投 3 次 `exit 1`、stderr 全空，进死信后又被 ADR-022 的 pull hook 捞回——**信「到了」，病（全局 CLI 2.1.287 落后 App 2.1.295）被盖住**。同日查出 Codex 也错位：全局 `codex` 0.157.1 < Codex Desktop 0.162.0-alpha。

@@ -4,6 +4,14 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Codex threads open in Codex Desktop are left for their prompt hook, not resumed into and dead-lettered (ADR-026)
+
+The Codex twin of ADR-023. Of 190 failed Codex deliveries in `daemon.log`, 126 were `thread-store conflict: thread <id> already has an active writer`: 42 messages to 5 threads, each retried exactly 3 times and then dead-lettered, because Codex Desktop had the thread open and a headless `codex exec resume` can't take it over. Unlike the Claude case, the turn never runs at all.
+
+- **Detection reads Codex's own lock**: upstream (`codex-rs/rollout/src/writer_lock.rs`), every writer `flock`s `~/.codex/thread-writer-locks/<thread>.lock` and deletes the file on release. A thread counts as live when its lock file exists **and** some process holds it open, which is asked of `lsof` (read-only, ~75ms, skipped entirely when no lock files exist, cached 2s). A crash-orphaned lock file is not live. anytoany never tries the flock itself, because holding it even briefly could make Codex Desktop fail to open the thread.
+- **Skipped, left pending**: `isSessionLive` now covers Codex too, so the dispatcher leaves those messages pending for the thread's `UserPromptSubmit` hook. They also skip the ADR-025 version preflight, since they never go through the global CLI.
+- **Fallback**: if resume still hits the lock (race, or no `lsof`), the error is terminal (`retry:false`) and reads `codex_thread_busy: codex thread <id> is open in another Codex process (usually Codex Desktop)… NOT delivered…` instead of a raw stderr tail retried three times.
+
 ### Check CLI versions before sending — an out-of-date CLI is now a loud error, not a silent dead letter (ADR-025)
 
 Headless delivery resumes a session with the *global* CLI, but the session is usually written by the desktop App, which bundles its own, newer one. On 2026-10-12 a Codex→Claude message failed three times with a bare `exit 1` and an empty stderr: the global `claude` was 2.1.287 and the App was 2.1.295. The ADR-022 pull hook then quietly recovered it, so the message "arrived" and the cause stayed hidden. The same day, the global `codex` (0.157.1) turned out to be behind Codex Desktop (0.162.0-alpha).

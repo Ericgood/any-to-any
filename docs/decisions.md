@@ -371,3 +371,21 @@ Codex 侧不分层（exec resume 已全验证）。
 **验证（全部实测）**：① TDD 红→绿，新增 `version-guard.test.ts`（解析/比较/探测缓存/originator 推断）、`version-guard-adapters.test.ts`（两家扫描器记录写入者、错位时 `deliver` 不起回合直接终态失败）、`server.test.ts`（409 + 不入库，`/api/send` 与 `/api/messages` 两个入口）、`prompt-hook.test.ts`（错位死信横幅）、`notify.test.ts`（按 agent 10 分钟节流）；全量 369 绿。② 对编译后 dist 跑本机真实会话：Codex 三条最活跃线程全部判错位（0.157.1 < 0.162.0-alpha），Claude 判通过（CLI 2.1.296 ≥ App 2.1.295）；用假 `--version`=2.1.287 重放 10-12 事故会话 `7506d124` → `retry:false` 的 `version_mismatch`，且**没有起回合**。③ 真 daemon（launchd 重启）端到端：`anyd send "@codex:sunoprompt日常开发任务复活" …` → 打印错误、exit 1，mailbox 计数 677 → 677（**未入库**）。
 
 **附带发现（不在本 ADR 范围）**：9-22 以来投 Codex 的 45 次失败里绝大多数是 `thread-store conflict: thread … already has an active writer`——Codex Desktop 正开着该线程，与 ADR-023 的 Claude 活会话同构，需要 Codex 侧的活会话探测，另开任务。
+
+## ADR-026 Codex 活线程也别 headless resume：读 Codex 自己的写锁，跳过、留 pending；「active writer」兜底成终态人话（2026-10-12，ADR-023 的 Codex 孪生 + 日志实证）
+
+**背景 / 实证**：`~/.anytoany/daemon.log` 里投 Codex 的 190 次失败中，**126 次**是同一句 `codex exec resume exited 1: … failed to initialize thread persistence: thread-store conflict: thread <id> already has an active writer`——**42 条消息、每条都整整重试 3 次后进死信**，集中在 5 个线程（9-04 首见，9-06 单日 45 次，9-30 单日 33 次）。症状与 ADR-023 的 Claude 活会话同构：Codex Desktop 正开着这个线程，headless resume 被拒；之后再靠 ADR-022 的 pull hook 把死信捞回。区别是 Codex 这边**确定没送达**（turn 根本没起来），所以重试 3 次纯属白打，还每次都弹一行 failed。
+
+**信号从哪来（不猜，读上游源码 + 本机实测）**：
+- 上游 `openai/codex` `codex-rs/rollout/src/writer_lock.rs`：每个线程的写入者在 `$CODEX_HOME/thread-writer-locks/<thread_id>.lock` 上拿 **`File::try_lock()`（Unix 上是 `flock`）**；拿不到就是 `"thread {id} already has an active writer"`（正是日志里那句）。写入者释放（`WriterLockGuard::drop`）时**先关 fd 再删文件**；进程崩了留下的孤儿文件，下一个写入者首次 acquire 时由 `remove_stale_thread_locks` 清掉。
+- 本机实测：目录下 8 个 `.lock`，`lsof` 显示**全部**被 pid 1220 打开——即 `/Applications/ChatGPT.app/.../CodexCLI.app/.../codex app-server`（Codex Desktop 的 app-server）；日志里最近一次冲突的线程 `019f5bf9…` 就在其中，历史上冲突过但现在没开的 4 个线程都**没有**锁文件。`lsof -F n -- <files>` 耗时约 75ms。
+
+**判定规则：`<id>.lock` 存在 且 被某个进程打开着 → 该 Codex 线程有活写入者。** 只看文件存在不够（崩溃孤儿文件会让消息永远卡 pending）；只看 `ps` 不够（app-server 一个进程托管多个线程，命令行里没有线程 id）；`ipc.sock` / app-server 协议能问到「哪些线程已加载」但要走握手、且属于实时通道升级路径，不为一个布尔值引入。**明确不做**：自己去 `flock` 试锁——那会在一瞬间真的持有锁，恰好撞上 Desktop 打开线程就让**用户那边**报 active writer，属于对用户进程的干扰。`lsof` 只读、无副作用。
+
+**决策（两层，同 ADR-023 结构）**：
+1. **主治：活线程跳过 resume，留 pending。** `session-liveness.ts` 新增 Codex 探测（列锁目录 → 无锁文件则不 spawn → 有则一次 `lsof -F n` → 解析出被持有的线程 id；2s TTL 缓存；`lsof` 不可用/出错 → 空集，回退原投递路径）。`isSessionLive(id)` = Claude 交互进程 **或** Codex 活写锁——dispatcher 的 skip 与 `/api/send` 的版本 preflight 豁免（ADR-025）自动覆盖 Codex，**不新增概念**。消息由该线程自己的 `UserPromptSubmit` hook（`anyd hook codex-prompt-submit`）在用户下次开口时取走。可见性不变（以前也是死信后被同一个 hook 捞回），但零重试、零假 failed 刷屏。
+2. **兜底：stderr 含 `already has an active writer` → 终态（`retry:false`），错误写成人话**：「线程正被另一个 Codex 进程（通常是 Codex Desktop）持有写锁，headless resume 被拒、**未送达**；会在该线程下次收到用户输入时由 prompt hook 取回」。覆盖探测与 resume 之间的竞态（用户刚好在这 2s 内打开线程）以及 `lsof` 不可用的机器。不重试的理由：锁的持有者是一个长寿的 App 进程，几秒后的重试只会再撞一次。
+
+**与既有 ADR 的关系**：ADR-023 Layer 1 的 Codex 版；ADR-022 的死信兜底继续兜住第 2 层；ADR-025 的「活会话豁免版本检查」随之对 Codex 生效（这些线程本就不走全局 CLI）。
+
+**Backlog**：① 真正的实时送达应走 Codex app-server（`~/.codex/app-server-control/app-server-control.sock` / `ipc.sock`）在 Desktop 进程内起回合，见 docs/research；② `CODEX_HOME` 自定义的机器：adapter 现在也写死 `~/.codex`，两处一起改；③ Windows 无 `lsof`，回退原路径。

@@ -39,7 +39,9 @@ export interface DispatcherOptions {
      *  resume-delivered to: the injected turn lands but `claude -p` exits non-zero
      *  (a post-turn hook chokes, or the shared session errors), so anytoany false-
      *  fails and retries — re-injecting duplicate turns into the session the operator
-     *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023). */
+     *  is actively using. Leave it pending; its own prompt hook surfaces it (ADR-023).
+     *  Same for a Codex thread held open by Codex Desktop: resume is refused outright
+     *  ("already has an active writer"), so it too waits for its prompt hook (ADR-026). */
     isSessionLive?: (sessionId: string) => boolean;
     /** A registered EXTERNAL agent session (ADR-024) — a desktop App's assistant
      *  such as 闪电说, which anytoany has no delivery adapter for. It pulls its own
