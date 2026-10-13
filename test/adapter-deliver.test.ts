@@ -24,7 +24,7 @@ function mockExec(result: { stdout?: string; stderr?: string; code?: number }) {
 describe('codex deliver contract', () => {
   it('spawns codex exec resume with argv-passed envelope (no shell)', async () => {
     const { exec, calls } = mockExec({ stdout: 'BRAVO' });
-    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const adapter = createCodexAdapter({ isThreadLive: () => false, exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({}), 'ENVELOPE "quoted; $(rm -rf)"');
     expect(r).toEqual({ ok: true, output: 'BRAVO' });
     expect(calls[0]?.cmd).toBe('codex');
@@ -39,7 +39,7 @@ describe('codex deliver contract', () => {
 
   it('reports non-zero exit as failure with stderr', async () => {
     const { exec } = mockExec({ code: 2, stderr: 'thread not found' });
-    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const adapter = createCodexAdapter({ isThreadLive: () => false, exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({}), 'x');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('thread not found');
@@ -157,7 +157,7 @@ describe('codex per-machine sandbox escalation', () => {
     };
     const session = { agent: 'codex', sessionId: 'x-1', title: 't', cwd: '/w', lastActiveAt: 0 };
 
-    const withCfg = createCodexAdapter({ exec, configFile: cfg });
+    const withCfg = createCodexAdapter({ isThreadLive: () => false, exec, configFile: cfg });
     await withCfg.deliver(session, 'E');
     // --sandbox MUST precede the `resume` subcommand (it's an `exec` flag)
     expect(calls[0]).toEqual(['exec', '--sandbox', 'danger-full-access', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
@@ -166,7 +166,7 @@ describe('codex per-machine sandbox escalation', () => {
     await withCfg.deliver(session, 'E');
     expect(calls[1]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
 
-    const noCfg = createCodexAdapter({ exec, configFile: join(dir, 'none.json') });
+    const noCfg = createCodexAdapter({ isThreadLive: () => false, exec, configFile: join(dir, 'none.json') });
     await noCfg.deliver(session, 'E');
     expect(calls[2]).toEqual(['exec', 'resume', 'x-1', '--skip-git-repo-check', 'E']);
   });
@@ -183,7 +183,7 @@ describe('codex per-turn timeout (owner-configurable) & timeout handling', () =>
       seen.push(opts.timeoutMs);
       return { stdout: 'ok', stderr: '', code: 0 };
     };
-    const a = createCodexAdapter({ exec, configFile: cfg });
+    const a = createCodexAdapter({ isThreadLive: () => false, exec, configFile: cfg });
     const session = { agent: 'codex', sessionId: 'x-1', title: 't', cwd: '/w', lastActiveAt: 0 };
 
     writeFileSync(cfg, JSON.stringify({ codex: { deliverTimeoutSec: 1200 } }));
@@ -197,7 +197,7 @@ describe('codex per-turn timeout (owner-configurable) & timeout handling', () =>
 
   it('a timeout (exit 124) is a non-retryable failure — the turn already ran on the target', async () => {
     const exec: ExecFn = async () => ({ stdout: '', stderr: 'stuff\n… reading big dir', code: 124 });
-    const a = createCodexAdapter({ exec, configFile: '/nonexistent/cfg.json' });
+    const a = createCodexAdapter({ isThreadLive: () => false, exec, configFile: '/nonexistent/cfg.json' });
     const r = await a.deliver({ agent: 'codex', sessionId: 'x', title: 't', cwd: '/w', lastActiveAt: 0 }, 'E');
     expect(r.ok).toBe(false);
     expect(r.retry).toBe(false);
@@ -215,7 +215,7 @@ describe('codex thread held by another writer (ADR-026)', () => {
 
   it('is a terminal, clearly-worded failure — not retried 3× against a lock a long-lived App holds', async () => {
     const { exec } = mockExec({ stderr: ACTIVE_WRITER_STDERR, code: 1 });
-    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const adapter = createCodexAdapter({ isThreadLive: () => false, exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({ sessionId: '019f5bf9-e99a-7503-8faf-eba4e9949715' }), 'E');
     expect(r.ok).toBe(false);
     expect(r.retry).toBe(false);
@@ -227,7 +227,7 @@ describe('codex thread held by another writer (ADR-026)', () => {
 
   it('other non-zero exits stay retryable', async () => {
     const { exec } = mockExec({ stderr: 'Error: network hiccup', code: 1 });
-    const adapter = createCodexAdapter({ exec, configFile: '/nonexistent/anytoany-config.json' });
+    const adapter = createCodexAdapter({ isThreadLive: () => false, exec, configFile: '/nonexistent/anytoany-config.json' });
     const r = await adapter.deliver(session({}), 'E');
     expect(r.ok).toBe(false);
     expect(r.retry).toBeUndefined();

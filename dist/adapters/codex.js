@@ -1,6 +1,7 @@
 import { open, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { liveCodexThreads } from '../daemon/session-liveness.js';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
 import { checkCliVersion, createVersionProbe, inferWriterVersion } from './version-guard.js';
@@ -15,6 +16,8 @@ function loadCodexTimeoutMs(configFile) {
     return typeof sec === 'number' && sec >= 60 && sec <= 3600 ? sec * 1000 : null;
 }
 const ROLLOUT_RE = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
+/** `codex queue` only appends a row; it should return in seconds. */
+const QUEUE_TIMEOUT_MS = 30_000;
 const FIRST_LINE_MAX = 1024 * 1024; // session_meta can carry long base_instructions
 const TITLE_MAX = 80;
 /** Read up to the first newline without loading the whole rollout file. */
@@ -76,14 +79,34 @@ export function createCodexAdapter(options = {}) {
     const exec = options.exec ?? realExec;
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     const configFile = options.configFile ?? defaultConfigFile();
+    const isThreadLive = options.isThreadLive ?? ((id) => liveCodexThreads().has(id));
     const probeVersion = createVersionProbe(exec, 'codex');
-    const preflight = (session) => checkCliVersion(probeVersion, CODEX_GUARD, session.writerVersion);
+    // The queue path only appends a row to Codex's own queue — no resume, so the
+    // CLI-older-than-App hazard doesn't apply (verified 0.157.1 → 0.162-alpha). ADR-027.
+    const preflight = async (session) => isThreadLive(session.sessionId) ? null : checkCliVersion(probeVersion, CODEX_GUARD, session.writerVersion);
+    /**
+     * A thread Codex Desktop holds open refuses `exec resume` (active writer), but
+     * Desktop watches the shared queue (~/.codex/queue_1.sqlite) for the threads it
+     * has loaded and runs a queued message within seconds — verified 2026-10-13 on a
+     * throwaway thread (ADR-027). There's no stdout to read, so replies come back
+     * through `anyd reply` (see replyChannel).
+     */
+    async function deliverViaQueue(session, envelope) {
+        const { stdout, stderr, code } = await exec('codex', ['queue', '--thread', session.sessionId, '--message', envelope], session.cwd ? { cwd: session.cwd, timeoutMs: QUEUE_TIMEOUT_MS } : { timeoutMs: QUEUE_TIMEOUT_MS });
+        if (code !== 0) {
+            return { ok: false, error: `codex queue exited ${code}: …${(stderr || stdout).slice(-500)}` };
+        }
+        return { ok: true, output: '' };
+    }
     return {
         agent: 'codex',
         preflight,
+        replyChannel: (session) => (isThreadLive(session.sessionId) ? 'command' : 'marker'),
         // Verified 2026-08-05: exec resume carries full history, is cwd-independent,
         // and tolerates concurrent resumes of the same thread (spec §9 R2).
         async deliver(session, envelope) {
+            if (isThreadLive(session.sessionId))
+                return deliverViaQueue(session, envelope);
             // An older CLI can't resume what a newer Codex Desktop wrote — refuse loudly (ADR-025).
             const mismatch = await preflight(session);
             if (mismatch)

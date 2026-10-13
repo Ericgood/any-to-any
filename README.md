@@ -132,6 +132,19 @@ anyd connect sds           # wire 闪电说's assistant up (preview; --apply to 
 anyd status / stop         # daemon state / stop
 ```
 
+## Messages to sessions you have open
+
+A session that's open right now gets its mail **straight away**. anytoany doesn't resume it from the outside, because that's what used to fail. Instead it uses each app's own way in:
+
+- **Codex Desktop**: the message goes into Codex's own queue (`codex queue`, CLI 0.149+), and Desktop runs it in the open thread within seconds. The agent answers with `anyd reply`. A thread running in a read-only or workspace-write sandbox can't send that reply, because Codex's sandbox blocks it, so give threads that collaborate full access.
+- **Claude Code**: anytoany rings the session's built-in inbox (Claude Code 2.1.224+), and the session wakes and picks the message up through its inbox hook. If your sessions default to **Bypass permissions**, Claude Code holds such knocks, so the doorbell stays off and mail arrives on your next prompt instead. To turn it on, add this to `~/.claude/settings.json`:
+
+  ```json
+  { "crossSessionInbound": "accept" }
+  ```
+
+  `anyd doctor` shows whether the doorbell is on. Details: [ADR-027](docs/decisions.md).
+
 ## Seeing incoming messages (Codex / Kimi / Z Code)
 
 **Claude Code shows incoming cross-agent messages on its own** — an inbox hook fires on every prompt and injects whatever arrived. **Codex, Kimi and Z Code interactive apps keep the session in memory and don't live-refresh from disk**, so a message delivered mid-session can sit on disk unseen until you'd otherwise close and reopen the session. It's a real limitation of those apps, and we've done our best to paper over it *without* a restart:

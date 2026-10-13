@@ -57,6 +57,7 @@ describe('session scanners record who last wrote the session (ADR-025)', () => {
       `${JSON.stringify(meta)}\n`,
     );
     const [s] = await createCodexAdapter({
+      isThreadLive: () => false,
       sessionsDir: root,
       indexFile: join(root, 'none.jsonl'),
       configFile: NO_CONFIG,
@@ -95,7 +96,7 @@ describe('codex: long-lived threads inherit the version their originator runs to
       new Date('2026-10-12T13:00:00Z'),
     );
     const byId = new Map(
-      (await createCodexAdapter({ sessionsDir: root, indexFile: join(root, 'none'), configFile: NO_CONFIG }).listSessions())
+      (await createCodexAdapter({ isThreadLive: () => false, sessionsDir: root, indexFile: join(root, 'none'), configFile: NO_CONFIG }).listSessions())
         .map((s) => [s.sessionId, s.writerVersion]),
     );
     expect(byId.get(OLD_ID)).toBe('0.162.0-alpha.17.2'); // written by today's Desktop
@@ -135,7 +136,7 @@ describe('codex delivery refuses an older CLI (ADR-025)', () => {
 
   it('deliver fails terminally WITHOUT spawning codex exec resume', async () => {
     const { exec, calls } = versionedExec('codex-cli 0.157.1');
-    const r = await createCodexAdapter({ exec, configFile: NO_CONFIG }).deliver(
+    const r = await createCodexAdapter({ isThreadLive: () => false, exec, configFile: NO_CONFIG }).deliver(
       codex({ writerVersion: '0.162.0-alpha.17.2' }),
       'ENV',
     );
@@ -148,7 +149,7 @@ describe('codex delivery refuses an older CLI (ADR-025)', () => {
 
   it('the npm `latest` (0.162.1) resumes a 0.162.0-alpha session', async () => {
     const { exec } = versionedExec('codex-cli 0.162.1');
-    const r = await createCodexAdapter({ exec, configFile: NO_CONFIG }).deliver(
+    const r = await createCodexAdapter({ isThreadLive: () => false, exec, configFile: NO_CONFIG }).deliver(
       codex({ writerVersion: '0.162.0-alpha.17.2' }),
       'ENV',
     );

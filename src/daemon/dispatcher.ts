@@ -159,10 +159,12 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     }
   }
 
+  const replyVia = adapter.replyChannel?.(target) ?? 'marker';
   const envelope = renderEnvelope({
     messageId: claimed.id,
     fromLabel: senderLabel,
     text,
+    replyVia,
     // a shared collab doc turns the plain relay into a coordinated hand-off
     ...(opts.collab?.exists(claimed.conversationId)
       ? {

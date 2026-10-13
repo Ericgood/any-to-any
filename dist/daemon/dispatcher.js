@@ -98,10 +98,12 @@ export async function dispatchOnce(opts) {
             // best-effort — never fail delivery because the doc couldn't be seeded
         }
     }
+    const replyVia = adapter.replyChannel?.(target) ?? 'marker';
     const envelope = renderEnvelope({
         messageId: claimed.id,
         fromLabel: senderLabel,
         text,
+        replyVia,
         // a shared collab doc turns the plain relay into a coordinated hand-off
         ...(opts.collab?.exists(claimed.conversationId)
             ? {

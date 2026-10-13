@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import { createClaudeAdapter } from './adapters/claude.js';
 import { createCodexAdapter } from './adapters/codex.js';
@@ -16,6 +19,8 @@ import { createMailbox } from './mailbox/mailbox.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 /** Adapters that can actually RECEIVE a headless delivery (the dispatcher's map). */
+/** How often the daemon checks for mail waiting on a running Claude session (ADR-027). */
+const DOORBELL_INTERVAL_MS = 2_000;
 const defaultAdapters = () => [
     createClaudeAdapter(),
     createCodexAdapter(),
@@ -268,6 +273,33 @@ program
             }
         },
     }, { intervalMs: Number.parseInt(opts.interval, 10) || 1000 });
+    // ADR-027: ring a running Claude session's own inbox so mail held for it (it is
+    // live, so the dispatcher skipped it) arrives now instead of on the user's next
+    // prompt. Content still flows through the session's pull hook.
+    const { createDoorbell, doorbellUseful, liveClaudeInboxes } = await import('./daemon/claude-inbox.js');
+    const readClaudeSettings = () => {
+        try {
+            return JSON.parse(readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8'));
+        }
+        catch {
+            return null; // no settings file — Claude's defaults apply
+        }
+    };
+    let doorbellGate = { at: 0, on: false };
+    const doorbell = createDoorbell({
+        mailbox,
+        inboxes: liveClaudeInboxes,
+        enabled: () => {
+            // settings edits apply within half a minute, no daemon restart
+            if (Date.now() - doorbellGate.at > 30_000)
+                doorbellGate = { at: Date.now(), on: doorbellUseful(readClaudeSettings()) };
+            return doorbellGate.on;
+        },
+        onEvent: (e) => console.log(`[${new Date().toISOString()}] doorbell ${e.kind} @claude:${e.sessionId.slice(0, 8)} ×${e.messageIds.length}${e.detail ? ` — ${e.detail}` : ''}`),
+    });
+    const doorbellTimer = setInterval(() => {
+        doorbell.tick().catch((err) => console.error(`doorbell tick failed: ${err instanceof Error ? err.message : String(err)}`));
+    }, DOORBELL_INTERVAL_MS);
     // External agents are pull-only, so their mail never emits a 'delivered'
     // event and the notifier above never fires for them. A desktop App like 闪电说
     // also has no self-drive — nothing wakes it until the user speaks. So this
@@ -301,6 +333,7 @@ program
     const shutdown = () => {
         console.log('anyd daemon stopping');
         running.stop();
+        clearInterval(doorbellTimer);
         autorun.stop();
         externalNotifier.stop();
         lan?.registry.stop();
@@ -829,8 +862,22 @@ program
     const all = mailbox.inbox({ all: true });
     const hits = all.filter((m) => m.id.startsWith(messageId));
     const target = hits.length === 1 && hits[0] ? hits[0].id : messageId;
-    const r = mailbox.reply(target, message);
-    console.log(`queued reply ${r.id} → @${r.to.agent}:${r.to.sessionId.slice(0, 8)}`);
+    try {
+        const r = mailbox.reply(target, message);
+        console.log(`queued reply ${r.id} → @${r.to.agent}:${r.to.sessionId.slice(0, 8)}`);
+    }
+    catch (e) {
+        // A sandboxed agent (e.g. a Codex thread in read-only / workspace-write) can't
+        // write ~/.anytoany — and Codex's sandbox blocks loopback HTTP too, so there is
+        // no channel back from in there. Say so plainly instead of a stack trace.
+        if (e.code === 'SQLITE_READONLY' || e.code === 'SQLITE_CANTOPEN') {
+            console.error('error: reply NOT sent — this agent runs in a sandbox that cannot write ~/.anytoany/mailbox.db. ' +
+                'Put your verdict in your visible answer instead, and tell the user that anytoany replies from this ' +
+                'session need full-access permissions (ADR-027).');
+            process.exit(1);
+        }
+        throw e;
+    }
 });
 program
     .command('conversations')

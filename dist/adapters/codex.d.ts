@@ -8,6 +8,8 @@ interface CodexAdapterOptions {
     deliverTimeoutMs?: number;
     /** anytoany machine config (~/.anytoany/config.json) — sandbox opt-in. */
     configFile?: string;
+    /** Is the thread held open by another Codex process (Codex Desktop)? ADR-026/027. */
+    isThreadLive?: (threadId: string) => boolean;
 }
 export declare function createCodexAdapter(options?: CodexAdapterOptions): DeliveryAdapter;
 export {};

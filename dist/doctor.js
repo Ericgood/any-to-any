@@ -3,6 +3,38 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { realExec } from './adapters/exec.js';
 import { defaultDbPath, createDb } from './mailbox/db.js';
+/**
+ * Can the Claude doorbell wake a running session (ADR-027)? Claude Code holds a
+ * peer message for approval when the receiver bypasses permission prompts, and the
+ * desktop App can't show that dialog — so the frame expires. The pull hook still
+ * delivers on the next prompt; `accept` is what makes delivery immediate. Changing
+ * it is the owner's call, so this only reports.
+ */
+export function crossSessionInboundCheck(settings) {
+    const value = settings?.crossSessionInbound;
+    if (value === 'refuse') {
+        return {
+            name: 'claude doorbell (crossSessionInbound)',
+            ok: false,
+            note: '"refuse" — running Claude sessions drop the doorbell; mail waits for the next prompt. Set it to "accept" in ~/.claude/settings.json to deliver immediately',
+        };
+    }
+    if (value === 'accept') {
+        return { name: 'claude doorbell (crossSessionInbound)', ok: true, note: '"accept" — running sessions wake on new mail' };
+    }
+    if (settings?.permissions?.defaultMode === 'bypassPermissions') {
+        return {
+            name: 'claude doorbell (crossSessionInbound)',
+            ok: true,
+            note: 'OFF — your sessions default to Bypass permissions, which hold peer messages, so the daemon does not ring; mail arrives on the next prompt as before. To have running sessions wake on new mail, set "crossSessionInbound": "accept" in ~/.claude/settings.json',
+        };
+    }
+    return {
+        name: 'claude doorbell (crossSessionInbound)',
+        ok: true,
+        note: 'unset — wakes sessions that prompt for permissions; a session in Bypass permissions holds the doorbell (mail then arrives on its next prompt). Set "crossSessionInbound": "accept" in ~/.claude/settings.json if you want those woken too',
+    };
+}
 async function which(cmd) {
     const { stdout, code } = await realExec('which', [cmd], { timeoutMs: 5000 });
     return code === 0 ? stdout.trim() : null;
@@ -22,6 +54,15 @@ export async function runDoctor() {
         ok: codexBin !== null,
         note: codexBin ?? 'not found — codex sessions cannot be delivered to',
     });
+    if (codexBin) {
+        // ADR-027: live Codex Desktop threads are reached through `codex queue` (CLI 0.149+)
+        const { code } = await realExec('codex', ['queue', '--help'], { timeoutMs: 10_000 });
+        checks.push({
+            name: 'codex queue (live Desktop threads)',
+            ok: code === 0,
+            note: code === 0 ? 'supported' : 'missing — upgrade: npm i -g @openai/codex@latest',
+        });
+    }
     checks.push({
         name: 'claude sessions',
         ok: existsSync(join(home, '.claude', 'projects')),
@@ -66,8 +107,10 @@ export async function runDoctor() {
         });
     }
     let hookRegistered = false;
+    let claudeSettings = null;
     try {
         const settings = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8'));
+        claudeSettings = settings;
         hookRegistered =
             settings.hooks?.['UserPromptSubmit']?.some((m) => m.hooks.some((h) => h.command.includes('anyd hook claude-prompt-submit'))) ?? false;
     }
@@ -79,6 +122,7 @@ export async function runDoctor() {
         ok: hookRegistered,
         note: hookRegistered ? 'UserPromptSubmit registered' : 'run: anyd setup',
     });
+    checks.push(crossSessionInboundCheck(claudeSettings));
     let allOk = true;
     for (const c of checks) {
         if (!c.ok)

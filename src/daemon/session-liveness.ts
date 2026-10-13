@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { liveClaudeInboxes } from './claude-inbox.js';
 
 /**
  * Detect Claude sessions that are currently open in an INTERACTIVE process, so the
@@ -120,7 +121,13 @@ export function createCodexLiveness(options: CodexLivenessOptions = {}): (now?: 
 /** Codex thread ids currently held by a writer (typically Codex Desktop's app-server). */
 export const liveCodexThreads = createCodexLiveness();
 
-/** Is this session open in an interactive Claude process, or held by a Codex writer, right now? */
+/**
+ * Is this local session being run by a live process that surfaces its own mail, so
+ * the dispatcher must NOT headless-resume into it? Claude only: the inbox registry
+ * (ADR-027 — the only signal that sees desktop-App sessions, whose command line has
+ * no `--resume=`) plus the `ps` scan (ADR-023). Live Codex threads are NOT skipped
+ * any more: the codex adapter queues into Codex Desktop instead (ADR-027).
+ */
 export function isSessionLive(sessionId: string, now: () => number = Date.now): boolean {
-  return liveClaudeSessions(now).has(sessionId) || liveCodexThreads(now).has(sessionId);
+  return liveClaudeInboxes().has(sessionId) || liveClaudeSessions(now).has(sessionId);
 }

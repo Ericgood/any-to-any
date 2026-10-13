@@ -542,3 +542,15 @@ describe('dispatchOnce — @user is a never-dead sink (ADR-020 escalation channe
     expect(mailbox.getMessage(m.id)?.status).toBe('failed'); // unchanged behavior
   });
 });
+
+describe('dispatcher — reply channel follows the adapter (ADR-027)', () => {
+  it('renders a command-reply envelope when the adapter will queue rather than resume', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = { ...fakeAdapter('codex', () => ({ ok: true, output: '' })), replyChannel: () => 'command' as const };
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'hi codex' });
+    await dispatchOnce({ mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY });
+    const envelope = adapter.calls[0]?.envelope ?? '';
+    expect(envelope).toContain(`anyd reply ${m.id}`);
+    expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
+  });
+});

@@ -391,3 +391,32 @@ Codex 侧不分层（exec resume 已全验证）。
 **验证（全部实测）**：① TDD 红→绿——`session-liveness.test.ts`（真实 `lsof -F n` 输出解析、孤儿锁文件不算活、无锁文件不 spawn、目录缺失/`lsof` 失败回退空集、2s TTL）、`adapter-deliver.test.ts`（日志原文 stderr → `codex_thread_busy` 终态、其余非 0 退出仍可重试）；先 7 红，全量 **377 绿**。② 编译后 dist 在 launchd 同款最小 PATH 下跑真实数据：认出 8 个被 Desktop 持有的线程（含日志里最近冲突的 `019f5bf9`=true），历史冲突但已关的 `01a06b64`=false，随机 uuid=false。③ **真 daemon 端到端 A/B**（`launchctl kickstart -k`，pid 15685）：自己对假线程 `0ff1ce00-a026-…` 的锁文件加 flock 持有 → 插 pending 探针 → 8 秒（8 个轮询周期）后 **pending、attempts=0、日志 0 行**；释放锁（对照组）→ 下一拍立即被 claim（`target session not found`，假线程本就不在目录里）——证明跳过确由写锁信号驱动。探针与锁文件已清理，无残留；全程没碰用户真实线程。
 
 **Backlog**：① 真正的实时送达应走 Codex app-server（`~/.codex/app-server-control/app-server-control.sock` / `ipc.sock`）在 Desktop 进程内起回合，见 docs/research；② `CODEX_HOME` 自定义的机器：adapter 现在也写死 `~/.codex`，两处一起改；③ Windows 无 `lsof`，回退原路径。
+
+## ADR-027 门铃：活会话不再干等用户打字 —— Claude 走官方收件箱 socket 唤醒，Codex 走 `codex queue` 进 Desktop 自己的队列（2026-10-13，社区调研 + 本机实测）
+
+**背景**：日志 251 次投递失败，0 次出在设备间传输，全卡在「塞进会话」这一步。ADR-023/026 的做法是「活会话别硬塞，留 pending 等用户下次开口」——不再失败了，但**要等用户打字才收到**。调研（docs/research/research-live-delivery-2026-10.md）找到两条官方门铃，本机逐条实测成立。
+
+**实测（2026-10-13，全部在隔离环境 / 专门新建的测试线程上，未碰用户真实会话）**：
+1. **Claude 收件箱**：Claude Code v2.1.224+ 每个会话（含桌面 App）绑定 `~/.claude/sessions/<pid>.json` 里登记的 Unix socket。对隔离的 `claude -p` stream-json worker（2.1.296）写一行 `{"type":"user","message":{"role":"user","content":…},"msg_id":…,"priority":"next"}`：空闲 worker **自动起一轮**（PONG）。全链路：隔离 mailbox 里放 pending 消息 → 只发「门铃」文本 → 会话醒来 → `UserPromptSubmit` 触发 anytoany 现有 pull hook 注入正文 → 模型照做并自己 `anyd reply`（KIWI）。
+2. **Bypass 接收方**：不设 `crossSessionInbound` 时帧被扣（stream 里 `peer_message_hold`，不起回合），**消息仍 pending 不丢**；`--settings '{"crossSessionInbound":"accept"}'` 后正常送达（GRAPE）。
+3. **Codex 队列**：`codex queue --thread <id> --message …`（CLI 0.149+，写共享的 `~/.codex/queue_1.sqlite`）。① 线程没人开时，消息**安全地躺在队列里**（60 秒无人消费）；② 用 `codex://threads/<id>` 让 Codex Desktop 打开该线程后 **14 秒内被 Desktop 消费**并作答；③ **Desktop 已持有写锁的线程，新排队消息 4 秒内送达**。这正是 openai/codex#37450 与 ACC/agent-talk 等社区项目认为无解的场景。跨版本可用：CLI 0.157.1 排队、Desktop 0.162.0-alpha 消费。
+
+**顺带抓到的老 bug**：ADR-023 用 `ps` 找 `--resume=<uuid>` 判断 Claude 活会话，但**桌面 App 的会话进程命令行里没有这个参数**（本机 4 个桌面会话全部漏判）。于是 daemon 一直在往用户开着的桌面会话里 headless resume——10-12 的 `d00591bc` 目标 7506d124 正是一个开着的桌面会话。
+
+**决策**：
+1. **Claude 活会话判定 = 收件箱注册表 ∪ ps**。注册表条目要求 pid 存活且 socket 文件存在。
+2. **Claude 门铃**：发往本机 Claude 活会话的 pending 消息，daemon 往其 socket 写一条**只含门铃文本**的帧（不含消息正文），每条消息只按一次。正文仍由 pull hook 注入。好处：帧被扣或丢时消息仍 pending，下次开口照样收到，**最坏情况退化成现状**；正文走 hook，沿用 ADR-016 的框架和 `anyd reply` 回信路径。不声明 `from-mode`：不伪造自己证明不了的权限模式（伪造等于绕过安全闸）。
+3. **Codex 活线程（写锁被持有）改用 `codex queue` 投完整信封**，标 delivered。信封改为「用 `anyd reply <id>` 回信」，因为队列路径拿不到 stdout，读不到回信标记。没人开的线程仍走 `exec resume`（立即执行、可拿回信）。
+4. **队列路径豁免 ADR-025 版本检查**：它不 resume 会话，只写一行队列，实测跨版本可用。`exec resume` 路径的检查不变。
+5. **`anyd doctor`** 检查：Claude 默认权限模式是 bypass 且未设 `crossSessionInbound: accept` 时提示（门铃会被扣）；`codex` 是否支持 `queue`。是否改用户设置由机主决定，anytoany 不代改。
+
+**取舍 / 不做**：不读、不转发注册表旁的 `*.key` token。token 会让消息被当成「会话自己的子进程」发的，从而跳过入站控制；那是给会话自己用的。Claude Channels 不用：自定义 channel 必须用 `--dangerously-*` 启动，且桌面会话用不上。
+
+**实现后追加的决策 —— 门铃闸门**：本机实测发现，`permissions.defaultMode: "bypassPermissions"` 写在用户级设置里时，**所有新会话都算 Bypass**，未设 accept 的门铃一律被扣（cause `no-mode-asserted`）。这种配置下按门铃只会在桌面会话里留下被扣的通知，没有任何收益。所以 daemon **只在门铃能叫醒人时才按**：`crossSessionInbound: accept`，或默认模式不是 bypass。设置每 30 秒重读一次，改完不用重启。`anyd doctor` 明确报告门铃是开还是关，以及怎么开。
+
+**验证（全部实测，真 daemon，launchd 重启后）**：
+- **TDD**：新增 `claude-inbox.test.ts`（注册表：死 pid、缺 socket、坏 json、`.key` 都排除；帧格式不含正文；真 Unix socket 收发；每条消息只按一次；按铃失败不风暴；闸门；doctor 文案）、`codex-queue.test.ts`（活线程走 queue、豁免版本检查、失败可重试、`replyChannel`；信封 command 模式）、dispatcher 按 adapter 渲染回信方式。全量 398 绿。
+- **Codex**：`anyd send "@codex:01a1358c" …`（测试线程，Desktop 持锁）→ dispatcher 走 `codex queue` → Desktop 在线程里跑完这一轮，并**自己执行了** `anyd reply 477abe06 "DONE BANANA"`。该测试线程是 `codex exec` 建的 read-only 沙箱，写 mailbox 报 `SQLITE_READONLY`。实测 Codex 沙箱连 loopback HTTP 也拦（`codex sandbox -- curl 127.0.0.1:7433` → 000），所以**沙箱线程没有回信通道**，属于 Codex 沙箱的属性。对此 `anyd reply` 改成说人话的错误；信封让 agent 在回信命令失败时把结论写进可见回答。沙箱外同一条命令正常路由：`codex:01a1358c → user:cli`。
+- **Claude**：① 用户默认 bypass、worker 未设 accept：门铃被扣，消息仍 pending、attempts 0；模拟用户下一句话后 14 秒，hook 注入、回 CHERRY（兜底成立）。② worker 带 `--settings accept`：**无任何用户输入，7 秒**收到 PLUM 回信。③ 闸门关闭时：0 次按铃、0 个被扣帧、消息 pending、未被 headless resume。④ `isSessionLive` 认出本机全部 4 个桌面会话（含 7506d124），随机 uuid 为 false。
+
+**已知限制**：门铃对 Bypass 接收方需机主设 accept；Codex `workspace-write` 沙箱线程里 `anyd reply` 可能写不进 `~/.anytoany`（本机 40 个近期线程中 39 个是 full-access）；收件箱的线协议来自社区抓包（ACC issue #130），非官方文档，所以做了失败回退，并在本机 2.1.296 实测确认。

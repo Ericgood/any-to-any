@@ -17,6 +17,36 @@ function collabFooter(collab) {
         `--- END SHARED PLAN ---`,
     ];
 }
+function markerReplyLines() {
+    return [
+        `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
+        `ends, nothing continues automatically. You MUST end your response with one line:`,
+        `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,
+        `${REPLY_MARKER} BLOCKED <missing>   — you genuinely cannot here (missing credentials/env/network)`,
+        `${REPLY_MARKER} DECLINED <why>      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
+        `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
+        `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
+        `DONE state with no new task or question for you), do not restate your own status:`,
+        `reply "${REPLY_MARKER} NOOP" and nothing else.`,
+    ];
+}
+/** Same verdict protocol, delivered by running a command (queued delivery, ADR-027). */
+function commandReplyLines(messageId) {
+    const cmd = `anyd reply ${messageId}`;
+    return [
+        `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
+        `ends, nothing continues automatically. Before ending it you MUST send exactly one reply by running:`,
+        `${cmd} "DONE <result>"       — you completed the request in this turn`,
+        `${cmd} "BLOCKED <missing>"   — you genuinely cannot here (missing credentials/env/network)`,
+        `${cmd} "DECLINED <why>"      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
+        `${cmd} "<answer>"            — for pure questions, just answer`,
+        `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
+        `DONE state with no new task or question for you), do not restate your own status:`,
+        `run ${cmd} "NOOP" and nothing else.`,
+        `If ${cmd} fails (e.g. your sandbox can't write ~/.anytoany), state the same verdict as the`,
+        `last line of your visible answer so your operator still sees it.`,
+    ];
+}
 /**
  * Render the delivery prompt injected into the target session.
  * Trusted-teammate framing (ADR-016): the sender is a peer agent in the
@@ -35,15 +65,7 @@ export function renderEnvelope(input) {
         input.text,
         `--- END MESSAGE ---`,
         ...(input.collab ? collabFooter(input.collab) : []),
-        `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
-        `ends, nothing continues automatically. You MUST end your response with one line:`,
-        `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,
-        `${REPLY_MARKER} BLOCKED <missing>   — you genuinely cannot here (missing credentials/env/network)`,
-        `${REPLY_MARKER} DECLINED <why>      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
-        `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
-        `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
-        `DONE state with no new task or question for you), do not restate your own status:`,
-        `reply "${REPLY_MARKER} NOOP" and nothing else.`,
+        ...(input.replyVia === 'command' ? commandReplyLines(input.messageId) : markerReplyLines()),
         `Acknowledgement-only replies ("received", "will do") are NOT valid — act now or`,
         `state what blocks you. DONE claims must be limited to what you actually did and`,
         `observed in this turn — never assert results you cannot verify from here (UI`,

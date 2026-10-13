@@ -1,6 +1,16 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-13 — 门铃：开着的会话现在就收到信，不用等你下次打字（ADR-027）
+
+- 起因：日志 251 次失败**全卡在最后一公里**，设备间传输 0 次。ADR-023/026 不再往活会话硬塞，但信要等你下次开口。调研社区与官方后，找到两条官方门铃，在本机测试会话 / 测试线程上逐条实测。
+- **Codex 桌面版（社区公认无解的场景）**：`codex queue` 写进 Codex 自己的共享队列 `~/.codex/queue_1.sqlite`，Desktop 会盯着自己开着的线程。实测 Desktop 持锁的线程 **4 秒内**跑完这一轮，agent 自己执行了 `anyd reply`。活线程改走这条路；信封改为「运行 `anyd reply <id>` 回信」。不 resume 所以豁免版本检查（0.157 排队、0.162 消费，实测可用）。没人开的线程仍走 `exec resume`。
+- **Claude 官方收件箱**：2.1.224 起每个会话（含桌面 App）在 `~/.claude/sessions/<pid>.json` 登记收件 socket。daemon 往里按一下「有新信」的门铃（不带正文），会话醒来后由现有 pull hook 注入正文。门铃被扣或丢时，信仍 pending，下次开口照收。设了 `crossSessionInbound: accept` 的测试会话，**无任何输入 7 秒回信**。
+- **闸门**：会话默认 Bypass 又没设 accept 时，Claude 会扣下所有外来帧，此时 daemon 不按铃，免得留噪音。`anyd doctor` 明说门铃开 / 关以及怎么开。不代改用户设置，不借用会话自己的 token 绕过入站控制。
+- **顺手修掉的老 bug**：ADR-023 靠 `ps` 找 `--resume=` 判断活会话，**桌面 App 会话没有这个参数**（本机 4 个全漏判），daemon 一直往开着的桌面会话里 headless resume。10-12 的死信 `d00591bc` 就是这么来的。现在用收件箱注册表判活。
+- **如实写明的限制**：只读 / workspace-write 沙箱里的 Codex 线程没有回信通道（Codex 沙箱同时拦写 mailbox 和 loopback HTTP，已实测）。`anyd reply` 改为说人话的报错，信封让 agent 把结论写进可见回答。
+- 验证：全量 398 绿；真 daemon 端到端：Codex 走 queue → Desktop 作答；Claude 开 accept 时 7 秒自动回信、未开时兜底 14 秒（模拟下一句话）；闸门关闭时 0 次按铃；4 个桌面会话全部判活。
+
 ## 2026-10-12 — Codex 活线程不再 headless resume：读 Codex 自己的写锁，跳过、留 pending（ADR-026）
 
 - 实证：`daemon.log` 投 Codex 的 190 次失败里 126 次是 `thread-store conflict: thread <id> already has an active writer`——42 条消息、5 个线程，**每条都重试满 3 次后进死信**。Codex Desktop 开着线程，headless resume 抢不到写锁，turn 根本没起来。ADR-023 的 Codex 孪生。

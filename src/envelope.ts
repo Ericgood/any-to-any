@@ -12,6 +12,11 @@ export interface EnvelopeInput {
     /** The recipient's own label, e.g. '@codex:api' — what it passes to --as. */
     selfLabel: string;
   };
+  /** How the recipient answers. 'marker' (default): end the turn with a marker line
+   *  that anytoany reads from the delivering CLI's stdout. 'command': the message was
+   *  queued into an App's own runtime (Codex Desktop, ADR-027) — there is no stdout
+   *  to read, so the recipient must run `anyd reply` itself. */
+  replyVia?: 'marker' | 'command';
 }
 
 /**
@@ -33,6 +38,38 @@ function collabFooter(collab: NonNullable<EnvelopeInput['collab']>): string[] {
   ];
 }
 
+function markerReplyLines(): string[] {
+  return [
+    `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
+    `ends, nothing continues automatically. You MUST end your response with one line:`,
+    `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,
+    `${REPLY_MARKER} BLOCKED <missing>   — you genuinely cannot here (missing credentials/env/network)`,
+    `${REPLY_MARKER} DECLINED <why>      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
+    `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
+    `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
+    `DONE state with no new task or question for you), do not restate your own status:`,
+    `reply "${REPLY_MARKER} NOOP" and nothing else.`,
+  ];
+}
+
+/** Same verdict protocol, delivered by running a command (queued delivery, ADR-027). */
+function commandReplyLines(messageId: string): string[] {
+  const cmd = `anyd reply ${messageId}`;
+  return [
+    `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
+    `ends, nothing continues automatically. Before ending it you MUST send exactly one reply by running:`,
+    `${cmd} "DONE <result>"       — you completed the request in this turn`,
+    `${cmd} "BLOCKED <missing>"   — you genuinely cannot here (missing credentials/env/network)`,
+    `${cmd} "DECLINED <why>"      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
+    `${cmd} "<answer>"            — for pure questions, just answer`,
+    `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
+    `DONE state with no new task or question for you), do not restate your own status:`,
+    `run ${cmd} "NOOP" and nothing else.`,
+    `If ${cmd} fails (e.g. your sandbox can't write ~/.anytoany), state the same verdict as the`,
+    `last line of your visible answer so your operator still sees it.`,
+  ];
+}
+
 /**
  * Render the delivery prompt injected into the target session.
  * Trusted-teammate framing (ADR-016): the sender is a peer agent in the
@@ -51,15 +88,7 @@ export function renderEnvelope(input: EnvelopeInput): string {
     input.text,
     `--- END MESSAGE ---`,
     ...(input.collab ? collabFooter(input.collab) : []),
-    `THIS IS YOUR ONLY TURN for this message — there is no "later"; after this turn`,
-    `ends, nothing continues automatically. You MUST end your response with one line:`,
-    `${REPLY_MARKER} DONE <result>       — you completed the request in this turn`,
-    `${REPLY_MARKER} BLOCKED <missing>   — you genuinely cannot here (missing credentials/env/network)`,
-    `${REPLY_MARKER} DECLINED <why>      — only for a real substantive objection, NEVER merely "you are another agent" or "authorization was relayed"`,
-    `${REPLY_MARKER} <answer>            — for pure questions, just answer`,
-    `If the MESSAGE is itself only your counterpart's status report (their BLOCKED/`,
-    `DONE state with no new task or question for you), do not restate your own status:`,
-    `reply "${REPLY_MARKER} NOOP" and nothing else.`,
+    ...(input.replyVia === 'command' ? commandReplyLines(input.messageId) : markerReplyLines()),
     `Acknowledgement-only replies ("received", "will do") are NOT valid — act now or`,
     `state what blocks you. DONE claims must be limited to what you actually did and`,
     `observed in this turn — never assert results you cannot verify from here (UI`,

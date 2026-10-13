@@ -11,6 +11,11 @@ export interface EnvelopeInput {
         /** The recipient's own label, e.g. '@codex:api' — what it passes to --as. */
         selfLabel: string;
     };
+    /** How the recipient answers. 'marker' (default): end the turn with a marker line
+     *  that anytoany reads from the delivering CLI's stdout. 'command': the message was
+     *  queued into an App's own runtime (Codex Desktop, ADR-027) — there is no stdout
+     *  to read, so the recipient must run `anyd reply` itself. */
+    replyVia?: 'marker' | 'command';
 }
 /**
  * Render the delivery prompt injected into the target session.

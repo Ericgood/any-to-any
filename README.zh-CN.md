@@ -87,6 +87,19 @@ anyd doctor                # 环境自检
 anyd status / stop         # daemon 状态 / 停止
 ```
 
+## 发给正开着的会话
+
+正开着的会话会**马上**收到信。anytoany 不从外面硬塞（以前就是这么失败的），而是走每个 App 自己的入口：
+
+- **Codex 桌面版**：消息放进 Codex 自己的队列（`codex queue`，CLI 0.149+），桌面版几秒内在开着的线程里执行，agent 用 `anyd reply` 回信。只读 / workspace-write 沙箱里的线程回不了信（Codex 沙箱拦着），所以参与协作的线程请给完全访问权限。
+- **Claude Code**：anytoany 敲会话自带的收件箱（Claude Code 2.1.224+），会话醒来后由收件 hook 取信。如果你的会话默认是 **Bypass permissions**，Claude Code 会扣下这类敲门，此时门铃不开，信在你下次开口时到达。要打开门铃，在 `~/.claude/settings.json` 里加：
+
+  ```json
+  { "crossSessionInbound": "accept" }
+  ```
+
+  `anyd doctor` 会显示门铃开没开。详见 [ADR-027](docs/decisions.md)。
+
 ## 收消息（Codex / Kimi / Z Code）
 
 **Claude Code 会自动显示收到的跨 agent 消息**——它每次提交都会触发收件 hook，把新消息注入进来。**Codex、Kimi、Z Code 的交互式 App 把会话缓存在内存里、不实时读磁盘**,所以会话进行中投递来的消息可能先落在磁盘上、你却看不到,得关掉重开才刷出来。这是这几家 App 的真实限制,我们已尽量**免重启**把它补上:

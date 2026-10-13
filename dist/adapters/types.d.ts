@@ -35,6 +35,10 @@ export interface DeliveryAdapter extends AgentAdapter {
     /** Cheap pre-send check (no turn is run): null = deliverable, else a
      *  human-facing error, e.g. `version_mismatch: …` (ADR-025). */
     preflight?(session: SessionInfo): Promise<string | null>;
+    /** How the recipient must answer for this delivery: 'marker' (read from the CLI's
+     *  stdout, the default) or 'command' (`anyd reply`, when the turn runs inside an
+     *  App we can't read output from — ADR-027). */
+    replyChannel?(session: SessionInfo): 'marker' | 'command';
 }
 /** Injectable subprocess runner so adapter contract tests never spawn real CLIs. */
 export type ExecFn = (cmd: string, args: string[], opts: {
