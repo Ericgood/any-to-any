@@ -449,6 +449,7 @@ Codex 侧不分层（exec resume 已全验证）。
 **验证（全部实测）**：
 - **TDD**：新增 `identity`（证书能被 X509Certificate 解析、自签、验签通过、有效期到 9999 年、ID 格式与规范化、0600/0700 权限）、`secure-transport`（真 socket：双方已配对 → 200；未配对客户端 → 403 并记为配对请求、处理函数不执行；冒充者在发出任何字节前被断开；无证书 → 401；probe 能查出对端 ID）、`peer-api`（`from.device` 用登记名覆盖自报值）、`lan`（未配对时转发失败并给出确切命令、对方记录配对请求；配对后热生效、转发成功、目录聚合；冒充者两种情形都被拒）、`pair-commands`。全量 421 绿。
 - **真 daemon 双实例**（本机，隔离 home，真 mDNS）：alpha 看到 beta「未配对 + 确切命令」，也正确识别出旧版本的 macbook。只有 alpha 信任 beta 时，beta 拒收（mailbox 0 条），并显示「来自 alpha 的配对请求」。beta 执行 `pair add` 后**无需重启**即可转发，beta 收到的消息 `from_device = alpha`。线路检查：TLS 1.3 / AES-256-GCM / Ed25519；明文 HTTP 打 peer 端口无应答；从局域网 IP 访问控制台被拒；旧 token 头访问 `/api/peer/*` 返回 404；不带证书的 Node 客户端得到 401。macOS 自带 curl（LibreSSL 3.3.6）无法与 Ed25519 握手，这是 curl 的限制，peer 两端都是 Node + OpenSSL 3，不受影响。
+- **CI 抓到的编码 bug（已修）**：第一版把证书序列号首字节「清掉最高位」，约 1/128 的概率清成 0x00，INTEGER 带上多余的前导零。Node 20 的 OpenSSL 3.0 严格拒绝（`illegal padding`），本地 Node 25 没触发。修法：DER INTEGER 统一做规范化编码（`derInteger`），序列号首字节保证非零；回归测试连续生成 400 张证书逐一校验。本机已生成的证书序列号首字节是 0x59，本身就规范，无需重新生成。
 - **本机真 daemon 已切换**：控制台只监听 `127.0.0.1:7433`，peer 端口 `*:7434`，身份已生成（key 0600），`anyd doctor` 有对应检查项。
 
 **不防的（如实写明）**：偷走 `identity/key.pem` 就能冒充本机（与 Syncthing 相同，靠文件权限和磁盘加密）；mDNS 广播暴露设备名和 ID；消息在本机 mailbox 里是明文存储（与 Syncthing 相同）。

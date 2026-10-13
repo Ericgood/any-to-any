@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   createSelfSignedIdentity,
+  derInteger,
   deviceIdFromCert,
   formatDeviceId,
   loadOrCreateIdentity,
@@ -37,6 +38,25 @@ describe('self-signed Ed25519 certificate (hand-rolled DER)', () => {
     const b = createSelfSignedIdentity();
     expect(a.certPem).not.toBe(b.certPem);
     expect(a.keyPem).not.toBe(b.keyPem);
+  });
+});
+
+describe('canonical DER INTEGER (CI caught a 1-in-128 "illegal padding" on Node 20)', () => {
+  it('never emits a redundant leading zero, adds one only for a set high bit', () => {
+    expect(derInteger(Buffer.from([0x00, 0x05]))).toEqual(Buffer.from([0x02, 0x01, 0x05]));
+    expect(derInteger(Buffer.from([0x00, 0x00, 0x7f, 0x01]))).toEqual(Buffer.from([0x02, 0x02, 0x7f, 0x01]));
+    expect(derInteger(Buffer.from([0x80]))).toEqual(Buffer.from([0x02, 0x02, 0x00, 0x80]));
+    expect(derInteger(Buffer.from([0x00, 0x80]))).toEqual(Buffer.from([0x02, 0x02, 0x00, 0x80]));
+    expect(derInteger(Buffer.from([0x02]))).toEqual(Buffer.from([0x02, 0x01, 0x02]));
+    expect(derInteger(Buffer.from([0x00]))).toEqual(Buffer.from([0x02, 0x01, 0x00]));
+  });
+
+  it('serials are always canonical across many certificates', () => {
+    for (let i = 0; i < 400; i++) {
+      const serial = new X509Certificate(createSelfSignedIdentity().certPem).serialNumber;
+      expect(serial).toMatch(/^[0-9A-F]{32}$/); // 16 bytes, positive, no padding byte
+      expect(serial.startsWith('00')).toBe(false);
+    }
   });
 });
 

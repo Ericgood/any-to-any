@@ -13,6 +13,12 @@ export interface DeviceIdentity {
     certPem: string;
     keyPem: string;
 }
+/**
+ * Positive INTEGER in canonical DER: no redundant leading 0x00 (strict parsers —
+ * OpenSSL 3.0 / Node 20 — reject "illegal padding"), and a single 0x00 only when
+ * the high bit would otherwise make it negative.
+ */
+export declare function derInteger(bytes: Buffer): Buffer;
 /** A fresh key pair and a self-signed certificate for it. */
 export declare function createSelfSignedIdentity(now?: Date): {
     certPem: string;

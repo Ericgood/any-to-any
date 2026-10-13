@@ -54,8 +54,18 @@ function oid(arcs: number[]): Buffer {
   return tlv(0x06, Buffer.from(bytes));
 }
 
-/** Positive INTEGER from raw bytes (prefix 0x00 when the high bit is set). */
-const integer = (bytes: Buffer): Buffer => tlv(0x02, bytes[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes);
+/**
+ * Positive INTEGER in canonical DER: no redundant leading 0x00 (strict parsers —
+ * OpenSSL 3.0 / Node 20 — reject "illegal padding"), and a single 0x00 only when
+ * the high bit would otherwise make it negative.
+ */
+export function derInteger(bytes: Buffer): Buffer {
+  let start = 0;
+  while (start < bytes.length - 1 && bytes[start] === 0 && (bytes[start + 1]! & 0x80) === 0) start++;
+  const body = bytes.subarray(start);
+  return tlv(0x02, body[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), body]) : body);
+}
+const integer = derInteger;
 
 const name = (cn: string): Buffer => seq(set(seq(oid(CN_OID), tlv(0x0c, Buffer.from(cn, 'utf8')))));
 
@@ -75,7 +85,7 @@ export function createSelfSignedIdentity(now: Date = new Date()): { certPem: str
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const algorithm = seq(oid(ED25519_OID));
   const serial = randomBytes(16);
-  serial[0] = serial[0]! & 0x7f; // keep it positive and 16 bytes
+  serial[0] = (serial[0]! & 0x7f) | 0x01; // positive and non-zero leading byte → 16 canonical bytes
   // backdate a day so a peer with a slightly slow clock still accepts it
   const notBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const tbs = seq(

@@ -16,7 +16,8 @@ The LAN layer used to be **plaintext HTTP with one shared token for the whole cl
 - **Breaking**: the old `cluster-token` is no longer read, and `--join <token>` / `pair --set` print the new flow. Upgrade both machines, then `pair add` once on each side.
 - **Also fixed**: an isolated daemon (`ANYTOANY_HOME`, as used by tests and smoke runs) rewrote **and pruned** the operator's real `~/.claude/agents/any-*` mention agents. Isolated instances now skip that sync.
 - **Beyond the LAN?** This is step one of what lets Syncthing cross networks, since identity is now a key and not an IP. Crossing networks would still need discovery and relay servers, which conflicts with ADR-002 (LAN only), so it's a separate decision.
-- Verified: 421 tests; two real daemons on one machine over real mDNS. Unpaired traffic was refused and recorded as a request; pairing applied live; the message was relayed and stamped with the verified device; the wire showed TLS 1.3 / AES-256-GCM / Ed25519. The console is unreachable from the LAN IP.
+- CI on Node 20 caught a 1-in-128 certificate encoding bug before release: the serial number could get a redundant leading zero, which strict OpenSSL rejects as "illegal padding". INTEGERs are now canonical DER, with a 400-certificate regression test.
+- Verified: 424 tests; two real daemons on one machine over real mDNS. Unpaired traffic was refused and recorded as a request; pairing applied live; the message was relayed and stamped with the verified device; the wire showed TLS 1.3 / AES-256-GCM / Ed25519. The console is unreachable from the LAN IP.
 
 ### Doorbells: running sessions get their mail now, not on the user's next prompt (ADR-027)
 
