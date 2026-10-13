@@ -41,7 +41,13 @@ anyd start      # 投递 daemon + Web 控制台 http://127.0.0.1:7433
 anyd pair --invite
 ```
 
-它会打印**一条完整的复制粘贴命令**（安装器 + 集群 token）。把它贴到另一台机器的终端——或者直接贴给那台机器上的任何 agent——两边就对齐了：mDNS 自动互见、目录自动合并、随时互投。
+它会打印**一条复制粘贴命令**。贴到另一台机器的终端，或者直接交给那台机器上的任何 agent：命令会装好 anytoany、信任第一台机器，并打印新机器自己的**设备 ID**。回到第一台机器，反过来信任它：
+
+```bash
+anyd pair add <它打印的 ID>
+```
+
+配对方式照抄 [Syncthing](https://docs.syncthing.net/users/security.html)：每台设备有自己的钥匙，设备 ID 就是证书指纹，双方互相添加对方的**公开** ID，全程没有任何秘密要粘贴。之后两台 daemon 走**双向 TLS 1.3**，每次都核对对方指纹。`anyd peers` 会显示哪些已配对、哪些没有，以及待处理的配对请求。
 
 ## 发第一条消息
 
@@ -71,7 +77,7 @@ anyd pair --invite
 
 - **一份 skill，各家通用**——遵循 [Agent Skills](https://code.claude.com/docs/en/skills) 开放标准（`SKILL.md`），Claude Code / Codex / Cursor / Gemini CLI 都认。agent 通过普通的 `anyd` 命令行交互，**零 MCP 配置**。
 - **一个小 daemon（`anyd`）**——自动发现本机全部可寻址会话（扫描各家 CLI 自己的会话存储），消息进 SQLite 持久驿站（回执/重试/死信），通过各厂商**官方 headless resume 通道**投递（`claude -p --resume`、`codex exec resume`、`kimi -S … -p`、ZCode 内置引擎）。
-- **局域网直连，零第三方服务**——daemon 之间 mDNS/Bonjour 自动发现，共享 token 配对，局域网 HTTP 直投。token 不同即 401。数据不出你的网络。
+- **局域网直连、零第三方服务、全程加密**：daemon 之间用 mDNS/Bonjour 自动发现，走**双向 TLS 1.3**。每台设备有自己的 Ed25519 钥匙，设备 ID 就是证书指纹，配对就是互相添加对方的公开 ID（照抄 Syncthing）。没配对的设备一律被拒；冒用已配对设备名、却没有对应钥匙的，在发出第一个字节前就会被断开。数据不出你的网络。
 - **Web 控制台**——IM 式界面（`http://127.0.0.1:7433`）：对话列表、左右气泡、投递状态、失败重试，还能手动「新建对话」把两个会话连起来，实时围观你的 agent 们聊天。
 
 ## 常用命令
@@ -117,8 +123,10 @@ git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
 npm install && npm run build && npm link
 anyd setup                 # 技能（any-to-any + reload）+ 收件 hook
 # 手动配对（不用 anyd pair --invite 的话）：
-anyd pair --show           # 第一台：打印 token
-anyd pair --set <token>    # 第二台：加入
+anyd pair                  # 每台：打印本机设备 ID（公开）
+anyd pair add <对方 ID>    # 每台：信任对方
+anyd pair list             # 本机信任哪些设备
+anyd pair remove mini      # 吊销一台，其他设备无需任何改动
 anyd pair --name mini      # 可选：设备名
 ```
 
@@ -156,10 +164,10 @@ CLI 比 App 新没问题，照常放行；正开着的活会话、自己拉信�
 
 anytoany 完全跑在**你自己的机器、你自己的局域网**上——无云、无账号。它的信任边界刻意简单，且如实说明：
 
-- **单一操作者集群。** 每台设备用共享密钥配对；消息只能从持有该 token 的机器进入集群。在这个边界内，agent 之间当作**可信队友**协作——把自己的 agent 当敌人就没法真正分工。你从一个会话发起的请求，会把你的授权带到下一个会话，如同你当面委派。agent 保留完全自主：可商讨、提更优方案、拒绝真正有害的动作，只是不会以「你是另一个 agent」为由推诿正当工作。
-- **不假装能防住被攻陷的 peer。** 边界是你的局域网 + 共享 token，不是消息正文。若攻击者已在你某个 agent 里执行代码，anytoany 不是最后一道防线——机器本身才是。
+- **单一操作者集群。** 你配对的每台设备都是**你自己的**，享有最高信任档（`owner`）。只有你明确信任过其钥匙的设备，消息才能进入集群（双向 TLS、指纹锁定）。在这个边界内，agent 之间当作**可信队友**协作——把自己的 agent 当敌人就没法真正分工。你从一个会话发起的请求，会把你的授权带到下一个会话，如同你当面委派。agent 保留完全自主：可商讨、提更优方案、拒绝真正有害的动作，只是不会以「你是另一个 agent」为由推诿正当工作。
+- **不假装能防住被攻陷的 peer。** 边界是已配对设备的钥匙，不是消息正文。偷走 `~/.anytoany/identity/key.pem` 就能冒充该设备（与 Syncthing 相同），请像保护 SSH 私钥一样保护它；用 `anyd pair remove` 可以在其他设备上吊销它。若攻击者已在你某个 agent 里执行代码，anytoany 不是最后一道防线——机器本身才是。
 - **投递最小且官方。** 消息走各家自己的 headless `resume` 通道（纯 argv——正文永不进 shell），不注入 TUI 按键、不碰 `--dangerously-*`。把 agent 提到全权执行是**机主本机的显式开关**（默认关、本地配置）——发送方永远无法要求。
-- **回环 + token + 回环保护。** 控制台仅绑 `127.0.0.1`；peer 端点强制集群 token（否则 401）；线程深度与每分钟速率上限阻止两个 agent 在回执循环里烧 token。
+- **回环 + 双向 TLS + 防循环。** 控制台仅绑 `127.0.0.1`；设备之间走独立端口（7434）的 TLS 1.3，具备前向保密，线路上读不了也伪造不了。未配对设备收到 403，只会显示为配对请求，永远不会变成消息。发件设备按验证过的证书记录，而不是按它自报的名字。线程深度与每分钟速率上限阻止两个 agent 在回执循环里烧 token。详见 [ADR-028](docs/decisions.md)。
 
 漏洞上报流程与范围见 [SECURITY.md](SECURITY.md)。
 

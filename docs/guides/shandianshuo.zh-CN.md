@@ -121,7 +121,7 @@ anyd connect sds --uninstall --apply
 
 - **消息不出你的电脑。** 收发都走 `127.0.0.1` 本地回环，代码里强制只接受本机连接，消息存在本机 SQLite 里。
 - **不需要注册任何账号**，anytoany 没有服务器。
-- 跨设备（比如 MacBook 指挥 Mac mini）要**两台机器配对同一个 token**，而且只走局域网直连 —— token 不对直接 401。
+- 跨设备（比如 MacBook 指挥 Mac mini）要先**两台机器互相配对**：各自执行 `anyd pair add <对方的设备 ID>`（ID 用 `anyd pair` 查看，可以公开）。之后走局域网内的加密直连，没配对的设备会被直接拒绝。
 
 ## 想深入
 

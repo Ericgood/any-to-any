@@ -123,6 +123,26 @@ export async function runDoctor(): Promise<boolean> {
     });
   }
 
+  // ADR-028: this device's identity and who it trusts
+  try {
+    const { loadOrCreateIdentity, shortDeviceId } = await import('./cluster/identity.js');
+    const { createTrustStore } = await import('./cluster/trust.js');
+    const { statSync } = await import('node:fs');
+    const identity = loadOrCreateIdentity();
+    const keyMode = statSync(join(home, '.anytoany', 'identity', 'key.pem')).mode & 0o777;
+    const paired = createTrustStore().list();
+    checks.push({
+      name: 'device identity (mutual TLS)',
+      ok: keyMode === 0o600,
+      note:
+        keyMode === 0o600
+          ? `${shortDeviceId(identity.id)}… — ${paired.length} paired device(s)${paired.length ? `: ${paired.map((d) => `@${d.name}`).join(', ')}` : ' (anyd pair to add one)'}`
+          : `private key is readable by others (mode ${keyMode.toString(8)}) — run: chmod 600 ~/.anytoany/identity/key.pem`,
+    });
+  } catch (e) {
+    checks.push({ name: 'device identity (mutual TLS)', ok: false, note: e instanceof Error ? e.message : String(e) });
+  }
+
   let hookRegistered = false;
   let claudeSettings: { crossSessionInbound?: unknown; permissions?: { defaultMode?: unknown } } | null = null;
   try {

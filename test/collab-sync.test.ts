@@ -5,49 +5,69 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
 import { serialize } from '../src/collab/doc.js';
 import { createCollabStore, type CollabStore } from '../src/collab/store.js';
-import { pushCollabDoc } from '../src/cluster/peers.js';
-import { startConsoleServer, type RunningServer } from '../src/daemon/server.js';
+import { loadOrCreateIdentity, type DeviceIdentity } from '../src/cluster/identity.js';
+import { createPeerApiHandler } from '../src/cluster/peer-api.js';
+import { pushCollabDoc, type PeerClient } from '../src/cluster/peers.js';
+import { startPeerServer, type PeerServer } from '../src/cluster/secure-transport.js';
+import { createTrustStore } from '../src/cluster/trust.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox } from '../src/mailbox/mailbox.js';
 
-// Two daemons on one host (device A :17440, device B :17441), same cluster token,
-// proving cross-device collab sync over real HTTP: push A→B, edit on B, push B→A,
-// and confirm both converge to the same plan + union of progress.
-const TOKEN = 'cluster-secret';
+// Two devices on one host, each with its own identity, paired both ways (ADR-028),
+// proving cross-device collab sync over real mutual TLS: push A→B, edit on B, push
+// B→A, and confirm both converge to the same plan + union of progress.
 const DIRECTORY: SessionInfo[] = [];
 const CONV = 'aaaaaaaa-0000-4000-8000-00000000abcd';
 const LEAD = '@claude:web-app';
 const WORKER = '@codex:api';
 
 describe('collab cross-device sync (M3)', () => {
-  let dirA: string, dirB: string;
+  const dirs: string[] = [];
+  const tmp = (p: string) => {
+    const d = mkdtempSync(join(tmpdir(), p));
+    dirs.push(d);
+    return d;
+  };
   let storeA: CollabStore, storeB: CollabStore;
-  let srvA: RunningServer, srvB: RunningServer;
-  const peerA = { device: 'A', host: '127.0.0.1', port: 17440 };
-  const peerB = { device: 'B', host: '127.0.0.1', port: 17441 };
+  let srvA: PeerServer, srvB: PeerServer;
+  let idA: DeviceIdentity, idB: DeviceIdentity;
+  let clientA: PeerClient, clientB: PeerClient;
+  let peerA: { device: string; host: string; port: number; id: string };
+  let peerB: { device: string; host: string; port: number; id: string };
 
-  beforeAll(() => {
-    dirA = mkdtempSync(join(tmpdir(), 'anytoany-syncA-'));
-    dirB = mkdtempSync(join(tmpdir(), 'anytoany-syncB-'));
-    storeA = createCollabStore({ dir: dirA });
-    storeB = createCollabStore({ dir: dirB });
-    const mk = (collab: CollabStore, port: number, device: string) =>
-      startConsoleServer({
-        mailbox: createMailbox(createDb(':memory:')),
-        directory: async () => DIRECTORY,
-        collab,
-        port,
-        changePollMs: 60_000,
-        peering: { selfDevice: device, token: TOKEN, localDirectory: async () => DIRECTORY },
+  beforeAll(async () => {
+    const homeA = tmp('anytoany-syncA-home-');
+    const homeB = tmp('anytoany-syncB-home-');
+    idA = loadOrCreateIdentity(homeA);
+    idB = loadOrCreateIdentity(homeB);
+    createTrustStore(homeA).add({ id: idB.id, name: 'B' });
+    createTrustStore(homeB).add({ id: idA.id, name: 'A' });
+    storeA = createCollabStore({ dir: tmp('anytoany-syncA-') });
+    storeB = createCollabStore({ dir: tmp('anytoany-syncB-') });
+    const mk = (identity: DeviceIdentity, home: string, collab: CollabStore, device: string) =>
+      startPeerServer({
+        identity,
+        trust: createTrustStore(home),
+        host: '127.0.0.1',
+        port: 0,
+        handle: createPeerApiHandler({
+          selfDevice: device,
+          mailbox: createMailbox(createDb(':memory:')),
+          collab,
+          localDirectory: async () => DIRECTORY,
+        }),
       });
-    srvA = mk(storeA, 17440, 'A');
-    srvB = mk(storeB, 17441, 'B');
+    srvA = await mk(idA, homeA, storeA, 'A');
+    srvB = await mk(idB, homeB, storeB, 'B');
+    peerA = { device: 'A', host: '127.0.0.1', port: srvA.port, id: idA.id };
+    peerB = { device: 'B', host: '127.0.0.1', port: srvB.port, id: idB.id };
+    clientA = { identity: idA, selfName: 'A' };
+    clientB = { identity: idB, selfName: 'B' };
   });
   afterAll(() => {
     srvA.close();
     srvB.close();
-    rmSync(dirA, { recursive: true, force: true });
-    rmSync(dirB, { recursive: true, force: true });
+    dirs.forEach((d) => rmSync(d, { recursive: true, force: true }));
   });
 
   it('pushes a doc A→B, then converges after B edits and pushes back', async () => {
@@ -57,7 +77,7 @@ describe('collab cross-device sync (M3)', () => {
     await storeA.appendProgress(CONV, LEAD, 'scaffolded interceptor');
 
     // A pushes to B — B has never seen this doc, stores it verbatim
-    const push1 = await pushCollabDoc(peerB, serialize(storeA.load(CONV)!), TOKEN);
+    const push1 = await pushCollabDoc(peerB, serialize(storeA.load(CONV)!), clientA);
     expect(push1.ok).toBe(true);
     expect(storeB.load(CONV)?.body).toBe('goal: wire /auth refresh');
     expect(storeB.load(CONV)?.tasks[0]?.state).toBe('working');
@@ -66,7 +86,7 @@ describe('collab cross-device sync (M3)', () => {
     await storeB.appendProgress(CONV, WORKER, 'wrote /auth/refresh, returns {token,exp}');
 
     // B pushes back to A — A merges: keeps the plan, gains B's progress
-    const push2 = await pushCollabDoc(peerA, serialize(storeB.load(CONV)!), TOKEN);
+    const push2 = await pushCollabDoc(peerA, serialize(storeB.load(CONV)!), clientB);
     expect(push2.ok).toBe(true);
 
     const a = storeA.load(CONV)!;
@@ -75,8 +95,8 @@ describe('collab cross-device sync (M3)', () => {
     expect(byAgent[WORKER]).toEqual(['wrote /auth/refresh, returns {token,exp}']);
 
     // one more round each way → both sides identical (convergent, idempotent)
-    await pushCollabDoc(peerB, serialize(storeA.load(CONV)!), TOKEN);
-    await pushCollabDoc(peerA, serialize(storeB.load(CONV)!), TOKEN);
+    await pushCollabDoc(peerB, serialize(storeA.load(CONV)!), clientA);
+    await pushCollabDoc(peerA, serialize(storeB.load(CONV)!), clientB);
     const finalA = storeA.load(CONV)!;
     const finalB = storeB.load(CONV)!;
     expect(finalA.body).toBe(finalB.body);
@@ -86,9 +106,11 @@ describe('collab cross-device sync (M3)', () => {
     expect(norm(storeA)).toEqual(norm(storeB));
   });
 
-  it('rejects a push carrying the wrong cluster token', async () => {
-    const r = await pushCollabDoc(peerB, serialize(storeA.load(CONV) ?? (await storeA.ensure({ conversationId: CONV, lead: LEAD }))), 'wrong-token');
+  it('rejects a push from a device B has not paired with — and says how to pair', async () => {
+    const stranger = loadOrCreateIdentity(tmp('anytoany-sync-stranger-'));
+    const doc = storeA.load(CONV) ?? (await storeA.ensure({ conversationId: CONV, lead: LEAD }));
+    const r = await pushCollabDoc(peerB, serialize(doc), { identity: stranger, selfName: 'stranger' });
     expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/401/);
+    expect(r.error).toContain(`anyd pair add ${stranger.id}`);
   });
 });

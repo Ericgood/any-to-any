@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
 import { getDeviceName, setDeviceName } from '../src/cluster/device.js';
-import { loadOrCreateToken, tokenFingerprint } from '../src/cluster/token.js';
 import { resolveTarget } from '../src/directory/resolve.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
@@ -12,16 +11,6 @@ import { routeForMessage } from '../src/cluster/routing.js';
 
 const home = mkdtempSync(join(tmpdir(), 'anytoany-cluster-'));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
-
-describe('cluster token', () => {
-  it('generates once and is stable across loads', () => {
-    const t1 = loadOrCreateToken(home);
-    const t2 = loadOrCreateToken(home);
-    expect(t1).toBe(t2);
-    expect(t1.length).toBeGreaterThanOrEqual(32);
-    expect(tokenFingerprint(t1)).toHaveLength(8);
-  });
-});
 
 describe('device name stability', () => {
   it('persists the first hostname derivation — LAN routing identity must not drift', () => {

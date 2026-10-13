@@ -4,6 +4,20 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Cross-device, Syncthing-style: one key per device, mutual TLS, pairing by public ID, and your own devices at the top trust tier (ADR-028)
+
+The LAN layer used to be **plaintext HTTP with one shared token for the whole cluster**, and the token rode in every request header. Anyone on the same Wi-Fi who captured one packet could act as you. That got worse with the doorbell (ADR-027): a message to a session in Bypass + `accept` now runs without asking. One token also meant a lost laptop forced re-pairing every machine, and `anyd pair --invite` put the secret into shell history and chat logs.
+
+- **Identity** (copied from [Syncthing](https://docs.syncthing.net/users/security.html)): every device generates an **Ed25519 key and a self-signed certificate** on first start (`~/.anytoany/identity/`, key 0600). Its **device ID is the certificate's SHA-256** in grouped base32. The private key never leaves the machine. Node can't issue X.509 certificates, so the fixed-shape DER is encoded by hand in about 80 lines, with zero dependencies; Node's own `X509Certificate` parses and verifies it in the tests.
+- **Pairing exchanges public IDs only**: `anyd pair` shows this device's ID, `anyd pair add <ID>` trusts another, and `anyd pair remove` revokes one device without touching the others. `anyd pair --invite` prints an installer line containing nothing secret. Edits apply to a running daemon immediately.
+- **Transport**: device-to-device traffic moved to its own port (console port + 1, default **7434**) over **mutual TLS 1.3** with forward secrecy. Both sides pin the other's fingerprint against their trust list. The client checks *who answered* before sending a single byte. The server refuses unpaired devices (403) and lists them as **pairing requests** in `anyd peers`, never as messages. The sending device is recorded from its verified certificate, not from what the body claims.
+- **The console is loopback-only, always.** It no longer binds `0.0.0.0` for peering; the plaintext peer API is gone from it.
+- **Trust tiers**: your own devices are `owner`, the top tier. Their messages carry your authority (ADR-016). A future `guest` tier for someone else's devices, delivering data and never commands, is specified in the ADR but deliberately not addable yet.
+- **Breaking**: the old `cluster-token` is no longer read, and `--join <token>` / `pair --set` print the new flow. Upgrade both machines, then `pair add` once on each side.
+- **Also fixed**: an isolated daemon (`ANYTOANY_HOME`, as used by tests and smoke runs) rewrote **and pruned** the operator's real `~/.claude/agents/any-*` mention agents. Isolated instances now skip that sync.
+- **Beyond the LAN?** This is step one of what lets Syncthing cross networks, since identity is now a key and not an IP. Crossing networks would still need discovery and relay servers, which conflicts with ADR-002 (LAN only), so it's a separate decision.
+- Verified: 421 tests; two real daemons on one machine over real mDNS. Unpaired traffic was refused and recorded as a request; pairing applied live; the message was relayed and stamped with the verified device; the wire showed TLS 1.3 / AES-256-GCM / Ed25519. The console is unreachable from the LAN IP.
+
 ### Doorbells: running sessions get their mail now, not on the user's next prompt (ADR-027)
 
 A tally of the daemon log found 251 delivery failures, and **none** of them were in transport between machines. Every one happened at the last step, pushing the message into the agent's session. ADR-023/026 stopped headless-resuming into live sessions, but their mail then waited until the user typed. A survey of the community (agents-can-communicate, agent-talk, openmsg, coder/agentapi …) and the vendors' own channels turned up two official ways in. Both were verified on this machine against throwaway sessions and threads.

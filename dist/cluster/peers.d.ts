@@ -1,18 +1,25 @@
 import type { SessionInfo } from '../adapters/types.js';
 import type { Message } from '../mailbox/mailbox.js';
+import type { DeviceIdentity } from './identity.js';
 export interface Peer {
     device: string;
     host: string;
+    /** The peer's mutual-TLS port (ADR-028). */
     port: number;
-    /** Token fingerprint from mDNS TXT — equal to ours means paired. */
-    fp: string;
+    /** Device ID from mDNS TXT — public, and only usable by whoever holds its key. */
+    id: string;
     lastSeenAt: number;
+}
+/** What we present when calling a peer: our identity and our device name. */
+export interface PeerClient {
+    identity: DeviceIdentity;
+    selfName: string;
 }
 export interface PeerRegistry {
     list(): Peer[];
     get(device: string): Peer | undefined;
     /** Manually add a peer (debugging / no-mDNS environments). */
-    addStatic(device: string, host: string, port: number, fp: string): void;
+    addStatic(device: string, host: string, port: number, id: string): void;
     stop(): void;
 }
 /**
@@ -23,8 +30,10 @@ export interface PeerRegistry {
 export declare function pickLanAddress(addresses: string[]): string | undefined;
 export interface DiscoveryOptions {
     selfDevice: string;
+    /** Our mutual-TLS peer port, announced over mDNS. */
     port: number;
-    token: string;
+    /** Our public device ID, announced so others can pair with us (ADR-028). */
+    selfId: string;
     /** Disable mDNS (tests / --peer only mode). */
     mdns?: boolean;
     /** Browse without announcing — for passive CLI scans that have no real port. */
@@ -32,22 +41,24 @@ export interface DiscoveryOptions {
 }
 /** Publish this daemon and track peers via mDNS (`_anytoany._tcp`). */
 export declare function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry;
+type PeerAddress = Pick<Peer, 'device' | 'host' | 'port' | 'id'>;
 /** Pull a peer's local session directory, stamping each entry with its device. */
-export declare function fetchPeerSessions(peer: Peer, token: string): Promise<SessionInfo[]>;
+export declare function fetchPeerSessions(peer: Peer, client: PeerClient): Promise<SessionInfo[]>;
 /**
  * Push our copy of a collaboration doc (serialized markdown) to a peer daemon,
- * which merges it convergently (Phase 4 / M3). Only host/port/device are used,
- * so a peer row from /api/peers works as well as a registry Peer.
+ * which merges it convergently (Phase 4 / M3).
  */
-export declare function pushCollabDoc(peer: Pick<Peer, 'device' | 'host' | 'port'>, docSerialized: string, token: string): Promise<{
+export declare function pushCollabDoc(peer: PeerAddress, docSerialized: string, client: PeerClient): Promise<{
     ok: boolean;
     error?: string;
 }>;
 /**
  * Hand a message to the peer daemon. Perspective flip: our 'to.device' becomes
- * the peer's local target; our side becomes 'from.device' as seen by them.
+ * the peer's local target. The peer records the sending device from OUR
+ * certificate, not from this body (ADR-028).
  */
-export declare function relayToPeer(peer: Peer, message: Message, token: string, selfDevice: string): Promise<{
+export declare function relayToPeer(peer: Peer, message: Message, client: PeerClient): Promise<{
     ok: boolean;
     error?: string;
 }>;
+export {};

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SessionInfo } from '../src/adapters/types.js';
 import { createCollabStore } from '../src/collab/store.js';
-import { tokenFingerprint } from '../src/cluster/token.js';
+import { createTrustStore } from '../src/cluster/trust.js';
 import { startConsoleServer, type RunningServer } from '../src/daemon/server.js';
 import { createDb } from '../src/mailbox/db.js';
 import { createMailbox, type Mailbox } from '../src/mailbox/mailbox.js';
@@ -211,120 +211,70 @@ describe('console server — collab endpoints (Phase 4)', () => {
   });
 });
 
-describe('peer endpoints', () => {
+// ADR-028: the console no longer serves peers (that moved to the mutual-TLS peer
+// server); it only REPORTS pairing state, from device IDs and the trust list.
+describe('console: LAN status (ADR-028)', () => {
   const PEER_PORT = 17434;
   const peerBase = `http://127.0.0.1:${PEER_PORT}`;
-  let mailbox: Mailbox;
+  const MINI = 'AAAAAAA-BBBBBBB-CCCCCCC-DDDDDDD-EEEEEEE-FFFFFFF-GGGGGGG-HHH';
+  const STRANGER = 'ZZZZZZZ-YYYYYYY-XXXXXXX-WWWWWWW-VVVVVVV-UUUUUUU-TTTTTTT-SSS';
   let server: RunningServer;
+  let trustHome: string;
 
   beforeAll(() => {
-    mailbox = createMailbox(createDb(':memory:'));
+    trustHome = mkdtempSync(join(tmpdir(), 'anytoany-console-trust-'));
+    const trust = createTrustStore(trustHome);
+    trust.add({ id: MINI, name: 'mac-mini' });
     server = startConsoleServer({
-      mailbox,
+      mailbox: createMailbox(createDb(':memory:')),
       directory: async () => DIRECTORY,
       port: PEER_PORT,
       changePollMs: 60_000,
       peering: {
         selfDevice: 'testbox',
-        token: 'secret-token',
-        localDirectory: async () => DIRECTORY,
+        selfId: 'SELFSEL-FSELFSE-LFSELFS-ELFSELF-SELFSEL-FSELFSE-LFSELFS-ELF',
+        trust,
         peers: () => [
-          { device: 'mini', host: '10.0.0.2', port: 7433, fp: tokenFingerprint('secret-token'), lastSeenAt: 1 },
-          { device: 'stranger', host: '10.0.0.9', port: 7433, fp: 'deadbeef', lastSeenAt: 2 },
+          { device: 'mini', host: '10.0.0.2', port: 7434, id: MINI, lastSeenAt: 1 },
+          { device: 'stranger', host: '10.0.0.9', port: 7434, id: STRANGER, lastSeenAt: 2 },
         ],
+        pending: () => [{ id: STRANGER, claimedName: 'stranger', at: 3 }],
       },
     });
   });
-  afterAll(() => server.close());
+  afterAll(() => {
+    server.close();
+    rmSync(trustHome, { recursive: true, force: true });
+  });
 
-  it('GET /api/peers lists live peers with pairing state (loopback console route)', async () => {
+  it('GET /api/peers: self ID, pairing by trusted device ID (not by name), pending requests', async () => {
     const body = (await (await fetch(peerBase + '/api/peers')).json()) as {
       lan: boolean;
-      self: { device: string; fp: string } | null;
-      peers: Array<{ device: string; paired: boolean }>;
+      self: { device: string; id: string } | null;
+      peers: Array<{ device: string; paired: boolean; trustedName?: string }>;
+      pending: Array<{ id: string }>;
+      trusted: Array<{ id: string; tier: string }>;
     };
     expect(body.lan).toBe(true);
     expect(body.self?.device).toBe('testbox');
-    expect(body.self?.fp).toBe(tokenFingerprint('secret-token'));
-    const byDevice = Object.fromEntries(body.peers.map((p) => [p.device, p.paired]));
-    expect(byDevice).toEqual({ mini: true, stranger: false });
+    expect(body.self?.id).toMatch(/^SELFSEL-/);
+    expect(body.peers.map((p) => [p.device, p.paired, p.trustedName])).toEqual([
+      ['mini', true, 'mac-mini'],
+      ['stranger', false, undefined],
+    ]);
+    expect(body.pending.map((c) => c.id)).toEqual([STRANGER]);
+    expect(body.trusted).toEqual([expect.objectContaining({ id: MINI, tier: 'owner' })]);
   });
 
-  it('rejects peer requests without the cluster token', async () => {
-    expect((await fetch(peerBase + '/api/peer/sessions')).status).toBe(401);
-  });
-
-  it('serves peer info and sessions with a valid token', async () => {
-    const headers = { 'x-anytoany-token': 'secret-token' };
-    const info = (await (await fetch(peerBase + '/api/peer/info', { headers })).json()) as { device: string };
-    expect(info.device).toBe('testbox');
-    const { sessions } = (await (await fetch(peerBase + '/api/peer/sessions', { headers })).json()) as {
-      sessions: unknown[];
-    };
-    expect(sessions).toHaveLength(2);
-  });
-
-  it('merges a pushed collab doc (POST /api/peer/collab) and rejects a bad token', async () => {
-    const cdir = mkdtempSync(join(tmpdir(), 'anytoany-peer-collab-'));
-    const collab = createCollabStore({ dir: cdir });
-    const PC_PORT = 17436;
-    const srv = startConsoleServer({
-      mailbox: createMailbox(createDb(':memory:')),
-      directory: async () => DIRECTORY,
-      collab,
-      port: PC_PORT,
-      changePollMs: 60_000,
-      peering: { selfDevice: 'box', token: 'tok', localDirectory: async () => DIRECTORY },
-    });
-    try {
-      const docMd = [
-        '---',
-        JSON.stringify({ conversationId: 'sync-0000-4000-8000-000000000001', lead: '@claude:x', updated: '2026-08-13T10:00:00.000Z', tasks: [] }, null, 2),
-        '---',
-        '',
-        'remote plan',
-        '',
-        '## Progress — @codex:y',
-        '',
-        '- did the remote thing',
-        '',
-      ].join('\n');
-      // wrong token → 401
-      const bad = await fetch(`http://127.0.0.1:${PC_PORT}/api/peer/collab`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ doc: docMd }),
-      });
-      expect(bad.status).toBe(401);
-      // valid token → merged and persisted
-      const ok = await fetch(`http://127.0.0.1:${PC_PORT}/api/peer/collab`, {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-anytoany-token': 'tok' }, body: JSON.stringify({ doc: docMd }),
-      });
-      expect(ok.status).toBe(200);
-      const stored = collab.load('sync-0000-4000-8000-000000000001');
-      expect(stored?.body).toBe('remote plan');
-      expect(stored?.progress[0]?.entries).toEqual(['did the remote thing']);
-    } finally {
-      srv.close();
-      rmSync(cdir, { recursive: true, force: true });
-    }
-  });
-
-  it('accepts relayed messages into the local mailbox with context preserved', async () => {
-    const r = await fetch(peerBase + '/api/peer/messages', {
+  it('the plaintext console never serves the peer API — even with the old token header', async () => {
+    const r = await fetch(peerBase + '/api/peer/sessions', { headers: { 'x-anytoany-token': 'anything' } });
+    expect(r.status).toBe(404);
+    const r2 = await fetch(peerBase + '/api/peer/messages', {
       method: 'POST',
-      headers: { 'x-anytoany-token': 'secret-token', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contextId: 'ctx-from-remote-1',
-        from: { agent: 'claude', sessionId: CLAUDE_A.sessionId, device: 'macbook' },
-        to: { agent: 'codex', sessionId: CODEX_B.sessionId },
-        text: 'relayed hello',
-      }),
+      headers: { 'content-type': 'application/json', 'x-anytoany-token': 'anything' },
+      body: JSON.stringify({ from: CLAUDE_A, to: CODEX_B, text: 'x' }),
     });
-    expect(r.status).toBe(201);
-    const queued = mailbox.inbox({ toSession: CODEX_B.sessionId });
-    expect(queued).toHaveLength(1);
-    expect(queued[0]?.contextId).toBe('ctx-from-remote-1');
-    expect(queued[0]?.from.device).toBe('macbook');
-    expect(queued[0]?.to.device).toBeUndefined(); // local target on this side
+    expect(r2.status).toBe(404);
   });
 });
 

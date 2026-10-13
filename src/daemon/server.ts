@@ -3,10 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { SessionInfo } from '../adapters/types.js';
-import { parse as parseCollabDoc } from '../collab/doc.js';
 import type { CollabStore } from '../collab/store.js';
 import type { Peer } from '../cluster/peers.js';
-import { tokenFingerprint } from '../cluster/token.js';
+import type { UntrustedContact } from '../cluster/secure-transport.js';
+import type { TrustStore } from '../cluster/trust.js';
 import type { Mailbox, SessionRef } from '../mailbox/mailbox.js';
 
 const require = createRequire(import.meta.url);
@@ -29,14 +29,16 @@ export interface ConsoleServerOptions {
    *  409 and queue nothing, so the sender sees e.g. a CLI version mismatch now —
    *  instead of a silent dead letter whose cause the pull-hook recovery hides. */
   preflight?: (session: SessionInfo) => Promise<string | null>;
-  /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
+  /** LAN peering status for /api/peers. The peer API itself is served by the
+   *  separate mutual-TLS peer server (ADR-028); this console stays loopback-only. */
   peering?: {
     selfDevice: string;
-    token: string;
-    /** Local-only directory (no peer aggregation) served to peers. */
-    localDirectory: () => Promise<SessionInfo[]>;
-    /** Live LAN peer list — served to the local CLI/webui at /api/peers. */
+    selfId: string;
+    /** Live LAN peer list (mDNS + static). */
     peers?: () => Peer[];
+    trust?: TrustStore;
+    /** Devices with a valid certificate that tried to talk to us but aren't paired. */
+    pending?: () => UntrustedContact[];
   };
 }
 
@@ -146,73 +148,12 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
     const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
 
     if (path.startsWith('/api/peer/')) {
-      if (!opts.peering) {
-        json(res, 404, { error: 'peering disabled' });
-        return;
-      }
-      const token = req.headers['x-anytoany-token'];
-      if (token !== opts.peering.token) {
-        json(res, 401, { error: 'invalid or missing cluster token' });
-        return;
-      }
-      if (req.method === 'GET' && path === '/api/peer/info') {
-        json(res, 200, { device: opts.peering.selfDevice });
-        return;
-      }
-      if (req.method === 'GET' && path === '/api/peer/sessions') {
-        json(res, 200, { sessions: await opts.peering.localDirectory() });
-        return;
-      }
-      if (req.method === 'POST' && path === '/api/peer/messages') {
-        const body = (await readBody(req)) as {
-          contextId?: string;
-          from?: SessionRef;
-          to?: SessionRef;
-          text?: string;
-        };
-        if (!isSessionRef(body.from) || !isSessionRef(body.to) || typeof body.text !== 'string') {
-          json(res, 400, { error: 'expected {contextId?, from, to, text}' });
-          return;
-        }
-        const m = opts.mailbox.send({
-          from: body.from,
-          to: { agent: body.to.agent, sessionId: body.to.sessionId }, // target is local here
-          text: body.text,
-          via: 'relay',
-          ...(body.contextId ? { contextId: body.contextId } : {}),
-        });
-        broadcast();
-        json(res, 201, { message: m });
-        return;
-      }
-      // Phase 4 / M3: a peer pushes its copy of a collab doc; we merge convergently.
-      if (req.method === 'POST' && path === '/api/peer/collab') {
-        if (!opts.collab) {
-          json(res, 404, { error: 'collab not enabled on this device' });
-          return;
-        }
-        const body = (await readBody(req)) as { doc?: string };
-        if (typeof body.doc !== 'string') {
-          json(res, 400, { error: 'expected {doc: <serialized markdown>}' });
-          return;
-        }
-        let incoming;
-        try {
-          incoming = parseCollabDoc(body.doc);
-        } catch (e) {
-          json(res, 400, { error: `unparseable collab doc: ${e instanceof Error ? e.message : String(e)}` });
-          return;
-        }
-        const merged = await opts.collab.merge(incoming);
-        broadcast();
-        json(res, 200, { doc: merged });
-        return;
-      }
-      json(res, 404, { error: 'not found' });
+      // moved off the plaintext console onto the mutual-TLS peer port (ADR-028)
+      json(res, 404, { error: 'the peer API is served over mutual TLS on the peer port (ADR-028)' });
       return;
     }
 
-    // everything non-peer is local-only even when bound to 0.0.0.0 for peering
+    // the console is bound to 127.0.0.1; keep the check as defence in depth
     if (!isLoopback) {
       json(res, 403, { error: 'local console endpoints are loopback-only' });
       return;
@@ -294,9 +235,18 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
         json(res, 200, { lan: false, self: null, peers: [] });
         return;
       }
-      const selfFp = tokenFingerprint(opts.peering.token);
-      const peers = (opts.peering.peers?.() ?? []).map((p) => ({ ...p, paired: p.fp === selfFp }));
-      json(res, 200, { lan: true, self: { device: opts.peering.selfDevice, fp: selfFp }, peers });
+      const trust = opts.peering.trust;
+      const peers = (opts.peering.peers?.() ?? []).map((p) => {
+        const trusted = p.id ? trust?.get(p.id) : undefined;
+        return { ...p, paired: Boolean(trusted), ...(trusted ? { trustedName: trusted.name } : {}) };
+      });
+      json(res, 200, {
+        lan: true,
+        self: { device: opts.peering.selfDevice, id: opts.peering.selfId },
+        peers,
+        trusted: trust?.list() ?? [],
+        pending: opts.peering.pending?.() ?? [],
+      });
       return;
     }
     if (req.method === 'GET' && path === '/api/conversations') {
@@ -516,7 +466,8 @@ export function startConsoleServer(opts: ConsoleServerOptions): RunningServer {
     console.error(`console server error: ${e.message}${hint}`);
     process.exit(1);
   });
-  server.listen(port, opts.peering ? '0.0.0.0' : '127.0.0.1');
+  // loopback only, always: other devices reach us through the mutual-TLS peer server
+  server.listen(port, '127.0.0.1');
   return {
     port,
     notifyChange: broadcast,

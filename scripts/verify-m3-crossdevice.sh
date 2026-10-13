@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify M3 cross-device collab-doc sync between two paired machines.
 #
-# Prereqs: both machines paired (same cluster token) with `anyd start` running,
+# Prereqs: both machines paired (each ran `anyd pair add <the other's ID>`, ADR-028) with `anyd start` running,
 # and each can see the other via `anyd peers`.
 #
 # This is a MANUAL, two-machine check — run the LEAD block on one machine and the

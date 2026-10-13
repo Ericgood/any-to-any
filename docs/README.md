@@ -7,7 +7,7 @@
 | File | What it covers |
 |---|---|
 | [analysis.md](analysis.md) | Research summary + the overall architecture: session directory, mailbox, delivery channels, LAN peering. |
-| [decisions.md](decisions.md) | **ADRs** (numbered, append-only) — every locked-in decision. Highlights: ADR-002 LAN-only (no Tailscale/cloud), ADR-005 per-vendor delivery channels, ADR-006 A2A-aligned message fields, ADR-011 mandatory-verdict envelope, ADR-014 three-party context, ADR-015 CI cost policy, **ADR-016 the trusted-teammate trust model**. ADR-025 refuses a send up front when the delivering CLI is older than the app that wrote the target session. |
+| [decisions.md](decisions.md) | **ADRs** (numbered, append-only) — every locked-in decision. Highlights: ADR-002 LAN-only (no Tailscale/cloud), ADR-005 per-vendor delivery channels, ADR-006 A2A-aligned message fields, ADR-011 mandatory-verdict envelope, ADR-014 three-party context, ADR-015 CI cost policy, **ADR-016 the trusted-teammate trust model**. ADR-025 refuses a send up front when the delivering CLI is older than the app that wrote the target session. ADR-027 delivers into running sessions through each app's own entry point (Codex queue / Claude inbox). **ADR-028 replaces the shared LAN token with Syncthing-style device identity and mutual TLS; your own devices are the top trust tier.** |
 
 ## Phase specs
 
@@ -15,7 +15,8 @@
 |---|---|
 | [specs/phase1-mvp.md](specs/phase1-mvp.md) | Same-machine `@` between Claude Code and Codex — the MVP. |
 | [specs/phase1-webui.md](specs/phase1-webui.md) | The local web console (IM-style timeline). |
-| [specs/phase2-lan.md](specs/phase2-lan.md) | LAN cross-device: mDNS discovery, token pairing, relay routing, directory aggregation. |
+| [specs/phase2-lan.md](specs/phase2-lan.md) | LAN cross-device: mDNS discovery, relay routing, directory aggregation. (Its token pairing is superseded by phase 6.) |
+| [specs/phase6-device-identity.md](specs/phase6-device-identity.md) | Device identity & encryption, copied from Syncthing: per-device Ed25519 key, device ID = cert fingerprint, mutual TLS 1.3, pairing by public ID (ADR-028). |
 | [specs/phase2.5-at-mention.md](specs/phase2.5-at-mention.md) | The `@any` addressing layer — user-confirmed target completion. |
 | [specs/phase3-zcode-adapter.md](specs/phase3-zcode-adapter.md) | ZCode (Z.ai) adapter. |
 | [specs/phase3-kimi-adapter.md](specs/phase3-kimi-adapter.md) | Kimi Code adapter. |

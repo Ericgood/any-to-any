@@ -113,8 +113,9 @@ program
   .option('--no-web', 'disable the web console server')
   .option('--no-lan', 'disable LAN peering (mDNS + relay)')
   .option('--no-notify', 'disable macOS notifications on new cross-agent traffic')
-  .option('--peer <host:port...>', 'manually add peer daemons (skips mDNS discovery for them)')
-  .action(async (opts: { interval: string; directoryTtl: string; port: string; web: boolean; lan: boolean; notify: boolean; peer?: string[] }) => {
+  .option('--peer <host:port...>', 'manually add peer daemons by their mutual-TLS peer port (skips mDNS for them)')
+  .option('--peer-port <port>', 'mutual-TLS port other devices connect to (default: console port + 1)')
+  .action(async (opts: { interval: string; directoryTtl: string; port: string; peerPort?: string; web: boolean; lan: boolean; notify: boolean; peer?: string[] }) => {
     const adapters = defaultAdapters();
     const mailbox = openMailbox();
     const port = Number.parseInt(opts.port, 10) || 7433;
@@ -135,62 +136,21 @@ program
       return cache.sessions;
     };
 
-    // LAN peering (Phase 2): discovery + remote directory aggregation + relay
-    let lan: {
-      selfDevice: string;
-      token: string;
-      registry: import('./cluster/peers.js').PeerRegistry;
-      relay: NonNullable<import('./daemon/dispatcher.js').DispatcherOptions['relay']>;
-    } | null = null;
-    if (opts.lan) {
-      const { loadOrCreateToken, tokenFingerprint } = await import('./cluster/token.js');
-      const { getDeviceName } = await import('./cluster/device.js');
-      const { startPeerRegistry, fetchPeerSessions, relayToPeer } = await import('./cluster/peers.js');
-      const token = loadOrCreateToken();
-      const selfDevice = getDeviceName();
-      const registry = startPeerRegistry({ selfDevice, port, token });
-      for (const spec of opts.peer ?? []) {
-        const [host, p] = spec.split(':');
-        if (!host || !p) continue;
-        const peerPort = Number.parseInt(p, 10);
-        // resolve the peer's real device name so reply routing can find it
-        try {
-          const res = await fetch(`http://${host}:${peerPort}/api/peer/info`, {
-            headers: { 'x-anytoany-token': token },
-            signal: AbortSignal.timeout(5000),
-          });
-          const info = (await res.json()) as { device?: string };
-          registry.addStatic(info.device ?? host, host, peerPort, tokenFingerprint(token));
-          console.log(`lan: static peer @${info.device ?? host} (${host}:${peerPort})`);
-        } catch {
-          console.error(`warning: static peer ${spec} unreachable at startup — will not be usable until restart`);
-        }
-      }
-      lan = {
-        selfDevice,
-        token,
-        registry,
-        relay: async (device, message) => {
-          const peer = registry.get(device);
-          if (!peer) return { ok: false, error: `device "${device}" not found on LAN (anyd peers to inspect)` };
-          return relayToPeer(peer, message, token, selfDevice);
-        },
-      };
-      console.log(`lan: device "${selfDevice}" fp ${tokenFingerprint(token)} — mDNS on, peers aggregate into directory`);
-    }
+    // LAN peering (ADR-002 discovery, ADR-028 identity + mutual TLS). Started after
+    // the single-instance checks below, so a second `anyd start` never grabs the port.
+    let lan: import('./cluster/lan.js').Lan | null = null;
 
     const directory = async () => {
       const local = await localDirectory();
       let all = local;
       if (lan) {
-        const { fetchPeerSessions } = await import('./cluster/peers.js');
-        const remotes = await Promise.allSettled(
-          lan.registry.list().map((p) => fetchPeerSessions(p, lan!.token)),
-        );
-        const remoteSessions = remotes.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-        all = [...local, ...remoteSessions].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+        // only paired devices, over pinned mutual TLS
+        all = [...local, ...(await lan.remoteSessions())].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
       }
-      // Phase 2.5: keep the @any- mention agents in step with the live directory
+      // Phase 2.5: keep the @any- mention agents in step with the live directory —
+      // but never from an isolated instance (ANYTOANY_HOME set: tests, smoke runs):
+      // it would rewrite, and prune, the operator's real ~/.claude/agents/any-*.
+      if (process.env['ANYTOANY_HOME'] && process.env['ANYTOANY_HOME'] !== homedir()) return all;
       try {
         const { syncMentionAgents } = await import('./cluster/sync-agents.js');
         const { written, removed } = await syncMentionAgents(all, mailbox.listConversations());
@@ -212,7 +172,7 @@ program
     // A live console on our port means another anyd owns this machine even if
     // its pid file is gone — bail BEFORE touching the pid file, or our exit
     // cleanup would erase the survivor's record.
-    if (opts.web || lan) {
+    if (opts.web || opts.lan) {
       const occupied = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
         signal: AbortSignal.timeout(1500),
       }).then(
@@ -234,10 +194,31 @@ program
     const notifier = createNotifier({ enabled: opts.notify });
 
     console.log(`anyd ${version} — daemon starting (poll ${opts.interval}ms)`);
+
+    const collab = createCollabStore();
+    let web: { notifyChange(): void; close(): void; port: number } | null = null;
+    if (opts.lan) {
+      const { startLan } = await import('./cluster/lan.js');
+      const { getDeviceName } = await import('./cluster/device.js');
+      const peerPort = Number.parseInt(opts.peerPort ?? '', 10) || port + 1;
+      lan = await startLan({
+        selfDevice: getDeviceName(),
+        peerPort,
+        mailbox,
+        collab,
+        localDirectory,
+        onChange: () => web?.notifyChange(),
+        ...(opts.peer ? { staticPeers: opts.peer } : {}),
+        log: (line) => console.log(line),
+      });
+      console.log(
+        `lan: device "${lan.selfDevice}" id ${lan.identity.id} — mutual TLS on :${lan.peerPort}, ${lan.trust.list().length} paired device(s)`,
+      );
+    }
+
     const initial = await directory();
     console.log(`directory: ${initial.length} sessions discovered`);
 
-    const collab = createCollabStore();
     const { isMonitored } = await import('./daemon/monitor.js');
     const { isSessionLive } = await import('./daemon/session-liveness.js');
     const { isRegisteredSession, listRegistered } = await import('./registry/external.js');
@@ -249,7 +230,6 @@ program
       if (isMonitored(s.sessionId) || isSessionLive(s.sessionId) || isRegisteredSession(s.sessionId)) return null;
       return (await adapterByAgent.get(s.agent)?.preflight?.(s)) ?? null;
     };
-    let web: { notifyChange(): void; close(): void; port: number } | null = null;
     if (opts.web || lan) {
       const { startConsoleServer } = await import('./daemon/server.js');
       web = startConsoleServer({
@@ -263,9 +243,10 @@ program
           ? {
               peering: {
                 selfDevice: lan.selfDevice,
-                token: lan.token,
-                localDirectory,
+                selfId: lan.identity.id,
                 peers: () => lan?.registry.list() ?? [],
+                trust: lan.trust,
+                pending: () => lan?.pending() ?? [],
               },
             }
           : {}),
@@ -284,7 +265,7 @@ program
         isMonitored: (sid) => isMonitored(sid),
         isSessionLive: (sid) => isSessionLive(sid),
         isPullOnly: (sid) => isRegisteredSession(sid),
-        ...(lan ? { selfDevice: lan.selfDevice, relay: lan.relay } : {}),
+        ...(lan ? { selfDevice: lan.selfDevice, relay: (device, message) => lan!.relay(device, message) } : {}),
         onEvent: (e) => {
           const m = e.message;
           const line = `[${new Date().toISOString()}] ${e.kind} ${m.id.slice(0, 8)} @${m.from.agent} → @${m.to.device ?? 'local'}/${m.to.agent}${e.detail ? ` — ${e.detail}` : ''}`;
@@ -375,7 +356,7 @@ program
       clearInterval(doorbellTimer);
       autorun.stop();
       externalNotifier.stop();
-      lan?.registry.stop();
+      lan?.stop();
       web?.close();
       process.exit(0);
     };
@@ -477,97 +458,61 @@ program
     const { processPromptHook } = await import('./hooks/prompt-hook.js');
     console.log(JSON.stringify(processPromptHook(openMailbox(), input)));
   });
-program
+const pair = program
   .command('pair')
-  .description('Show or set the LAN cluster token (same token on every device = paired)')
-  .option('--show', 'print this device token and pairing command for other devices')
-  .option('--set <token>', 'join a cluster by writing its token')
+  .description('Pair your devices (Syncthing-style: each side adds the other\'s public device ID, ADR-028)')
+  .option('--invite', 'print a copy-paste one-liner that installs anytoany on a new device and trusts this one')
   .option('--name <device>', 'set this device display name')
-  .option('--invite', 'print a copy-paste one-liner that installs + joins from another device')
-  .action(async (opts: { show?: boolean; set?: string; name?: string; invite?: boolean }) => {
-    const { loadOrCreateToken, setToken, tokenFingerprint } = await import('./cluster/token.js');
-    const { getDeviceName, setDeviceName } = await import('./cluster/device.js');
+  .option('--set <token>', '(removed) token pairing was replaced by device IDs')
+  .option('--show', '(removed) use `anyd pair` to show this device ID')
+  .action(async (opts: { invite?: boolean; name?: string; set?: string; show?: boolean }) => {
+    const { setDeviceName } = await import('./cluster/device.js');
+    const { showSelf, showInvite } = await import('./cluster/pair-commands.js');
+    if (opts.set) {
+      console.error('error: shared-token pairing was removed (ADR-028) — pair by device ID instead:');
+      showSelf();
+      process.exit(1);
+    }
     if (opts.name) {
       setDeviceName(opts.name);
       console.log(`device name set: ${opts.name}`);
     }
-    if (opts.set) {
-      setToken(opts.set);
-      console.log(`cluster token saved (fp ${tokenFingerprint(opts.set)}) — restart anyd start to apply`);
-      return;
-    }
-    const token = loadOrCreateToken();
-    if (opts.invite) {
-      console.log(`Paste this into the other device's terminal — or hand it to any agent there:\n`);
-      console.log(`  curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash -s -- --join ${token}\n`);
-      console.log(`It installs anytoany, joins this cluster, and configures the agents.`);
-      console.log(`Then start the daemon there:  anyd start`);
-      return;
-    }
-    console.log(`device: ${getDeviceName()}`);
-    console.log(`token fingerprint: ${tokenFingerprint(token)}`);
-    if (opts.show) {
-      console.log(`\non the other device, run:\n  anyd pair --set ${token}`);
-    } else {
-      console.log(`use --invite for a copy-paste installer one-liner, --show for the raw token`);
-    }
+    if (opts.invite) showInvite();
+    else showSelf();
+  });
+pair
+  .command('add')
+  .description('Trust another of YOUR devices by its device ID (run `anyd pair` there to see it)')
+  .argument('<deviceId>', 'the other device\'s ID, e.g. ABCDEFG-HIJKLMN-…')
+  .option('--name <name>', 'what to call it (default: the name it announces on the LAN)')
+  .option('--port <port>', 'local daemon console port (to look up its name)', '7433')
+  .action(async (deviceId: string, opts: { name?: string; port: string }) => {
+    const { addTrusted } = await import('./cluster/pair-commands.js');
+    const ok = await addTrusted(deviceId, { ...(opts.name ? { name: opts.name } : {}), port: Number.parseInt(opts.port, 10) || 7433 });
+    if (!ok) process.exit(1);
+  });
+pair
+  .command('remove')
+  .description('Stop trusting a device (by ID or name)')
+  .argument('<deviceIdOrName>')
+  .action(async (idOrName: string) => {
+    const { removeTrusted } = await import('./cluster/pair-commands.js');
+    if (!removeTrusted(idOrName)) process.exit(1);
+  });
+pair
+  .command('list')
+  .description('Devices this one trusts')
+  .action(async () => {
+    const { listTrusted } = await import('./cluster/pair-commands.js');
+    listTrusted();
   });
 program
   .command('peers')
-  .description('List LAN peers discovered via mDNS (asks the running daemon; passive scan as fallback)')
+  .description('LAN devices: which are paired, which are not, and pending pairing requests')
   .option('--port <port>', 'local daemon console port', '7433')
   .action(async (opts: { port: string }) => {
-    const { loadOrCreateToken, tokenFingerprint } = await import('./cluster/token.js');
-    const { getDeviceName } = await import('./cluster/device.js');
-    const fp = tokenFingerprint(loadOrCreateToken());
-    const port = Number.parseInt(opts.port, 10) || 7433;
-
-    interface PeerRow {
-      device: string;
-      host: string;
-      port: number;
-      fp: string;
-      paired?: boolean;
-    }
-    let peers: PeerRow[] | null = null;
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/peers`, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const body = (await res.json()) as { lan: boolean; peers: PeerRow[] };
-        if (!body.lan) {
-          console.log('daemon is running with LAN peering disabled (--no-lan)');
-          return;
-        }
-        peers = body.peers;
-      }
-    } catch {
-      /* daemon not running or older build — fall back to a passive scan */
-    }
-    if (peers === null) {
-      const { startPeerRegistry } = await import('./cluster/peers.js');
-      const registry = startPeerRegistry({
-        selfDevice: getDeviceName(),
-        port: 0,
-        token: loadOrCreateToken(),
-        publish: false, // browse-only: a CLI scan has no console port to announce
-      });
-      console.log('daemon not reachable — passive mDNS scan for 3s…');
-      await new Promise((r) => setTimeout(r, 3000));
-      peers = registry.list();
-      registry.stop();
-    }
-    console.log(`self: @${getDeviceName()}  fp ${fp}`);
-    if (peers.length === 0) {
-      console.log('no peers found (is anyd start running on the other device? same network?)');
-      return;
-    }
-    for (const p of peers) {
-      const isPaired = p.paired ?? p.fp === fp;
-      const status = isPaired
-        ? 'paired'
-        : `NOT paired — run anyd pair --show here, then anyd pair --set <token> on @${p.device} and restart anyd there`;
-      console.log(`@${p.device}  ${p.host}:${p.port}  ${status}`);
-    }
+    const { showPeers } = await import('./cluster/pair-commands.js');
+    await showPeers(Number.parseInt(opts.port, 10) || 7433);
   });
 program
   .command('doctor')
@@ -1147,7 +1092,7 @@ collab
       process.exit(1);
     }
     const device = opts.to.replace(/^@/, '').toLowerCase();
-    interface PeerRow { device: string; host: string; port: number; }
+    interface PeerRow { device: string; host: string; port: number; id: string; paired?: boolean; trustedName?: string; }
     let peers: PeerRow[];
     try {
       const res = await fetch(`http://127.0.0.1:${opts.port}/api/peers`, { signal: AbortSignal.timeout(3000) });
@@ -1161,14 +1106,17 @@ collab
       console.error('cannot reach the local daemon to find the peer — is anyd start running?');
       process.exit(1);
     }
-    const peer = peers.find((p) => p.device.toLowerCase() === device);
+    const peer = peers.find(
+      (p) => p.paired && (p.device.toLowerCase() === device || p.trustedName?.toLowerCase() === device),
+    );
     if (!peer) {
-      console.error(`peer "@${device}" not found on the LAN (anyd peers to list). Is its daemon running and paired?`);
+      console.error(`peer "@${device}" is not a paired device on the LAN (anyd peers to list, anyd pair add to pair)`);
       process.exit(1);
     }
     const { pushCollabDoc } = await import('./cluster/peers.js');
-    const { loadOrCreateToken } = await import('./cluster/token.js');
-    const r = await pushCollabDoc(peer, serializeCollab(doc), loadOrCreateToken());
+    const { loadOrCreateIdentity } = await import('./cluster/identity.js');
+    const { getDeviceName } = await import('./cluster/device.js');
+    const r = await pushCollabDoc(peer, serializeCollab(doc), { identity: loadOrCreateIdentity(), selfName: getDeviceName() });
     if (r.ok) {
       console.log(`synced ${conversationId} → @${peer.device} (it merged your copy)`);
     } else {

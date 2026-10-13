@@ -420,3 +420,35 @@ Codex 侧不分层（exec resume 已全验证）。
 - **Claude**：① 用户默认 bypass、worker 未设 accept：门铃被扣，消息仍 pending、attempts 0；模拟用户下一句话后 14 秒，hook 注入、回 CHERRY（兜底成立）。② worker 带 `--settings accept`：**无任何用户输入，7 秒**收到 PLUM 回信。③ 闸门关闭时：0 次按铃、0 个被扣帧、消息 pending、未被 headless resume。④ `isSessionLive` 认出本机全部 4 个桌面会话（含 7506d124），随机 uuid 为 false。
 
 **已知限制**：门铃对 Bypass 接收方需机主设 accept；Codex `workspace-write` 沙箱线程里 `anyd reply` 可能写不进 `~/.anytoany`（本机 40 个近期线程中 39 个是 full-access）；收件箱的线协议来自社区抓包（ACC issue #130），非官方文档，所以做了失败回退，并在本机 2.1.296 实测确认。
+
+## ADR-028 跨设备照抄 Syncthing：每台设备一把自己的钥匙，设备 ID = 证书指纹，双向 TLS，配对交换公开 ID；自己的设备 = 最高信任档（2026-10-13，用户拍板）
+
+**背景**：ADR-002 的局域网层是**明文 HTTP + 全集群共用一把 token**，token 放在每个请求头里。同一 Wi-Fi 里抓一次包就能拿到 token，进而以「主人授权」（ADR-016）指挥任意 agent。ADR-027 打开门铃后（`crossSessionInbound: accept` + Bypass），注入的消息会被**立即执行且不再确认**，风险被放大。另外两个结构性缺陷：一把钥匙无法单独吊销某台设备；`anyd pair --invite` 的一行命令里带着秘密，会进 shell 历史和聊天记录。
+
+**决策：照抄 Syncthing 的身份与加密模型**（[Syncthing Security](https://docs.syncthing.net/users/security.html)）：
+1. **身份**：每台设备首次启动时生成 **Ed25519 密钥对 + 自签名证书**，存于 `~/.anytoany/identity/`（目录 0700、私钥 0600）。私钥永不离开本机。
+2. **设备 ID** = 证书 DER 的 SHA-256，用 base32 编码，按 7 位一组用 `-` 分隔（形如 `ABCDEFG-HIJKLMN-…`）。ID 是**公开信息**，泄露无害。
+3. **配对**：双方各自执行 `anyd pair add <对方 ID>`，把对方写进信任名单 `~/.anytoany/trusted-devices.json`。交换的是公开 ID，**不再有任何秘密要传**。吊销某台设备 = 删掉一行（`anyd pair remove`）。
+4. **传输**：设备间改走**双向 TLS 1.3**（两边都出示证书），使用独立端口（默认 console 端口 + 1 = 7434）。握手后双方核对对方证书指纹是否在信任名单里，对不上就断开。客户端**先核对再发数据**：自己建立 TLS 连接，核对指纹之后才把 socket 交给 HTTP。没有私钥就造不出指纹相同的证书，也就无法冒充。TLS 1.3 的密钥交换是临时的（前向保密）：私钥将来泄露，过去的流量也解不开。
+5. **本机控制台不变**：仍是 HTTP，但**只绑 127.0.0.1**，不再为了 peer 绑 `0.0.0.0`。明文接口从此不暴露在局域网上。
+6. **发件设备名不能自报**：对端转来的消息，`from.device` 一律改写为信任名单里登记的名字，不信任请求体里的自报值，防止已配对设备冒充另一台设备。
+7. **mDNS** 广播 `device`、`id`（公开 ID）和 TLS 端口；不再广播 token 指纹。广播内容可以伪造，但伪造者过不了 TLS 指纹核对，最多做到「看得见、连不上」。
+
+**信任档位（用户拍板：自己的设备 = 最高档）**：信任名单每条带 `tier`。本 ADR 只实现 **`owner`**（机主自己的设备），语义沿用 ADR-016：消息携带机主授权，接收方当作队友委派的工作，配合门铃可自动执行。**为将来留的档位**（未实现、不可添加）：`guest`（别人的设备 / 别人的 agent）只能投递「资料」：消息标注来源、不带授权、有后果的动作必须由本机主人批准。这条线必须在任何跨人功能之前落地，否则等于把「默认授权」开放给外人。
+
+**为什么不用其他方案**：保留 token 并在外面加 TLS，仍是共享秘密、仍无法单独吊销；PSK-TLS 同理。证书由 CA 签发需要中心化基础设施，违背「零服务」。Tailscale 已被 ADR-002 否决。生成自签证书：Node 内置 `crypto` 能生成密钥但**不能生成 X.509 证书**，常见做法是依赖 node-forge 或调用系统 `openssl`。我们选择**手写约 80 行最小 DER 编码器**（Ed25519 证书没有扩展字段，结构固定），零依赖、跨平台；用 Node 自带的 `X509Certificate` 解析并验签作为测试。
+
+**迁移**：旧的 `cluster-token` 作废，不再读取；`anyd pair --set/--show` 会打印新流程。新旧版本**不互通**：两台设备都要升级，然后互相 `pair add` 一次。上次跨设备转发是 2026-08-11（@mini），当前无在线 peer，影响面已确认。
+
+**与跨网的关系**（用户问「是不是就不局限于局域网了」）：Syncthing 能跨网靠三件事：① 身份绑密钥不绑 IP；② 发现服务器（ID → 当前地址）；③ 中继 + NAT 穿透。本 ADR 完成 ①，并提供让 ② ③ 安全的端到端加密：中继只能转发看不懂的密文。跨网还需要引入发现和中继服务器（Syncthing 社区服务器 / Iroh relay / 自建）。这与 ADR-002「只做局域网、不引入第三方组网」冲突，**需要用户另行拍板**。传输层已按「可换管道」设计：身份和配对不随之改变。
+
+**实现要点（落地时补充）**：
+- 代码：`src/cluster/identity.ts`（证书 + ID）、`trust.ts`（信任名单，按 mtime 热加载）、`secure-transport.ts`（双向 TLS 服务端 / 客户端）、`peer-api.ts`（peer 路由）、`lan.ts`（daemon 的局域网层）、`pair-commands.ts`（CLI）。`token.ts` 删除。
+- **顺手修的隐患**：用隔离 `ANYTOANY_HOME` 跑的 daemon（测试、smoke）会改写**并清理**用户真实的 `~/.claude/agents/any-*`（mention agent 同步只认真实 home）。现在隔离实例跳过这一步。
+
+**验证（全部实测）**：
+- **TDD**：新增 `identity`（证书能被 X509Certificate 解析、自签、验签通过、有效期到 9999 年、ID 格式与规范化、0600/0700 权限）、`secure-transport`（真 socket：双方已配对 → 200；未配对客户端 → 403 并记为配对请求、处理函数不执行；冒充者在发出任何字节前被断开；无证书 → 401；probe 能查出对端 ID）、`peer-api`（`from.device` 用登记名覆盖自报值）、`lan`（未配对时转发失败并给出确切命令、对方记录配对请求；配对后热生效、转发成功、目录聚合；冒充者两种情形都被拒）、`pair-commands`。全量 421 绿。
+- **真 daemon 双实例**（本机，隔离 home，真 mDNS）：alpha 看到 beta「未配对 + 确切命令」，也正确识别出旧版本的 macbook。只有 alpha 信任 beta 时，beta 拒收（mailbox 0 条），并显示「来自 alpha 的配对请求」。beta 执行 `pair add` 后**无需重启**即可转发，beta 收到的消息 `from_device = alpha`。线路检查：TLS 1.3 / AES-256-GCM / Ed25519；明文 HTTP 打 peer 端口无应答；从局域网 IP 访问控制台被拒；旧 token 头访问 `/api/peer/*` 返回 404；不带证书的 Node 客户端得到 401。macOS 自带 curl（LibreSSL 3.3.6）无法与 Ed25519 握手，这是 curl 的限制，peer 两端都是 Node + OpenSSL 3，不受影响。
+- **本机真 daemon 已切换**：控制台只监听 `127.0.0.1:7433`，peer 端口 `*:7434`，身份已生成（key 0600），`anyd doctor` 有对应检查项。
+
+**不防的（如实写明）**：偷走 `identity/key.pem` 就能冒充本机（与 Syncthing 相同，靠文件权限和磁盘加密）；mDNS 广播暴露设备名和 ID；消息在本机 mailbox 里是明文存储（与 Syncthing 相同）。

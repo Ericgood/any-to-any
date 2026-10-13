@@ -17,16 +17,18 @@ import { Bonjour } from 'bonjour-service';
 import { pickLanAddress, startPeerRegistry } from '../src/cluster/peers.js';
 
 describe('peer registry mDNS behaviour', () => {
-  it('daemon mode announces itself with its real port', () => {
+  it('daemon mode announces its mutual-TLS port and public device ID — never a secret (ADR-028)', () => {
     publishMock.mockClear();
-    const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, token: 't' });
-    expect(publishMock).toHaveBeenCalledWith(expect.objectContaining({ port: 7433 }));
+    const r = startPeerRegistry({ selfDevice: 'macbook', port: 7434, selfId: 'SELFID' });
+    expect(publishMock).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 7434, txt: { device: 'macbook', id: 'SELFID' } }),
+    );
     r.stop();
   });
 
   it('publisher and browser use separate mDNS instances — a shared socket starves browser queries', () => {
     vi.mocked(Bonjour).mockClear();
-    const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, token: 't' });
+    const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, selfId: 'SELFID' });
     expect(vi.mocked(Bonjour)).toHaveBeenCalledTimes(2);
     r.stop();
   });
@@ -35,7 +37,7 @@ describe('peer registry mDNS behaviour', () => {
     vi.useFakeTimers();
     try {
       updateMock.mockClear();
-      const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, token: 't' });
+      const r = startPeerRegistry({ selfDevice: 'macbook', port: 7433, selfId: 'SELFID' });
       vi.advanceTimersByTime(31_000);
       expect(updateMock).toHaveBeenCalled();
       r.stop();
@@ -50,7 +52,7 @@ describe('peer registry mDNS behaviour', () => {
   it('browse-only mode never publishes (CLI passive scan may pass port 0)', () => {
     publishMock.mockClear();
     vi.mocked(Bonjour).mockClear();
-    const r = startPeerRegistry({ selfDevice: 'macbook', port: 0, token: 't', publish: false });
+    const r = startPeerRegistry({ selfDevice: 'macbook', port: 0, selfId: 'SELFID', publish: false });
     expect(publishMock).not.toHaveBeenCalled();
     expect(findMock).toHaveBeenCalled();
     expect(vi.mocked(Bonjour)).toHaveBeenCalledTimes(1);
@@ -62,16 +64,16 @@ describe('peer rename dedup', () => {
   it('drops a stale alias when the same host:port reappears under a new name', () => {
     const onMock = vi.fn();
     findMock.mockReturnValueOnce({ on: onMock, update: updateMock });
-    const r = startPeerRegistry({ selfDevice: 'macbook', port: 0, token: 't', publish: false });
+    const r = startPeerRegistry({ selfDevice: 'macbook', port: 0, selfId: 'SELFID', publish: false });
     const up = onMock.mock.calls.find((c) => c[0] === 'up')?.[1] as (s: unknown) => void;
     const svc = (device: string) => ({
-      txt: { device, fp: 'aa' },
+      txt: { device, id: 'PEERID' },
       addresses: ['192.168.1.97'],
       port: 7433,
     });
     up(svc('desktop-7f3a'));
     up(svc('mini'));
-    expect(r.list().map((p) => p.device)).toEqual(['mini']);
+    expect(r.list().map((p) => [p.device, p.id])).toEqual([['mini', 'PEERID']]);
     r.stop();
   });
 });

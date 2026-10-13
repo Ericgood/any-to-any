@@ -1,22 +1,30 @@
 import { Bonjour, type Service } from 'bonjour-service';
 import type { SessionInfo } from '../adapters/types.js';
 import type { Message } from '../mailbox/mailbox.js';
-import { tokenFingerprint } from './token.js';
+import type { DeviceIdentity } from './identity.js';
+import { peerRequest } from './secure-transport.js';
 
 export interface Peer {
   device: string;
   host: string;
+  /** The peer's mutual-TLS port (ADR-028). */
   port: number;
-  /** Token fingerprint from mDNS TXT — equal to ours means paired. */
-  fp: string;
+  /** Device ID from mDNS TXT — public, and only usable by whoever holds its key. */
+  id: string;
   lastSeenAt: number;
+}
+
+/** What we present when calling a peer: our identity and our device name. */
+export interface PeerClient {
+  identity: DeviceIdentity;
+  selfName: string;
 }
 
 export interface PeerRegistry {
   list(): Peer[];
   get(device: string): Peer | undefined;
   /** Manually add a peer (debugging / no-mDNS environments). */
-  addStatic(device: string, host: string, port: number, fp: string): void;
+  addStatic(device: string, host: string, port: number, id: string): void;
   stop(): void;
 }
 
@@ -43,8 +51,10 @@ export function pickLanAddress(addresses: string[]): string | undefined {
 
 export interface DiscoveryOptions {
   selfDevice: string;
+  /** Our mutual-TLS peer port, announced over mDNS. */
   port: number;
-  token: string;
+  /** Our public device ID, announced so others can pair with us (ADR-028). */
+  selfId: string;
   /** Disable mDNS (tests / --peer only mode). */
   mdns?: boolean;
   /** Browse without announcing — for passive CLI scans that have no real port. */
@@ -54,7 +64,6 @@ export interface DiscoveryOptions {
 /** Publish this daemon and track peers via mDNS (`_anytoany._tcp`). */
 export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
   const peers = new Map<string, Peer>();
-  const fp = tokenFingerprint(opts.token);
   let publisher: Bonjour | null = null;
   let finder: Bonjour | null = null;
   let requery: NodeJS.Timeout | null = null;
@@ -66,7 +75,7 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
         name: `anytoany-${opts.selfDevice}`,
         type: SERVICE_TYPE,
         port: opts.port,
-        txt: { device: opts.selfDevice, fp },
+        txt: { device: opts.selfDevice, id: opts.selfId },
         // A same-name record on the network can only be our own stale ghost
         // (a crashed daemon that never sent its mDNS goodbye). Probing would
         // throw an uncatchable name-conflict — announce and reclaim instead.
@@ -79,7 +88,7 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
     finder = new Bonjour();
     const browser = finder.find({ type: SERVICE_TYPE });
     const upsert = (service: Service): void => {
-      const txt = (service.txt ?? {}) as { device?: string; fp?: string };
+      const txt = (service.txt ?? {}) as { device?: string; id?: string };
       const device = txt.device;
       if (!device || device.toLowerCase() === opts.selfDevice.toLowerCase()) return;
       const host = pickLanAddress(service.addresses ?? []) ?? service.host;
@@ -88,7 +97,7 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
         device,
         host,
         port: service.port,
-        fp: txt.fp ?? '',
+        id: txt.id ?? '',
         lastSeenAt: Date.now(),
       });
       // Same endpoint under another name = the device was renamed (or a ghost
@@ -113,8 +122,8 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
   return {
     list: () => [...peers.values()],
     get: (device) => peers.get(device.toLowerCase()),
-    addStatic(device, host, port, peerFp) {
-      peers.set(device.toLowerCase(), { device, host, port, fp: peerFp, lastSeenAt: Date.now() });
+    addStatic(device, host, port, id) {
+      peers.set(device.toLowerCase(), { device, host, port, id, lastSeenAt: Date.now() });
     },
     stop() {
       if (requery) clearInterval(requery);
@@ -124,79 +133,85 @@ export function startPeerRegistry(opts: DiscoveryOptions): PeerRegistry {
   };
 }
 
-async function peerFetch(path: string, peer: Peer, token: string, init?: RequestInit): Promise<Response> {
-  return fetch(`http://${peer.host}:${peer.port}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      'x-anytoany-token': token,
-      'content-type': 'application/json',
-    },
-    signal: AbortSignal.timeout(10_000),
+type PeerAddress = Pick<Peer, 'device' | 'host' | 'port' | 'id'>;
+
+/** One call to a paired peer over pinned mutual TLS (ADR-028). */
+async function callPeer(
+  peer: PeerAddress,
+  client: PeerClient,
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: unknown }> {
+  if (!peer.id) throw new Error(`peer ${peer.device} did not announce a device ID (older anytoany?) — upgrade it`);
+  return peerRequest({
+    host: peer.host,
+    port: peer.port,
+    expectedId: peer.id,
+    identity: client.identity,
+    selfName: client.selfName,
+    method,
+    path,
+    ...(body !== undefined ? { body } : {}),
   });
 }
 
+function httpError(peer: PeerAddress, client: PeerClient, status: number, body: unknown): string {
+  if (status === 403) {
+    return `peer ${peer.device}: not paired — on @${peer.device} run: anyd pair add ${client.identity.id}`;
+  }
+  const detail = (body as { error?: string } | null)?.error ?? '';
+  return `peer ${peer.device}: HTTP ${status} ${detail}`.trim();
+}
+
+const unreachable = (peer: PeerAddress, e: unknown): string =>
+  `peer ${peer.device} unreachable: ${e instanceof Error ? e.message : String(e)}`;
+
 /** Pull a peer's local session directory, stamping each entry with its device. */
-export async function fetchPeerSessions(peer: Peer, token: string): Promise<SessionInfo[]> {
-  const res = await peerFetch('/api/peer/sessions', peer, token);
-  if (!res.ok) throw new Error(`peer ${peer.device} sessions: HTTP ${res.status}`);
-  const { sessions } = (await res.json()) as { sessions: SessionInfo[] };
+export async function fetchPeerSessions(peer: Peer, client: PeerClient): Promise<SessionInfo[]> {
+  const r = await callPeer(peer, client, 'GET', '/api/peer/sessions');
+  if (r.status !== 200) throw new Error(httpError(peer, client, r.status, r.body));
+  const { sessions } = r.body as { sessions: SessionInfo[] };
   return sessions.map((s) => ({ ...s, device: peer.device }));
 }
 
 /**
  * Push our copy of a collaboration doc (serialized markdown) to a peer daemon,
- * which merges it convergently (Phase 4 / M3). Only host/port/device are used,
- * so a peer row from /api/peers works as well as a registry Peer.
+ * which merges it convergently (Phase 4 / M3).
  */
 export async function pushCollabDoc(
-  peer: Pick<Peer, 'device' | 'host' | 'port'>,
+  peer: PeerAddress,
   docSerialized: string,
-  token: string,
+  client: PeerClient,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await peerFetch('/api/peer/collab', peer as Peer, token, {
-      method: 'POST',
-      body: JSON.stringify({ doc: docSerialized }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      return { ok: false, error: `peer ${peer.device}: HTTP ${res.status} ${body.error ?? ''}`.trim() };
-    }
-    return { ok: true };
+    const r = await callPeer(peer, client, 'POST', '/api/peer/collab', { doc: docSerialized });
+    return r.status === 200 ? { ok: true } : { ok: false, error: httpError(peer, client, r.status, r.body) };
   } catch (e) {
-    return { ok: false, error: `peer ${peer.device} unreachable: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: unreachable(peer, e) };
   }
 }
 
 /**
  * Hand a message to the peer daemon. Perspective flip: our 'to.device' becomes
- * the peer's local target; our side becomes 'from.device' as seen by them.
+ * the peer's local target. The peer records the sending device from OUR
+ * certificate, not from this body (ADR-028).
  */
 export async function relayToPeer(
   peer: Peer,
   message: Message,
-  token: string,
-  selfDevice: string,
+  client: PeerClient,
 ): Promise<{ ok: boolean; error?: string }> {
   const wire = {
     contextId: message.contextId,
-    from: { agent: message.from.agent, sessionId: message.from.sessionId, device: message.from.device ?? selfDevice },
+    from: { agent: message.from.agent, sessionId: message.from.sessionId },
     to: { agent: message.to.agent, sessionId: message.to.sessionId },
     text: message.parts.map((p) => p.text).join('\n'),
-    via: 'relay',
   };
   try {
-    const res = await peerFetch('/api/peer/messages', peer, token, {
-      method: 'POST',
-      body: JSON.stringify(wire),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      return { ok: false, error: `peer ${peer.device}: HTTP ${res.status} ${body.error ?? ''}`.trim() };
-    }
-    return { ok: true };
+    const r = await callPeer(peer, client, 'POST', '/api/peer/messages', wire);
+    return r.status === 201 ? { ok: true } : { ok: false, error: httpError(peer, client, r.status, r.body) };
   } catch (e) {
-    return { ok: false, error: `peer ${peer.device} unreachable: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: unreachable(peer, e) };
   }
 }

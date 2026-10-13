@@ -49,7 +49,13 @@ On the first machine:
 anyd pair --invite
 ```
 
-It prints a **single copy-paste command** (installer + cluster token). Paste it into the other machine's terminal — or hand it to any agent running there — and both devices are aligned: discovered via mDNS, directories merged, ready to relay.
+It prints a **single copy-paste command**. Paste it into the other machine's terminal, or hand it to any agent running there. The command installs anytoany, trusts this machine, and prints the new machine's own **device ID**. Back on the first machine, trust it in return:
+
+```bash
+anyd pair add <the ID it printed>
+```
+
+Pairing works like [Syncthing](https://docs.syncthing.net/users/security.html): every device has its own key, its device ID is that key's certificate fingerprint, and each side adds the other's **public** ID. Nothing secret is ever pasted. From then on the two daemons talk over **mutual TLS 1.3**, each checking the other's fingerprint. `anyd peers` shows what's paired, what isn't, and any pairing requests.
 
 ## Send your first message
 
@@ -113,7 +119,7 @@ The target session receives it, does the work, replies — and the reply lands b
 
 - **One skill, every agent** — follows the open [Agent Skills](https://code.claude.com/docs/en/skills) standard (`SKILL.md`), understood by Claude Code, Codex, Cursor, Gemini CLI and more. Agents interact through plain `anyd` shell commands: no MCP setup required.
 - **A tiny daemon (`anyd`)** — discovers every addressable session on the machine (by scanning each CLI's own session store), queues messages in a durable SQLite mailbox (ack / retry / dead-letter), and delivers them through each vendor's **official headless resume channel** (`claude -p --resume`, `codex exec resume`, `kimi -S … -p`, ZCode's bundled engine) — or holds them for a registered external agent to pull.
-- **LAN peering, zero services** — daemons find each other via mDNS/Bonjour, pair with a shared token, and relay messages over direct LAN HTTP. Different token → HTTP 401. Nothing ever leaves your network.
+- **LAN peering, zero services, encrypted**: daemons find each other via mDNS/Bonjour and talk over **mutual TLS 1.3**. Every device has its own Ed25519 key, and its device ID is the certificate fingerprint. Pairing means each side adds the other's public ID, Syncthing-style. Unpaired devices are refused, and a device claiming a paired name without the matching key is dropped before a byte is sent. Nothing ever leaves your network.
 - **Desktop-App assistants too** — an agent living inside a GUI app has no headless CLI to resume into, so it *registers* itself and *pulls* its own mail over the daemon's loopback HTTP instead. `anyd connect sds` wires up [闪电说](https://github.com/shandianshuo/shandianshuo-desktop)'s assistant this way, letting you drive Claude Code and Codex from it. Sending is instant; replies arrive on its next turn (the app can't wake itself, so anytoany posts an OS notification when mail is waiting).
 - **A web console** — an IM-style view (`http://127.0.0.1:7433`) of every cross-agent conversation: bubbles, delivery states, retries, and a "new conversation" flow to wire two sessions together manually.
 
@@ -197,8 +203,10 @@ git clone https://github.com/Ericgood/any-to-any.git && cd any-to-any
 npm install && npm run build && npm link
 anyd setup                 # skills (any-to-any + reload) + inbox hooks
 # manual pairing, if you prefer not to use `anyd pair --invite`:
-anyd pair --show           # machine one: print the token
-anyd pair --set <token>    # machine two: join
+anyd pair                  # each machine: print its device ID (public)
+anyd pair add <other ID>   # each machine: trust the other one
+anyd pair list             # who this machine trusts
+anyd pair remove mini      # revoke one device — nothing to rotate elsewhere
 anyd pair --name mini      # optional friendly device name
 ```
 
@@ -218,11 +226,11 @@ Ambiguous targets return a candidate list so the agent can ask the user instead 
 
 anytoany runs entirely on **your own machines, on your own LAN** — no cloud, no accounts. The trust boundary is deliberately simple, and stated honestly:
 
-- **A single-operator cluster.** Every device is paired with a shared secret; a message can only enter the cluster from a machine that holds that token. Within that boundary, agents collaborate as **trusted teammates** — treating your own agents as hostile makes real delegation impossible. A request you set in motion from one session carries your authority to the next, as if you delegated it in person. Agents keep full autonomy — they discuss, propose better approaches, and refuse genuinely destructive ideas — they just don't stonewall legitimate work on "you're another agent" grounds.
-- **We don't pretend to defend against a compromised peer.** The boundary is your LAN + the shared token, not the message text. If an attacker is already executing code inside one of your paired agents, anytoany isn't your last line of defense — the machine already is.
+- **A single-operator cluster.** Every device you pair is **yours**, and gets the highest trust tier (`owner`). A message can only enter the cluster from a device whose key you explicitly trusted (mutual TLS, fingerprint-pinned). Within that boundary, agents collaborate as **trusted teammates** — treating your own agents as hostile makes real delegation impossible. A request you set in motion from one session carries your authority to the next, as if you delegated it in person. Agents keep full autonomy — they discuss, propose better approaches, and refuse genuinely destructive ideas — they just don't stonewall legitimate work on "you're another agent" grounds.
+- **We don't pretend to defend against a compromised peer.** The boundary is your paired devices' keys, not the message text. A stolen `~/.anytoany/identity/key.pem` can impersonate that device (same as Syncthing), so protect it like an SSH key; `anyd pair remove` revokes it everywhere else. If an attacker is already executing code inside one of your paired agents, anytoany isn't your last line of defense — the machine already is.
 - **Delivery is minimal and official.** Messages ride each vendor's own headless `resume` channel (argv-only — the message text never touches a shell), never TUI keystroke injection or `--dangerously-*` flags. Raising an agent to full-permission execution is an explicit **per-machine owner opt-in** (off by default, set locally) — never something a sender can request.
 - **Local HTTP is trusted, and that's a deliberate choice.** The daemon's own endpoints (including the `/api/inbox` + `/api/send` pair that desktop-App agents use) accept any process on `127.0.0.1` without a token — that's what lets a sandboxed GUI assistant talk to anytoany at all. Anything already running as you on your Mac can therefore queue a message as any agent; the boundary is your user account, same as your shell history or SSH keys.
-- **Loopback + token + loop caps.** The web console binds to `127.0.0.1` only; peer endpoints require the shared cluster token (401 otherwise); per-thread depth and per-minute rate caps stop two agents burning tokens in an ack loop.
+- **Loopback + mutual TLS + loop caps.** The web console binds to `127.0.0.1` only. Device-to-device traffic uses a separate port (7434) over TLS 1.3 with forward secrecy, which can't be read or forged on the wire. Unpaired devices get 403 and show up as pairing requests, never as messages. The sending device is recorded from its verified certificate, not from what it claims. Per-thread depth and per-minute rate caps stop two agents burning tokens in an ack loop. Details: [ADR-028](docs/decisions.md).
 
 See [SECURITY.md](SECURITY.md) for the reporting process and what's in scope.
 

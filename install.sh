@@ -3,17 +3,24 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
 #
-# Join an existing cluster (printed by `anyd pair --invite` on the first device):
-#   ... | bash -s -- --join <token> [--name mini]
+# Pair with one of your existing devices (printed by `anyd pair --invite` there):
+#   ... | bash -s -- --trust <that device's ID> --trust-name macbook [--name mini]
+# Only public device IDs are exchanged — nothing in the command is secret (ADR-028).
 set -euo pipefail
 
 REPO="git+https://github.com/Ericgood/any-to-any.git"
-JOIN=""
+TRUST=""
+TRUST_NAME=""
 NAME=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --join) JOIN="${2:-}"; shift 2 ;;
+    --trust) TRUST="${2:-}"; shift 2 ;;
+    --trust-name) TRUST_NAME="${2:-}"; shift 2 ;;
     --name) NAME="${2:-}"; shift 2 ;;
+    --join)
+      echo "✗ --join <token> was removed: devices now pair by public device ID (ADR-028)." >&2
+      echo "  On your other device run 'anyd pair --invite' for an updated command." >&2
+      exit 1 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -52,11 +59,15 @@ fi
 say "Configuring agents (skills: any-to-any + reload; inbox hooks)…"
 "$ANYD" setup
 
-if [[ -n "$JOIN" ]]; then
-  "$ANYD" pair --set "$JOIN"
-fi
 if [[ -n "$NAME" ]]; then
   "$ANYD" pair --name "$NAME"
+fi
+if [[ -n "$TRUST" ]]; then
+  if [[ -n "$TRUST_NAME" ]]; then
+    "$ANYD" pair add "$TRUST" --name "$TRUST_NAME"
+  else
+    "$ANYD" pair add "$TRUST"
+  fi
 fi
 
 echo
@@ -68,6 +79,10 @@ fi
 echo "  Start the daemon:   anyd start"
 echo "  Web console:        http://127.0.0.1:7433"
 echo "  See your sessions:  anyd list"
-if [[ -z "$JOIN" ]]; then
+if [[ -n "$TRUST" ]]; then
+  echo
+  say "One step left — on ${TRUST_NAME:-your other device}, trust this one back:"
+  "$ANYD" pair | grep '^id:' | sed 's/^id: */      anyd pair add /'
+else
   echo "  Link another device: anyd pair --invite   (prints a one-liner to paste there)"
 fi

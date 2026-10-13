@@ -6,12 +6,17 @@ ANYD="node $(cd "$(dirname "$0")/.." && pwd)/dist/cli.js"
 WORK=$(mktemp -d /tmp/anytoany-lan.XXXX)
 HOME_A="$WORK/homeA"; HOME_B="$WORK/homeB"
 PORT_A=7501; PORT_B=7502
+PEER_A=7511; PEER_B=7512   # mutual-TLS peer ports (ADR-028)
 mkdir -p "$HOME_A/.anytoany" "$HOME_B/.anytoany"
-TOKEN="lan-smoke-$(date +%s)-token-0123456789abcdef"
-printf '%s\n' "$TOKEN" > "$HOME_A/.anytoany/cluster-token"
-printf '%s\n' "$TOKEN" > "$HOME_B/.anytoany/cluster-token"
 printf 'alpha\n' > "$HOME_A/.anytoany/device-name"
 printf 'beta\n'  > "$HOME_B/.anytoany/device-name"
+
+echo "=== pair alpha <-> beta by device ID (each side trusts the other) ==="
+ID_A=$(ANYTOANY_HOME="$HOME_A" $ANYD pair | sed -n 's/^id: *//p')
+ID_B=$(ANYTOANY_HOME="$HOME_B" $ANYD pair | sed -n 's/^id: *//p')
+ANYTOANY_HOME="$HOME_A" $ANYD pair add "$ID_B" --name beta --port 1 >/dev/null
+ANYTOANY_HOME="$HOME_B" $ANYD pair add "$ID_A" --name alpha --port 1 >/dev/null
+echo "alpha=$ID_A"; echo "beta=$ID_B"
 
 cleanup() { kill "$PID_A" "$PID_B" 2>/dev/null || true; }
 trap cleanup EXIT
@@ -26,11 +31,11 @@ print(c[0]['sessionId'])")
 echo "TARGET=$TARGET"
 
 echo "=== start daemon beta (:$PORT_B) ==="
-ANYTOANY_HOME="$HOME_B" $ANYD start --port $PORT_B --peer "127.0.0.1:$PORT_A" > "$WORK/beta.log" 2>&1 &
+ANYTOANY_HOME="$HOME_B" $ANYD start --port $PORT_B --peer-port $PEER_B --peer "127.0.0.1:$PEER_A" > "$WORK/beta.log" 2>&1 &
 PID_B=$!
 sleep 2
 echo "=== start daemon alpha (:$PORT_A) with static peer to beta ==="
-ANYTOANY_HOME="$HOME_A" $ANYD start --port $PORT_A --peer "127.0.0.1:$PORT_B" > "$WORK/alpha.log" 2>&1 &
+ANYTOANY_HOME="$HOME_A" $ANYD start --port $PORT_A --peer-port $PEER_A --peer "127.0.0.1:$PEER_B" > "$WORK/alpha.log" 2>&1 &
 PID_A=$!
 sleep 3
 

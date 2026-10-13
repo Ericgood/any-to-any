@@ -1,6 +1,8 @@
 import type { SessionInfo } from '../adapters/types.js';
 import type { CollabStore } from '../collab/store.js';
 import type { Peer } from '../cluster/peers.js';
+import type { UntrustedContact } from '../cluster/secure-transport.js';
+import type { TrustStore } from '../cluster/trust.js';
 import type { Mailbox } from '../mailbox/mailbox.js';
 export interface ConsoleServerOptions {
     mailbox: Mailbox;
@@ -20,14 +22,16 @@ export interface ConsoleServerOptions {
      *  409 and queue nothing, so the sender sees e.g. a CLI version mismatch now —
      *  instead of a silent dead letter whose cause the pull-hook recovery hides. */
     preflight?: (session: SessionInfo) => Promise<string | null>;
-    /** LAN peering (Phase 2): serve /api/peer/* and bind 0.0.0.0. */
+    /** LAN peering status for /api/peers. The peer API itself is served by the
+     *  separate mutual-TLS peer server (ADR-028); this console stays loopback-only. */
     peering?: {
         selfDevice: string;
-        token: string;
-        /** Local-only directory (no peer aggregation) served to peers. */
-        localDirectory: () => Promise<SessionInfo[]>;
-        /** Live LAN peer list — served to the local CLI/webui at /api/peers. */
+        selfId: string;
+        /** Live LAN peer list (mDNS + static). */
         peers?: () => Peer[];
+        trust?: TrustStore;
+        /** Devices with a valid certificate that tried to talk to us but aren't paired. */
+        pending?: () => UntrustedContact[];
     };
 }
 export interface RunningServer {
