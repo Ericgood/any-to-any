@@ -453,3 +453,30 @@ Codex 侧不分层（exec resume 已全验证）。
 - **本机真 daemon 已切换**：控制台只监听 `127.0.0.1:7433`，peer 端口 `*:7434`，身份已生成（key 0600），`anyd doctor` 有对应检查项。
 
 **不防的（如实写明）**：偷走 `identity/key.pem` 就能冒充本机（与 Syncthing 相同，靠文件权限和磁盘加密）；mDNS 广播暴露设备名和 ID；消息在本机 mailbox 里是明文存储（与 Syncthing 相同）。
+
+## ADR-029 ZCode 门铃：会话正在跑回合时，信写进 ZCode 原生会话信箱；没领走就收回、照旧续接（2026-10-13，源码 + 本机实测）
+
+**背景**：ADR-027 给 Claude / Codex 装了门铃，调研（docs/research/research-doorbell-kimi-zcode-opencode.md）发现 ZCode 有未公开的原生会话信箱。现状：anytoany 对 ZCode 一律用 `--resume --prompt` 起一个 headless 回合。空闲会话这样没问题（同库，桌面版可见），但**会话正在跑一个回合时**，再起一个回合就等于两个写者同时写同一个会话。
+
+**ZCode 信箱（源码 `apps/zcode-cli/packages/core/src/hooks/session-mailbox.ts`，本机 CLI 0.16.5 实测）**：
+- 开关：环境变量 `ZCODE_MESSAGE_ENABLED=1`；位置：`ZCODE_MAILBOX_ROOT`，默认 `~/.zcode/mailbox/<sess_…>/{unread,read}/`。
+- 信件：`{version:1, messageId, fromSessionId, toSessionId, content, createdAt}`；按文件名排序，每次最多领取 20 封。
+- 领取时点：`UserPromptSubmit`、`PostToolUse`（**插进当前回合**）、`Stop`（注入后 `continue:true`，**带着信继续**）。空闲会话不会被叫醒。
+
+**判定（本机实测得出）**：
+1. **会话是否正在跑回合**：ZCode 沿用 opencode 的消息结构，助手消息在回合开始时就写入，结束时补上 `time.completed`。实测：跑 `sleep 20` 期间，最新一条助手消息没有 `completed`，结束后才有。规则：最新消息是「没有 completed 的助手消息」且不超过 30 分钟（防止崩溃回合残留），或是 60 秒内刚写入的用户消息 → 正在跑。
+2. **该会话的运行时有没有开信箱**：原计划读进程环境变量（`ps eww`），但**实测 ZCode 会把进程名改成 `zcode-cli`，覆盖了进程里存环境变量的那块内存**，读不到。改用 ZCode 自己留下的痕迹：带开关的运行时每个回合开头都会领信，并顺手 `mkdir -p` 出该会话的 `unread/` 目录。**目录存在 ⇔ 这个会话在开着开关的运行时里跑过回合。**
+
+**决策**：
+- **正在跑回合 且 信箱目录存在** → 把完整信封**原子地**写进 `unread/`（先写临时名再 `rename`，领取方永远读不到写了一半的文件）；信封切换为 `anyd reply` 回信模式（ADR-027 的 command 模式）。之后盯着：信被领走 → 已送达；**回合结束信还在**（开关已关、领取没发生）→ 用 `rename` 原子收回 → 照旧 `--resume` 投递。收回与领取二者必有一个成功，不会重复，也不会丢。
+- 其他情况（空闲、目录不存在）→ 照旧 `--resume`。
+- **不碰 ZCode 自己的 `session_input` 表**：那是运行时内部的输入队列，外部写入有并发和格式漂移的风险。
+- 开关由机主决定：`anyd doctor` 报告信箱状态和开启方法（`launchctl setenv ZCODE_MESSAGE_ENABLED 1` 后重启 ZCode；或单次 `open --env ZCODE_MESSAGE_ENABLED=1 -a ZCode`）。anytoany 不代改。
+
+**验证（全部实测，真 daemon，一次性测试会话）**：
+- **TDD**：`zcode-mailbox.test.ts` 15 个用例，覆盖信箱根目录解析、开关痕迹、原子写入（不留临时文件）、拒绝越界会话 id、收回与领取竞争时只有一方成功、「正在跑」的五种判定、四种路由（中途 + 开关 → 信箱且不起回合；回合结束未领 → 收回 + 续接恰好一次；空闲 → 续接；无开关 → 续接且不写文件）、doctor 文案。全量 439 绿。
+- **本机 CLI**：带开关时，信在下次开口时被领取并照做；对照组不带开关，信原封不动。
+- **真 daemon 端到端**：带开关的 `sleep 30` 回合进行中（`assistant:running`）发信 → daemon 路由到信箱（unread 1）→ 回合内被领取，模型在回答里说明「这期间收到门铃探测，已通过 `anyd reply` 回复」→ 回信入库。不带开关的回合 → 回合期间信留在 unread、回合输出里没有令牌 → 回合结束被收回 → `--resume` 送达，回信「DONE FALLBACK-ZC-77」入库一次。
+- 测试会话的信箱目录已清理，`anyd doctor` 如实显示「关」。
+
+**取舍**：空闲会话仍然要起一个 headless 回合，ZCode 没有「叫醒空闲会话」的外部入口，这一点和 Claude / Codex 的门铃不同。好处是 ZCode 的 headless 回合本来就与桌面版同库可见，空闲时直接续接已经够用；门铃专门解决「正在跑时别并发写」，并做到回合中途送达。未公开功能可能随版本变化：信封格式在写入前做校验，任何失败都退回 `--resume`。

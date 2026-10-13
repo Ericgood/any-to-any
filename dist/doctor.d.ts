@@ -16,5 +16,10 @@ export declare function crossSessionInboundCheck(settings: {
         defaultMode?: unknown;
     };
 } | null): Check;
+/**
+ * ZCode's native mailbox (ADR-029). A flagged runtime creates `<root>/<sess>/unread`
+ * on every turn, so those dirs are ZCode's own record that the doorbell works.
+ */
+export declare function zcodeMailboxCheck(root: string, zcodeInstalled: boolean): Check | null;
 export declare function runDoctor(): Promise<boolean>;
 export {};

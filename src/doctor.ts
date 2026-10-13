@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { realExec } from './adapters/exec.js';
@@ -42,6 +42,28 @@ export function crossSessionInboundCheck(
     name: 'claude doorbell (crossSessionInbound)',
     ok: true,
     note: 'unset — wakes sessions that prompt for permissions; a session in Bypass permissions holds the doorbell (mail then arrives on its next prompt). Set "crossSessionInbound": "accept" in ~/.claude/settings.json if you want those woken too',
+  };
+}
+
+/**
+ * ZCode's native mailbox (ADR-029). A flagged runtime creates `<root>/<sess>/unread`
+ * on every turn, so those dirs are ZCode's own record that the doorbell works.
+ */
+export function zcodeMailboxCheck(root: string, zcodeInstalled: boolean): Check | null {
+  if (!zcodeInstalled) return null;
+  let seen = 0;
+  try {
+    seen = readdirSync(root).filter((d) => existsSync(join(root, d, 'unread'))).length;
+  } catch {
+    seen = 0; // no mailbox root yet
+  }
+  return {
+    name: 'zcode doorbell (session mailbox)',
+    ok: true,
+    note:
+      seen > 0
+        ? `on — ${seen} session(s) have run with ZCode's mailbox; mail to a session mid-turn lands at its next tool call`
+        : 'off — a ZCode session that is mid-turn gets a second, headless turn instead (the old behaviour). To turn it on: launchctl setenv ZCODE_MESSAGE_ENABLED 1, then quit and reopen ZCode (lasts until reboot)',
   };
 }
 
@@ -142,6 +164,10 @@ export async function runDoctor(): Promise<boolean> {
   } catch (e) {
     checks.push({ name: 'device identity (mutual TLS)', ok: false, note: e instanceof Error ? e.message : String(e) });
   }
+
+  const { mailboxRoot } = await import('./adapters/zcode-mailbox.js');
+  const zcodeMailbox = zcodeMailboxCheck(mailboxRoot(), existsSync('/Applications/ZCode.app') || existsSync(join(home, '.zcode')));
+  if (zcodeMailbox) checks.push(zcodeMailbox);
 
   let hookRegistered = false;
   let claudeSettings: { crossSessionInbound?: unknown; permissions?: { defaultMode?: unknown } } | null = null;

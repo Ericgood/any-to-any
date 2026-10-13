@@ -4,6 +4,15 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### ZCode doorbell: mail to a session that is mid-turn rides ZCode's own mailbox (ADR-029)
+
+Until now every ZCode delivery started a headless `--resume` turn. That's fine for an idle session, since ZCode's CLI and desktop share one store, but if the session is **in the middle of a turn**, it puts a second writer on the same session. ZCode's open-source runtime turned out to have an unpublished **session mailbox**. With `ZCODE_MESSAGE_ENABLED=1`, a running turn picks letters up from `~/.zcode/mailbox/<session>/unread/` at its next tool call, and at turn end it reads them and keeps going.
+
+- **When anytoany uses it**: the session is mid-turn **and** ZCode has created that session's mailbox directory. "Mid-turn" means the latest assistant message has no `time.completed` yet, which held throughout a live `sleep 20` turn. ZCode creates the directory itself every time a flagged turn starts. Reading the process environment doesn't work, because ZCode renames its process and that overwrites it. Everything else still gets a headless `--resume` turn.
+- **Atomic in, atomic out**: letters are renamed into `unread/` (never half-written), and replies come back via `anyd reply`. If the turn ends and the letter is still unread, for example because the switch was turned off, anytoany `rename`s it back out and delivers it the old way. Exactly one side wins, so nothing is lost or delivered twice.
+- **Verified with the real daemon** on a throwaway session. While a flagged `sleep 30` turn was running, a message landed in the mailbox, was picked up inside that turn, and the agent answered through `anyd reply`. In an unflagged turn the letter stayed unread, was reclaimed when the turn ended, and was delivered once through `--resume`.
+- `anyd doctor` reports the ZCode doorbell's state and how to turn it on (`launchctl setenv ZCODE_MESSAGE_ENABLED 1`, then reopen ZCode). The desktop app runs the same runtime, so by its source it should inherit the switch. That still needs one real desktop turn to confirm.
+
 ### Cross-device, Syncthing-style: one key per device, mutual TLS, pairing by public ID, and your own devices at the top trust tier (ADR-028)
 
 The LAN layer used to be **plaintext HTTP with one shared token for the whole cluster**, and the token rode in every request header. Anyone on the same Wi-Fi who captured one packet could act as you. That got worse with the doorbell (ADR-027): a message to a session in Bypass + `accept` now runs without asking. One token also meant a lost laptop forced re-pairing every machine, and `anyd pair --invite` put the secret into shell history and chat logs.

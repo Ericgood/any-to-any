@@ -1,6 +1,6 @@
 # 调研：Kimi / ZCode / OpenCode 的「门铃」—— 怎么把消息送进正开着的会话
 
-> 创建：2026-10-13 · 最后更新：2026-10-13
+> 创建：2026-10-13 · 最后更新：2026-10-13（ZCode 门铃已落地，见 ADR-029）
 > 前情：ADR-027 已给 Claude（官方收件箱 socket）和 Codex（`codex queue` 进 Desktop 队列）装上门铃。本篇查剩下三家。
 > 方法：本机实测（Kimi 0.41.0、ZCode App 3.11.2 / CLI 0.16.5）+ ZCode 开源仓库源码 + 官方文档与 issue。OpenCode 本机未安装，仅文档调研。
 

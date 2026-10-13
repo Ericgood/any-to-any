@@ -7,7 +7,7 @@
 | File | What it covers |
 |---|---|
 | [analysis.md](analysis.md) | Research summary + the overall architecture: session directory, mailbox, delivery channels, LAN peering. |
-| [decisions.md](decisions.md) | **ADRs** (numbered, append-only) — every locked-in decision. Highlights: ADR-002 LAN-only (no Tailscale/cloud), ADR-005 per-vendor delivery channels, ADR-006 A2A-aligned message fields, ADR-011 mandatory-verdict envelope, ADR-014 three-party context, ADR-015 CI cost policy, **ADR-016 the trusted-teammate trust model**. ADR-025 refuses a send up front when the delivering CLI is older than the app that wrote the target session. ADR-027 delivers into running sessions through each app's own entry point (Codex queue / Claude inbox). **ADR-028 replaces the shared LAN token with Syncthing-style device identity and mutual TLS; your own devices are the top trust tier.** |
+| [decisions.md](decisions.md) | **ADRs** (numbered, append-only) — every locked-in decision. Highlights: ADR-002 LAN-only (no Tailscale/cloud), ADR-005 per-vendor delivery channels, ADR-006 A2A-aligned message fields, ADR-011 mandatory-verdict envelope, ADR-014 three-party context, ADR-015 CI cost policy, **ADR-016 the trusted-teammate trust model**. ADR-025 refuses a send up front when the delivering CLI is older than the app that wrote the target session. ADR-027 delivers into running sessions through each app's own entry point (Codex queue / Claude inbox). **ADR-028 replaces the shared LAN token with Syncthing-style device identity and mutual TLS; your own devices are the top trust tier.** ADR-029 adds the ZCode doorbell (its native session mailbox, for sessions mid-turn). |
 
 ## Phase specs
 

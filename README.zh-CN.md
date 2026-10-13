@@ -98,13 +98,14 @@ anyd status / stop         # daemon 状态 / 停止
 正开着的会话会**马上**收到信。anytoany 不从外面硬塞（以前就是这么失败的），而是走每个 App 自己的入口：
 
 - **Codex 桌面版**：消息放进 Codex 自己的队列（`codex queue`，CLI 0.149+），桌面版几秒内在开着的线程里执行，agent 用 `anyd reply` 回信。只读 / workspace-write 沙箱里的线程回不了信（Codex 沙箱拦着），所以参与协作的线程请给完全访问权限。
+- **ZCode**：会话**正在跑一个回合**时，anytoany 把消息放进 ZCode 自己的会话信箱，正在跑的回合会在下一次工具调用或回合结束时取走并接着干，不会再起一个回合和它抢同一个会话。空闲会话照旧起一个 headless 回合。信箱是 ZCode 未公开的功能，需要开关：执行 `launchctl setenv ZCODE_MESSAGE_ENABLED 1`，然后退出并重新打开 ZCode（重启电脑前有效）。如果回合结束时信还没被取走，anytoany 会把它收回、改用原来的方式投递，不丢也不重复。
 - **Claude Code**：anytoany 敲会话自带的收件箱（Claude Code 2.1.224+），会话醒来后由收件 hook 取信。如果你的会话默认是 **Bypass permissions**，Claude Code 会扣下这类敲门，此时门铃不开，信在你下次开口时到达。要打开门铃，在 `~/.claude/settings.json` 里加：
 
   ```json
   { "crossSessionInbound": "accept" }
   ```
 
-  `anyd doctor` 会显示门铃开没开。详见 [ADR-027](docs/decisions.md)。
+  `anyd doctor` 会显示各家门铃开没开。详见 [ADR-027](docs/decisions.md)（Claude、Codex）和 [ADR-029](docs/decisions.md)（ZCode）。
 
 ## 收消息（Codex / Kimi / Z Code）
 

@@ -143,13 +143,14 @@ anyd status / stop         # daemon state / stop
 A session that's open right now gets its mail **straight away**. anytoany doesn't resume it from the outside, because that's what used to fail. Instead it uses each app's own way in:
 
 - **Codex Desktop**: the message goes into Codex's own queue (`codex queue`, CLI 0.149+), and Desktop runs it in the open thread within seconds. The agent answers with `anyd reply`. A thread running in a read-only or workspace-write sandbox can't send that reply, because Codex's sandbox blocks it, so give threads that collaborate full access.
+- **ZCode**: if a session is **in the middle of a turn**, anytoany drops the message in ZCode's own session mailbox. The running turn picks it up at its next tool call, or when it ends, and carries on with it, so no second turn competes for the same session. An idle session gets a headless turn as before. The mailbox is an unpublished ZCode feature behind a switch; turn it on with `launchctl setenv ZCODE_MESSAGE_ENABLED 1`, then quit and reopen ZCode (this lasts until reboot). If a letter isn't picked up by the end of the turn, anytoany takes it back and delivers it the old way, so nothing is lost or sent twice.
 - **Claude Code**: anytoany rings the session's built-in inbox (Claude Code 2.1.224+), and the session wakes and picks the message up through its inbox hook. If your sessions default to **Bypass permissions**, Claude Code holds such knocks, so the doorbell stays off and mail arrives on your next prompt instead. To turn it on, add this to `~/.claude/settings.json`:
 
   ```json
   { "crossSessionInbound": "accept" }
   ```
 
-  `anyd doctor` shows whether the doorbell is on. Details: [ADR-027](docs/decisions.md).
+  `anyd doctor` shows whether each doorbell is on. Details: [ADR-027](docs/decisions.md) (Claude, Codex) and [ADR-029](docs/decisions.md) (ZCode).
 
 ## Seeing incoming messages (Codex / Kimi / Z Code)
 

@@ -1,12 +1,17 @@
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
 import { realExec } from './exec.js';
+import { isSessionBusy, mailboxEnabledFor, mailboxRoot, postToMailbox, reclaimMail } from './zcode-mailbox.js';
 const TITLE_MAX = 80;
 /** The desktop app bundles the full CLI engine — no separate install needed. */
 const APP_ENGINE = '/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs';
+/** Keep replyChannel() and deliver() on the same route for one delivery. */
+const ROUTE_MEMO_MS = 5_000;
+const DEFAULT_POLL_MS = 1_000;
 const ZCODE_MODES = new Set(['plan', 'edit', 'build', 'yolo']);
 /**
  * Delivery permission mode for headless zcode turns. Default 'build': safe,
@@ -47,9 +52,62 @@ export function createZcodeAdapter(options = {}) {
     const exec = options.exec ?? realExec;
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     const configFile = options.configFile ?? defaultConfigFile();
+    const root = options.mailboxRoot ?? mailboxRoot();
+    const isBusy = options.isBusy ?? ((id) => isSessionBusy(dbFile, id));
+    const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
+    const sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    const memo = new Map();
+    /**
+     * ADR-029: a session that is mid-turn in a runtime with ZCode's mailbox on gets
+     * the letter dropped in its mailbox — picked up at the next tool call or at turn
+     * end — instead of a second, concurrent headless turn on the same session.
+     */
+    const route = (session) => {
+        const hit = memo.get(session.sessionId);
+        if (hit && Date.now() - hit.at < ROUTE_MEMO_MS)
+            return hit.route;
+        const next = mailboxEnabledFor(root, session.sessionId) && isBusy(session.sessionId) ? 'mailbox' : 'resume';
+        memo.set(session.sessionId, { at: Date.now(), route: next });
+        return next;
+    };
+    /** Deliver via the mailbox; null = taken back undrained → use the classic path. */
+    async function deliverViaMailbox(session, envelope, budgetMs) {
+        let path;
+        try {
+            path = postToMailbox(root, {
+                messageId: randomUUID(),
+                fromSessionId: 'anytoany',
+                toSessionId: session.sessionId,
+                content: envelope,
+                createdAt: new Date().toISOString(),
+            });
+        }
+        catch {
+            return null;
+        }
+        const deadline = Date.now() + budgetMs;
+        for (;;) {
+            await sleep(pollMs);
+            if (!existsSync(path))
+                return { ok: true, output: '' }; // ZCode took it
+            // the turn ended (or ran out of budget) and nobody read it — e.g. the flag was
+            // turned off since; take it back atomically and deliver the classic way
+            if (!isBusy(session.sessionId) || Date.now() > deadline) {
+                return reclaimMail(path) ? null : { ok: true, output: '' };
+            }
+        }
+    }
     return {
         agent: 'zcode',
+        // the mailbox has no stdout to read a reply marker from — the agent runs `anyd reply`
+        replyChannel: (session) => (route(session) === 'mailbox' ? 'command' : 'marker'),
         async deliver(session, envelope) {
+            const turnTimeoutMs = options.deliverTimeoutMs ?? loadDeliverTimeoutMs(configFile) ?? timeoutMs;
+            if (route(session) === 'mailbox') {
+                const viaMailbox = await deliverViaMailbox(session, envelope, turnTimeoutMs);
+                if (viaMailbox)
+                    return viaMailbox;
+            }
             const engine = options.engineBin ?? resolveEngine();
             if (!engine) {
                 return {
@@ -71,7 +129,6 @@ export function createZcodeAdapter(options = {}) {
                 envelope,
             ];
             const viaNode = engine.endsWith('.cjs') || engine.endsWith('.js');
-            const turnTimeoutMs = options.deliverTimeoutMs ?? loadDeliverTimeoutMs(configFile) ?? timeoutMs;
             const { stdout, stderr, code } = await exec(viaNode ? 'node' : engine, viaNode ? [engine, ...args] : args, session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs });
             if (code !== 0) {
                 return { ok: false, error: `zcode resume exited ${code}: …${stderr.slice(-500)}` };

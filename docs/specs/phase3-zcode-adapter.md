@@ -1,6 +1,6 @@
 # Phase 3 规格 — ZCode adapter（第三家：智谱 Z.ai）
 
-> 创建：2026-08-06 · 最后更新：2026-08-06
+> 创建：2026-08-06 · 最后更新：2026-10-13
 > 状态：已实施（发现+投递管道实测通过；投递的模型层 auth 待用户侧动作——见母调研 §7.7，升级 App 跑 `zcode login` 或手配 API key）。母调研：[research-zcode.md](../research/research-zcode.md)
 > 动机：用户要用 MacBook 的 Codex ↔ Mac mini 的 ZCode 跨机通信（两台机都装了 ZCode 桌面客户端）。
 > 实测调整：argv 去掉 `--max-turns`（0.15.2 解析器不认，见母调研 §7.1）；db 路径固定不随 `ZCODE_DATA_BASE_DIR`（§7.3）。
@@ -33,3 +33,14 @@
 1. 单测：fixture SQLite 建 `session` 表——interactive 入选、subagent 三种形态全过滤、title/cwd/时间映射正确、db 缺失返回空；deliver 断言 argv（含 `--mode build` 非 yolo）、错误含 stderr 尾部。
 2. 真机（本机装有 ZCode 3.5.3）：`ZCODE_DATA_BASE_DIR` 隔离环境跑通「创建 → resume 续接」全流程（不碰用户真实会话库写入）；真实库只做只读扫描验证。
 3. 跨机：mini 更新 anytoany 后，MacBook 侧 `anyd list` 出现 `@<mini>/zcode/...` 条目；Codex→ZCode 首条真实消息由用户发起验证（不注入测试消息到真实会话）。
+
+## 门铃（2026-10-13，ADR-029）
+
+- **问题**：会话正在跑一个回合时，`--resume --prompt` 会再起一个回合，两个写者同时写同一个会话。
+- **入口**：ZCode 原生会话信箱（未公开，开关 `ZCODE_MESSAGE_ENABLED=1`）。信写到 `~/.zcode/mailbox/<sess>/unread/<时间戳>-<id>.json`，格式 `{version:1, messageId, fromSessionId, toSessionId, content, createdAt}`。ZCode 在 `UserPromptSubmit` / `PostToolUse` / `Stop` 三个时点领取。
+- **路由**（`src/adapters/zcode.ts` + `zcode-mailbox.ts`）：会话**正在跑回合**（最新助手消息没有 `time.completed`，30 分钟内）**且**信箱目录存在（ZCode 带开关跑过回合时自己建的）→ 原子写入信箱，信封切到 `anyd reply` 回信；每秒检查一次，被领走即送达。**回合结束仍没被领走 → `rename` 原子收回 → 照旧 `--resume`**。其余情况照旧 `--resume`。路由结论缓存 5 秒，回信方式和投递方式保持一致。
+- **为什么不读进程环境变量判断开关**：ZCode 会把进程名改成 `zcode-cli`，覆盖了 `ps eww` 读环境变量的那块内存（实测）。
+- **doctor**：`zcode doorbell (session mailbox)` 一项显示开 / 关，以及开启方法。
+- **实测**：真 daemon、测试会话、带开关跑 `sleep 30` 的回合中发信 → 信进 `unread` → 回合内被领取，模型照做并 `anyd reply` 回信 → 送达一次。不带开关的回合 → 信留在 `unread` → 回合结束后被收回 → `--resume` 送达，回信一次。
+- **待验证**：桌面版。它用同一个运行时（以子进程 `glm/zcode.cjs app-server --stdio` 启动，只额外设了 `ELECTRON_RUN_AS_NODE`），按源码判断会继承开关，需要机主开启开关后在桌面版里跑一个回合，再用 `anyd doctor` 确认。
+
