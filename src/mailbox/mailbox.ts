@@ -26,6 +26,8 @@ export interface Message {
   status: MessageStatus;
   attempts: number;
   lastError?: string;
+  /** Delivered inside the target's own live session (its own turn), not a separate headless one. */
+  deliveredInSession?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -76,7 +78,7 @@ export interface Mailbox {
    *  dispatcher pass over messages whose local target is being live-monitored
    *  (they stay pending for `anyd monitor` to pull instead of a headless resume). */
   claimNextPending(opts?: { skip?: (toSession: string, toDevice: string | null) => boolean }): Message | null;
-  markDelivered(id: string): Message;
+  markDelivered(id: string, opts?: { inSession?: boolean }): Message;
   markFailed(id: string, error: string, opts?: { terminal?: boolean }): Message;
   retry(id: string): Message;
   /** Requeue messages stranded in 'delivering' by a crashed daemon (at-least-once). */
@@ -105,6 +107,7 @@ interface MessageRow {
   status: MessageStatus;
   attempts: number;
   last_error: string | null;
+  delivered_in_session?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -129,6 +132,7 @@ function rowToMessage(row: MessageRow): Message {
     updatedAt: row.updated_at,
   };
   if (row.last_error !== null) msg.lastError = row.last_error;
+  if (row.delivered_in_session === 1) msg.deliveredInSession = true;
   return msg;
 }
 
@@ -371,13 +375,17 @@ export function createMailbox(db: Db, opts: { now?: () => number } = {}): Mailbo
       return claim();
     },
 
-    markDelivered(id: string): Message {
+    markDelivered(id: string, opts?: { inSession?: boolean }): Message {
       const current = getMessage(id);
       if (!current) throw new Error(`message not found: ${id}`);
       if (current.status !== 'delivering') {
         throw new Error(`illegal transition: ${current.status} -> delivered (must claim first)`);
       }
-      db.prepare(`UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ?`).run(now(), id);
+      db.prepare(`UPDATE messages SET status = 'delivered', delivered_in_session = ?, updated_at = ? WHERE id = ?`).run(
+        opts?.inSession ? 1 : null,
+        now(),
+        id,
+      );
       const updated = getMessage(id);
       if (!updated) throw new Error('update failed');
       return updated;

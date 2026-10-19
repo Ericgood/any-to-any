@@ -233,3 +233,18 @@ describe('three-party context — user piggyback on an agent pair thread', () =>
     ).toThrow(/not found/);
   });
 });
+
+describe('delivered-in-session flag (2026-10-20)', () => {
+  it('persists and round-trips; defaults to absent', async () => {
+    const { createDb } = await import('../src/mailbox/db.js');
+    const { createMailbox } = await import('../src/mailbox/mailbox.js');
+    const mb = createMailbox(createDb(':memory:'));
+    const a = mb.send({ from: { agent: 'claude', sessionId: 'a' }, to: { agent: 'codex', sessionId: 'b' }, text: 'x' });
+    mb.claimNextPending();
+    expect(mb.markDelivered(a.id, { inSession: true }).deliveredInSession).toBe(true);
+    expect(mb.getMessage(a.id)?.deliveredInSession).toBe(true);
+    const b = mb.send({ from: { agent: 'claude', sessionId: 'a' }, to: { agent: 'codex', sessionId: 'b' }, text: 'y' });
+    mb.claimNextPending();
+    expect(mb.markDelivered(b.id).deliveredInSession).toBeUndefined();
+  });
+});

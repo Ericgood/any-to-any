@@ -156,7 +156,7 @@ describe('ZCode delivery picks the doorbell only when the session is mid-turn wi
     const { adapter, calls, root } = harness({ busy: () => true, enabled: true, onPoll: drain });
     expect(adapter.replyChannel?.(session)).toBe('command');
     const r = await adapter.deliver(session, 'ENVELOPE');
-    expect(r).toEqual({ ok: true, output: '' });
+    expect(r).toEqual({ ok: true, output: '', inSession: true });
     expect(calls).toEqual([]);
     const [read] = readdirSync(join(root, SID, 'read'));
     expect(JSON.parse(readFileSync(join(root, SID, 'read', read!), 'utf8')).content).toBe('ENVELOPE');

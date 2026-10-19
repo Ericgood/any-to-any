@@ -123,7 +123,7 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
     if (code !== 0) {
       return { ok: false, error: `codex queue exited ${code}: …${(stderr || stdout).slice(-500)}` };
     }
-    return { ok: true, output: '' };
+    return { ok: true, output: '', inSession: true };
   }
 
   return {

@@ -89,11 +89,11 @@ export function createZcodeAdapter(options = {}) {
         for (;;) {
             await sleep(pollMs);
             if (!existsSync(path))
-                return { ok: true, output: '' }; // ZCode took it
+                return { ok: true, output: '', inSession: true }; // ZCode took it
             // the turn ended (or ran out of budget) and nobody read it — e.g. the flag was
             // turned off since; take it back atomically and deliver the classic way
             if (!isBusy(session.sessionId) || Date.now() > deadline) {
-                return reclaimMail(path) ? null : { ok: true, output: '' };
+                return reclaimMail(path) ? null : { ok: true, output: '', inSession: true };
             }
         }
     }

@@ -21,6 +21,8 @@ export interface Message {
     status: MessageStatus;
     attempts: number;
     lastError?: string;
+    /** Delivered inside the target's own live session (its own turn), not a separate headless one. */
+    deliveredInSession?: boolean;
     createdAt: number;
     updatedAt: number;
 }
@@ -69,7 +71,9 @@ export interface Mailbox {
     claimNextPending(opts?: {
         skip?: (toSession: string, toDevice: string | null) => boolean;
     }): Message | null;
-    markDelivered(id: string): Message;
+    markDelivered(id: string, opts?: {
+        inSession?: boolean;
+    }): Message;
     markFailed(id: string, error: string, opts?: {
         terminal?: boolean;
     }): Message;

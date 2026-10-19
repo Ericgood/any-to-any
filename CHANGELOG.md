@@ -4,6 +4,14 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Fix: Codex answered "already handled in the background" and did nothing (ADR-027 incident, 2026-10-20)
+
+Messages queued into Codex Desktop (ADR-027) were marked delivered as soon as they were queued. When Desktop ran that turn, the Codex inbox hook's FYI digest listed the very same message under "ALREADY processed automatically in headless turns; do NOT act". The model obeyed and replied "already processed, not repeating". **7 of the 9 messages queued into Codex since 10-13 were swallowed this way**, including a batch of disk-cleanup requests.
+
+- Deliveries handed to the target's **own** runtime (Codex queue, ZCode mailbox) are now recorded as in-session (a new `delivered_in_session` column), and the digest never lists them: that turn *is* the session's own.
+- As a backstop, the hook reads the current prompt and never lists the message id it carries.
+- Verified live on a throwaway Desktop thread: the queued message was flagged in-session, and Codex actually ran the command.
+
 ### ZCode doorbell: mail to a session that is mid-turn rides ZCode's own mailbox (ADR-029)
 
 Until now every ZCode delivery started a headless `--resume` turn. That's fine for an idle session, since ZCode's CLI and desktop share one store, but if the session is **in the middle of a turn**, it puts a second writer on the same session. ZCode's open-source runtime turned out to have an unpublished **session mailbox**. With `ZCODE_MESSAGE_ENABLED=1`, a running turn picks letters up from `~/.zcode/mailbox/<session>/unread/` at its next tool call, and at turn end it reads them and keeps going.

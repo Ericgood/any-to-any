@@ -176,3 +176,44 @@ describe('collectInbox (shared by hook and `anyd pull`)', () => {
     expect(text).not.toMatch(/Nothing was lost/); // not the soothing generic banner
   });
 });
+
+// 2026-10-20 incident: 7 of 9 messages queued into Codex Desktop since ADR-027 were
+// answered with "already processed in the background, not repeating" and never done.
+// The queued turn fired the prompt hook, whose FYI digest listed THAT VERY MESSAGE as
+// "ALREADY processed automatically in headless turns; do NOT act" — because queueing
+// marks it delivered. A message delivered INTO the session's own runtime is the turn
+// itself, never a background leftover.
+describe('digest never tells a session to ignore the message it is running (2026-10-20)', () => {
+  let mailbox: Mailbox;
+  let nowMs = 1_800_000_000_000;
+  beforeEach(() => {
+    mailbox = createMailbox(createDb(':memory:'), { now: () => nowMs });
+    nowMs += 10_000;
+  });
+
+  const deliver = (text: string, inSession: boolean) => {
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text });
+    mailbox.claimNextPending();
+    return mailbox.markDelivered(m.id, inSession ? { inSession: true } : undefined);
+  };
+
+  it('a message delivered inside the session (codex queue / zcode mailbox) is NOT in the digest', () => {
+    const queued = deliver('[设备空间清理] 请核对并收掉 musely 用不上的工作副本', true);
+    expect(queued.deliveredInSession).toBe(true);
+    const text = collectInbox(mailbox, CODEX_B.sessionId, { home, now: () => nowMs }) ?? '';
+    expect(text).not.toContain('设备空间清理');
+    expect(text).not.toMatch(/ALREADY processed/);
+  });
+
+  it('a message genuinely handled in a separate headless turn still shows as FYI', () => {
+    deliver('handled by exec resume', false);
+    expect(collectInbox(mailbox, CODEX_B.sessionId, { home, now: () => nowMs }) ?? '').toContain('handled by exec resume');
+  });
+
+  it('belt and braces: a message whose id is in the current prompt is never listed as done', () => {
+    const m = deliver('the envelope being run right now', false);
+    const prompt = `[anytoany] Message from @claude:x (message id: ${m.id}).\n--- MESSAGE ---\nthe envelope being run right now`;
+    const out = processPromptHook(mailbox, { session_id: CODEX_B.sessionId, prompt }, { home, now: () => nowMs });
+    expect(out.hookSpecificOutput?.additionalContext ?? '').not.toContain('the envelope being run right now');
+  });
+});

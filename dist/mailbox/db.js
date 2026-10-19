@@ -53,6 +53,9 @@ const MIGRATIONS = [
     `ALTER TABLE conversations ADD COLUMN b_device TEXT`,
     `ALTER TABLE messages ADD COLUMN from_device TEXT`,
     `ALTER TABLE messages ADD COLUMN to_device TEXT`,
+    // 1 = delivered INTO the target's own live session (codex queue, zcode mailbox):
+    // that turn is the session's own, so the hook digest must never call it background work
+    `ALTER TABLE messages ADD COLUMN delivered_in_session INTEGER`,
 ];
 /** Open (creating if needed) the mailbox database. Pass ':memory:' in tests. */
 export function createDb(path = defaultDbPath()) {

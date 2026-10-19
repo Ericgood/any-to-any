@@ -123,8 +123,8 @@ export async function dispatchOnce(opts) {
     }
     if (!result.ok)
         return fail(result.error ?? 'delivery failed', result.retry === false);
-    const delivered = opts.mailbox.markDelivered(claimed.id);
-    emit({ kind: 'delivered', message: delivered });
+    const delivered = opts.mailbox.markDelivered(claimed.id, result.inSession ? { inSession: true } : undefined);
+    emit({ kind: 'delivered', message: delivered, ...(result.inSession ? { detail: 'in-session' } : {}) });
     const replyText = extractReply(result.output ?? '');
     if (replyText) {
         // Anti-pingpong: a BLOCKED status answered with another BLOCKED status is

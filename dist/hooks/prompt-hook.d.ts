@@ -2,6 +2,8 @@ import type { Mailbox } from '../mailbox/mailbox.js';
 export interface PromptHookInput {
     session_id?: string;
     thread_id?: string;
+    /** The prompt this hook fires for (Claude / Codex include it). */
+    prompt?: string;
 }
 export interface PromptHookOutput {
     hookSpecificOutput?: {
@@ -19,6 +21,7 @@ export interface PromptHookOutput {
 export declare function collectInbox(mailbox: Mailbox, sessionId: string, opts?: {
     home?: string;
     now?: () => number;
+    excludeIds?: ReadonlySet<string>;
 }): string | null;
 /**
  * Full recent cross-agent exchange for a session — read-only, ignores the cursor,

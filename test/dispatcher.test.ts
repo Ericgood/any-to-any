@@ -554,3 +554,13 @@ describe('dispatcher — reply channel follows the adapter (ADR-027)', () => {
     expect(mailbox.getMessage(m.id)?.status).toBe('delivered');
   });
 });
+
+describe('dispatcher records in-session delivery (2026-10-20)', () => {
+  it('an adapter that ran the message inside the live session marks it so', async () => {
+    const mailbox = createMailbox(createDb(':memory:'));
+    const adapter = fakeAdapter('codex', () => ({ ok: true, output: '', inSession: true }));
+    const m = mailbox.send({ from: CLAUDE_A, to: CODEX_B, text: 'queued into desktop' });
+    await dispatchOnce({ mailbox, adapters: new Map([[adapter.agent, adapter]]), directory: async () => DIRECTORY });
+    expect(mailbox.getMessage(m.id)?.deliveredInSession).toBe(true);
+  });
+});

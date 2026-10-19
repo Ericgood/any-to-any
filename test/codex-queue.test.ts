@@ -34,7 +34,7 @@ describe('codex delivery into a thread Codex Desktop holds open (ADR-027)', () =
     const { exec, calls } = recordingExec({ stdout: `Queued message 01a1358e-552a for thread ${THREAD}.\n` });
     const adapter = createCodexAdapter({ exec, configFile: NO_CONFIG, isThreadLive: live });
     const r = await adapter.deliver(session(), 'ENVELOPE');
-    expect(r).toEqual({ ok: true, output: '' });
+    expect(r).toEqual({ ok: true, output: '', inSession: true });
     expect(calls).toEqual([['codex', 'queue', '--thread', THREAD, '--message', 'ENVELOPE']]);
   });
 

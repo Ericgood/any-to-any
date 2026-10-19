@@ -99,7 +99,11 @@ export function collectInbox(mailbox, sessionId, opts = {}) {
     const seen = (id) => pending.some((p) => p.id === id) || recovered.some((r) => r.id === id);
     const activity = mailbox
         .recentActivity(sessionId, cursor)
-        .filter((m) => m.status === 'delivered' && !seen(m.id));
+        // never list as "already processed" a message that is being run IN this session:
+        // delivered into its own runtime (codex queue / zcode mailbox — the turn itself),
+        // or the envelope this very prompt carries. The 2026-10-20 incident: such a digest
+        // made Codex answer "already handled in the background" and do nothing.
+        .filter((m) => m.status === 'delivered' && !seen(m.id) && !m.deliveredInSession && !opts.excludeIds?.has(m.id));
     if (activity.length > 0)
         blocks.push(renderDigest(sessionId, activity));
     writeCursor(sessionId, home, now());
@@ -142,7 +146,8 @@ export function processPromptHook(mailbox, input, opts = {}) {
     const sessionId = input.session_id ?? input.thread_id;
     if (!sessionId)
         return {};
-    const text = collectInbox(mailbox, sessionId, opts);
+    const inPrompt = new Set([...(input.prompt ?? '').matchAll(/message id: ([0-9a-f-]{36})/g)].map((m) => m[1]));
+    const text = collectInbox(mailbox, sessionId, { ...opts, excludeIds: inPrompt });
     return text
         ? { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: text } }
         : {};

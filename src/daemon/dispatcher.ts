@@ -184,8 +184,8 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
   }
   if (!result.ok) return fail(result.error ?? 'delivery failed', result.retry === false);
 
-  const delivered = opts.mailbox.markDelivered(claimed.id);
-  emit({ kind: 'delivered', message: delivered });
+  const delivered = opts.mailbox.markDelivered(claimed.id, result.inSession ? { inSession: true } : undefined);
+  emit({ kind: 'delivered', message: delivered, ...(result.inSession ? { detail: 'in-session' } : {}) });
 
   const replyText = extractReply(result.output ?? '');
   if (replyText) {

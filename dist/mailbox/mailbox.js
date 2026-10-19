@@ -25,6 +25,8 @@ function rowToMessage(row) {
     };
     if (row.last_error !== null)
         msg.lastError = row.last_error;
+    if (row.delivered_in_session === 1)
+        msg.deliveredInSession = true;
     return msg;
 }
 const pairKey = (a, b) => [a, b].map((r) => `${r.device ?? ''}/${r.agent}:${r.sessionId}`).sort().join('|');
@@ -218,14 +220,14 @@ export function createMailbox(db, opts = {}) {
             });
             return claim();
         },
-        markDelivered(id) {
+        markDelivered(id, opts) {
             const current = getMessage(id);
             if (!current)
                 throw new Error(`message not found: ${id}`);
             if (current.status !== 'delivering') {
                 throw new Error(`illegal transition: ${current.status} -> delivered (must claim first)`);
             }
-            db.prepare(`UPDATE messages SET status = 'delivered', updated_at = ? WHERE id = ?`).run(now(), id);
+            db.prepare(`UPDATE messages SET status = 'delivered', delivered_in_session = ?, updated_at = ? WHERE id = ?`).run(opts?.inSession ? 1 : null, now(), id);
             const updated = getMessage(id);
             if (!updated)
                 throw new Error('update failed');
