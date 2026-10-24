@@ -740,16 +740,24 @@ program
       const s = await resolveOrExit(opts.session);
       targets = [{ id: s.sessionId, label: `@${s.agent}:${s.title}` }];
     } else {
+      // who am I? the agent's own session id first — a shared folder is not an identity
       const cwd = opts.cwd ?? process.cwd();
       const { sessions } = await listAllSessions(directoryAdapters());
-      const matches = sessions.filter((s) => s.cwd === cwd);
-      if (matches.length === 0) {
-        if (!opts.quiet) {
-          console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
+      const { resolveSelfSessions, describeSelfFailure } = await import('./directory/self.js');
+      const self = resolveSelfSessions(sessions, cwd);
+      if (self.ok) {
+        targets = self.targets;
+      } else if (opts.history && self.reason === 'ambiguous') {
+        // read-only view: showing every session here takes nothing from anyone
+        targets = self.candidates.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
+      } else {
+        if (self.reason === 'ambiguous') {
+          console.error(describeSelfFailure(self, cwd));
+          process.exit(1);
         }
+        if (!opts.quiet) console.log(describeSelfFailure(self, cwd));
         return;
       }
-      targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
     }
     // --history: read-only view of the recent exchange, so you can SEE what
     // happened even after it was delivered headlessly and the cursor moved on.
@@ -798,14 +806,16 @@ program
       const s = await resolveOrExit(opts.session);
       targets = [{ id: s.sessionId, label: `@${s.agent}:${s.title}` }];
     } else {
+      // same identity rule as pull: never monitor (and take) another session's mail
       const cwd = opts.cwd ?? process.cwd();
       const { sessions } = await listAllSessions(directoryAdapters());
-      const matches = sessions.filter((s) => s.cwd === cwd);
-      if (matches.length === 0) {
-        console.log(`no session found for ${cwd} — open a session here, or pass --session "@<agent>:<fragment>"`);
-        return;
+      const { resolveSelfSessions, describeSelfFailure } = await import('./directory/self.js');
+      const self = resolveSelfSessions(sessions, cwd);
+      if (!self.ok) {
+        console.error(describeSelfFailure(self, cwd));
+        process.exit(self.reason === 'ambiguous' ? 1 : 0);
       }
-      targets = matches.map((s) => ({ id: s.sessionId, label: `@${s.agent}:${s.title}` }));
+      targets = self.targets;
     }
     const timeoutMs = (Number.parseInt(opts.timeout ?? '1800', 10) || 1800) * 1000;
     const pollMs = Number.parseInt(opts.poll ?? '1500', 10) || 1500;

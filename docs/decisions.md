@@ -486,3 +486,10 @@ Codex 侧不分层（exec resume 已全验证）。
 - 测试会话的信箱目录已清理，`anyd doctor` 如实显示「关」。
 
 **取舍**：空闲会话仍然要起一个 headless 回合，ZCode 没有「叫醒空闲会话」的外部入口，这一点和 Claude / Codex 的门铃不同。好处是 ZCode 的 headless 回合本来就与桌面版同库可见，空闲时直接续接已经够用；门铃专门解决「正在跑时别并发写」，并做到回合中途送达。未公开功能可能随版本变化：信封格式在写入前做校验，任何失败都退回 `--resume`。
+
+## ADR-030 取信先认「我是谁」：同一个文件夹不等于同一个会话（2026-10-24，真实事故）
+
+**事故**：Codex 对话「闪电说 iOS 开发」把 iPad 问题交接给同一文件夹（`~/shandianshuo-iOS`）下的 Claude 会话。发信后，它按 skill 的建议「给同伴发完消息顺手 `anyd pull --quiet`」取了一次信。`pull` 没带 `--session` 时，会把「工作目录等于当前文件夹的**所有**会话」都当成自己，于是 0.4 秒内**把刚寄给 Claude 的交接信取走、标成已送达，打印进了 Codex 自己的输出**。门铃每 2 秒巡检一次，还来不及去敲 Claude 的门。Codex 看到「delivered」，以为对方已收到；Claude 直到 7 分钟后用户发言时，才在活动摘要里看到这封信，而且被标着「已处理，勿执行」。用户的感受是「Codex 说发了，Claude 没收到」。
+- **影响**：日志里可查到 3 条信被寄信人自己取走（iOS 2 条、鸿蒙 1 条，全是 Codex → 同文件夹的 Claude）。那个文件夹下有 8 个会话，风险面很大。
+- **决策**：`anyd pull` / `anyd monitor` 不带 `--session` 时，先认身份：`CLAUDE_CODE_SESSION_ID`（Claude Code 注入）、`CODEX_THREAD_ID`（Codex 注入）→ 只处理这一个会话。认不出身份时，文件夹下恰好一个会话才用它；有多个会话就**拒绝取信**并列出候选，要求显式 `--session`（`--history` 只读查看不受影响）。宁可报错，也不能猜。skill 同步：只用自己的 `--session`，绝不用同伴的。
+- **验证**：纯函数 `resolveSelfSessions` 6 个用例；真 CLI + 真实会话目录 + 隔离信箱，在 `~/shandianshuo-iOS`（8 个会话）实测：以 Codex 身份取信，寄给 Claude 的信保持 pending；身份不明时拒绝并 exit 1，信仍 pending；以 Claude 身份取信，正常取到。全量 450 绿。

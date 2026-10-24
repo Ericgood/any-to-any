@@ -4,6 +4,14 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Fix: an agent pulling its own mail could take a peer's mail in the same folder (ADR-030)
+
+A Codex thread handed an iPad issue to the Claude session in the same project folder, then ran `anyd pull --quiet` as the skill suggests. Without `--session`, `pull` treated **every session in this folder** as "me", so it took the Claude session's brand-new mail within 0.4s, marked it delivered, and printed it into Codex's own output. Codex saw "delivered"; Claude saw nothing until the user typed again. The logs show three messages lost this way.
+
+- `anyd pull` and `anyd monitor` now identify the caller first: `CLAUDE_CODE_SESSION_ID` (Claude Code) or `CODEX_THREAD_ID` (Codex) selects exactly that session. With no identity, a folder counts only if exactly one session lives there. If several do, the command **refuses** and lists them, rather than guessing.
+- The skills now say: pass your own `--session` when asked, and never a peer's.
+- Verified with the real CLI in a folder with 8 sessions: pulling as Codex leaves Claude's mail pending, an unidentified caller is refused, and pulling as Claude gets it.
+
 ### Fix: Codex answered "already handled in the background" and did nothing (ADR-027 incident, 2026-10-20)
 
 Messages queued into Codex Desktop (ADR-027) were marked delivered as soon as they were queued. When Desktop ran that turn, the Codex inbox hook's FYI digest listed the very same message under "ALREADY processed automatically in headless turns; do NOT act". The model obeyed and replied "already processed, not repeating". **7 of the 9 messages queued into Codex since 10-13 were swallowed this way**, including a batch of disk-cleanup requests.

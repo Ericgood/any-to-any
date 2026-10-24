@@ -32,4 +32,4 @@ Run `anyd pull --quiet` **proactively** (silent when nothing new) at the start o
 ## Notes
 
 - Works with the `anyd` daemon down — it reads the mailbox on disk. That's the point: it's a disk pull, minus the restart.
-- Auto-detects your session by the current directory. If it can't (you changed dirs, or several sessions share the dir), pass it: `anyd pull --history --session "@<agent>:<fragment>"` (find yourself in `anyd list`).
+- Knows which session is yours from the id Claude Code / Codex export to your shell. Other agents fall back to the current directory; if several sessions share it, `anyd pull` **refuses** (taking another session's mail would hide it from that session) and lists them. Then pass yours explicitly: `anyd pull --session "@<agent>:<fragment>"` (find yourself in `anyd list`).
