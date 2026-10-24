@@ -41,7 +41,7 @@ describe('session scanners record who last wrote the session (ADR-025)', () => {
       { type: 'custom-title', customTitle: 'title' },
     ];
     writeFileSync(join(root, '-w-proj', `${CLAUDE_ID}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n'));
-    const [s] = await createClaudeAdapter({ projectsDir: root }).listSessions();
+    const [s] = await createClaudeAdapter({ dirExists: () => true, projectsDir: root }).listSessions();
     expect(s?.writerVersion).toBe('2.1.295');
   });
 
@@ -109,14 +109,14 @@ describe('codex: long-lived threads inherit the version their originator runs to
 describe('claude delivery refuses an older CLI (ADR-025)', () => {
   it('preflight reports the mismatch with the upgrade command', async () => {
     const { exec } = versionedExec('2.1.287 (Claude Code)');
-    const err = await createClaudeAdapter({ exec }).preflight!(session({ writerVersion: '2.1.295' }));
+    const err = await createClaudeAdapter({ dirExists: () => true, exec }).preflight!(session({ writerVersion: '2.1.295' }));
     expect(err?.startsWith(VERSION_MISMATCH)).toBe(true);
     expect(err).toContain('npm i -g @anthropic-ai/claude-code@latest');
   });
 
   it('deliver fails terminally WITHOUT spawning the resume turn', async () => {
     const { exec, calls } = versionedExec('2.1.287 (Claude Code)');
-    const r = await createClaudeAdapter({ exec }).deliver(session({ writerVersion: '2.1.295' }), 'ENV');
+    const r = await createClaudeAdapter({ dirExists: () => true, exec }).deliver(session({ writerVersion: '2.1.295' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.retry).toBe(false);
     expect(r.error?.startsWith(VERSION_MISMATCH)).toBe(true);
@@ -125,7 +125,7 @@ describe('claude delivery refuses an older CLI (ADR-025)', () => {
 
   it('a newer CLI delivers normally', async () => {
     const { exec, calls } = versionedExec('2.1.296 (Claude Code)');
-    const r = await createClaudeAdapter({ exec }).deliver(session({ writerVersion: '2.1.295' }), 'ENV');
+    const r = await createClaudeAdapter({ dirExists: () => true, exec }).deliver(session({ writerVersion: '2.1.295' }), 'ENV');
     expect(r).toEqual({ ok: true, output: 'REPLY' });
     expect(calls[1]).toEqual(['claude', '-p', '--resume', CLAUDE_ID, 'ENV']);
   });

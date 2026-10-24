@@ -36,7 +36,7 @@ describe('kimi session discovery', () => {
       { id: 'session_aaaa', workDir: '/Users/alex/projects/api-service', mtime: 5000 },
       { id: 'session_bbbb', workDir: '/Users/alex/projects/web-app', mtime: 9000 },
     ]);
-    const a = createKimiAdapter({ indexFile: idx, kimiBin: '/x/kimi' });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: idx, kimiBin: '/x/kimi' });
     const s = await a.listSessions();
     expect(s.map((x) => x.sessionId)).toEqual(['session_bbbb', 'session_aaaa']); // newest first
     const g = s.find((x) => x.sessionId === 'session_aaaa');
@@ -44,14 +44,14 @@ describe('kimi session discovery', () => {
   });
 
   it('returns [] when the index does not exist (machine without kimi)', async () => {
-    const a = createKimiAdapter({ indexFile: join(dir, 'nope.jsonl'), kimiBin: '/x/kimi' });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: join(dir, 'nope.jsonl'), kimiBin: '/x/kimi' });
     expect(await a.listSessions()).toEqual([]);
   });
 
   it('skips malformed index lines without failing the whole scan', async () => {
     const idx = join(dir, 'idx-bad.jsonl');
     writeFileSync(idx, `not json\n${JSON.stringify({ sessionId: 'session_ok', sessionDir: join(dir, 'x'), workDir: '/w/ok' })}\n`);
-    const a = createKimiAdapter({ indexFile: idx, kimiBin: '/x/kimi' });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: idx, kimiBin: '/x/kimi' });
     const s = await a.listSessions();
     expect(s).toHaveLength(1);
     expect(s[0]?.sessionId).toBe('session_ok');
@@ -70,7 +70,7 @@ describe('kimi delivery', () => {
 
   it('resumes by id with stream-json and NEVER passes -y/--auto (both rejected with -p)', async () => {
     const exec = vi.fn<ExecFn>(async () => ({ stdout: streamOut, stderr: '', code: 0 }));
-    const a = createKimiAdapter({ indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
     const r = await a.deliver(SESS, 'ENVELOPE');
     expect(exec).toHaveBeenCalledWith(
       '/usr/local/bin/kimi',
@@ -88,14 +88,14 @@ describe('kimi delivery', () => {
 
   it('omits cwd when unknown', async () => {
     const exec = vi.fn<ExecFn>(async () => ({ stdout: streamOut, stderr: '', code: 0 }));
-    const a = createKimiAdapter({ indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
     await a.deliver({ ...SESS, cwd: '' }, 'E');
     expect(exec).toHaveBeenCalledWith('/usr/local/bin/kimi', expect.any(Array), { timeoutMs: 300_000 });
   });
 
   it('surfaces the tail of stderr on failure', async () => {
     const exec: ExecFn = async () => ({ stdout: '', stderr: `${'x'.repeat(600)}REAL KIMI ERROR`, code: 1 });
-    const a = createKimiAdapter({ indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
+    const a = createKimiAdapter({ dirExists: () => true, indexFile: join(dir, 'unused'), kimiBin: '/usr/local/bin/kimi', exec });
     const r = await a.deliver(SESS, 'E');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('REAL KIMI ERROR');

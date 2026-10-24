@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { liveCodexThreads } from '../daemon/session-liveness.js';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 import { checkCliVersion, createVersionProbe, inferWriterVersion, type WriterSample } from './version-guard.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
@@ -31,6 +31,8 @@ const FIRST_LINE_MAX = 1024 * 1024; // session_meta can carry long base_instruct
 const TITLE_MAX = 80;
 
 interface CodexAdapterOptions {
+  /** Does a directory exist? Injectable for tests (default: the real filesystem). */
+  dirExists?: (dir: string) => boolean;
   sessionsDir?: string;
   indexFile?: string;
   exec?: ExecFn;
@@ -98,6 +100,9 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
   const sessionsDir = options.sessionsDir ?? join(homedir(), '.codex', 'sessions');
   const indexFile = options.indexFile ?? join(homedir(), '.codex', 'session_index.jsonl');
   const exec = options.exec ?? realExec;
+  const dirExists = options.dirExists ?? ((d: string) => existingDir(d) !== undefined);
+  /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+  const liveCwd = (d: string | undefined): string | undefined => (d && dirExists(d) ? d : undefined);
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
   const configFile = options.configFile ?? defaultConfigFile();
   const isThreadLive = options.isThreadLive ?? ((id: string) => liveCodexThreads().has(id));
@@ -118,7 +123,8 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
     const { stdout, stderr, code } = await exec(
       'codex',
       ['queue', '--thread', session.sessionId, '--message', envelope],
-      session.cwd ? { cwd: session.cwd, timeoutMs: QUEUE_TIMEOUT_MS } : { timeoutMs: QUEUE_TIMEOUT_MS },
+      // cwd-independent: a moved/deleted project folder must not block delivery
+      liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs: QUEUE_TIMEOUT_MS } : { timeoutMs: QUEUE_TIMEOUT_MS },
     );
     if (code !== 0) {
       return { ok: false, error: `codex queue exited ${code}: …${(stderr || stdout).slice(-500)}` };
@@ -152,7 +158,7 @@ export function createCodexAdapter(options: CodexAdapterOptions = {}): DeliveryA
       const { stdout, stderr, code } = await exec(
         'codex',
         ['exec', ...sandboxArgs, 'resume', session.sessionId, '--skip-git-repo-check', envelope],
-        session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
+        liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
       );
       if (code === 124) {
         // timeout: the turn DID run on the target and was killed mid-work — retrying

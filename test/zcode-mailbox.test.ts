@@ -133,7 +133,7 @@ describe('ZCode delivery picks the doorbell only when the session is mid-turn wi
       calls.push([cmd, ...args]);
       return { stdout: 'RESUMED <<<ANYTOANY_REPLY>>> DONE', stderr: '', code: 0 };
     };
-    const adapter = createZcodeAdapter({
+    const adapter = createZcodeAdapter({ dirExists: () => true,
       exec,
       engineBin: '/fake/zcode',
       configFile: '/nonexistent/config.json',

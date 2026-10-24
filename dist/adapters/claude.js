@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 import { checkCliVersion, createVersionProbe } from './version-guard.js';
 const CLAUDE_GUARD = {
     cli: 'claude',
@@ -128,6 +128,9 @@ async function readSession(path, mtimeMs, size) {
 export function createClaudeAdapter(options = {}) {
     const projectsDir = options.projectsDir ?? join(homedir(), '.claude', 'projects');
     const exec = options.exec ?? realExec;
+    const dirExists = options.dirExists ?? ((d) => existingDir(d) !== undefined);
+    /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+    const liveCwd = (d) => (d && dirExists(d) ? d : undefined);
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     const probeVersion = createVersionProbe(exec, 'claude');
     const preflight = (session) => checkCliVersion(probeVersion, CLAUDE_GUARD, session.writerVersion);
@@ -140,6 +143,14 @@ export function createClaudeAdapter(options = {}) {
         async deliver(session, envelope) {
             if (!session.cwd) {
                 return { ok: false, error: 'claude delivery requires the session cwd (unknown for this session)' };
+            }
+            if (!liveCwd(session.cwd)) {
+                // `claude --resume` looks the session up by project folder — retrying can't help
+                return {
+                    ok: false,
+                    retry: false,
+                    error: `the session's project folder was moved or deleted: ${session.cwd} — claude --resume can't find the session from anywhere else. Open the session in its new location and resend.`,
+                };
             }
             // An older CLI can't resume what a newer App wrote — refuse loudly, don't retry (ADR-025).
             const mismatch = await preflight(session);

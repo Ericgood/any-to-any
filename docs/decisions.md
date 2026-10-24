@@ -493,3 +493,14 @@ Codex 侧不分层（exec resume 已全验证）。
 - **影响**：日志里可查到 3 条信被寄信人自己取走（iOS 2 条、鸿蒙 1 条，全是 Codex → 同文件夹的 Claude）。那个文件夹下有 8 个会话，风险面很大。
 - **决策**：`anyd pull` / `anyd monitor` 不带 `--session` 时，先认身份：`CLAUDE_CODE_SESSION_ID`（Claude Code 注入）、`CODEX_THREAD_ID`（Codex 注入）→ 只处理这一个会话。认不出身份时，文件夹下恰好一个会话才用它；有多个会话就**拒绝取信**并列出候选，要求显式 `--session`（`--history` 只读查看不受影响）。宁可报错，也不能猜。skill 同步：只用自己的 `--session`，绝不用同伴的。
 - **验证**：纯函数 `resolveSelfSessions` 6 个用例；真 CLI + 真实会话目录 + 隔离信箱，在 `~/shandianshuo-iOS`（8 个会话）实测：以 Codex 身份取信，寄给 Claude 的信保持 pending；身份不明时拒绝并 exit 1，信仍 pending；以 Claude 身份取信，正常取到。全量 450 绿。
+
+## ADR-031 会话的项目文件夹被挪走或删掉：不再误报「找不到命令」，能投就照投（2026-10-25，真实事故）
+
+**事故**：Codex 对话「规划 CloneCut 病毒视频克隆 Demo」创建于 `~/增长研究/clonecut`，后来项目挪到了 `~/clonecut`。Claude 会话「clonecut 上站」给它发交接，daemon 在**已不存在的旧目录**里启动 `codex queue`。Node 对「工作目录不存在」报的是 `spawn codex ENOENT`，看上去像 Codex 没装。重试 3 次后进了死信，发信的 Claude 收不到任何失败通知，在后台等了 29 分钟。
+**决策**：
+- `realExec` 先检查工作目录：不存在就直接返回 127 和一句明白话（`working directory does not exist: … (the session's project folder was moved or deleted)`），不再让 Node 给出误导性报错。
+- **Codex / Kimi / ZCode** 按会话 id 续接，与目录无关：旧目录不在了就不指定目录，照常投递。
+- **Claude** 的 `--resume` 必须在原项目目录里才找得到会话：目录不在就**立刻终态失败**（不重试），并说明原因和怎么办（去新位置打开会话后重发）。
+- 目录检查可注入（`dirExists`），测试不依赖真实文件系统。
+**验证**：新增 3 个回归测试，全量 453 绿；把死信 3734f860 重新投递后，走 Desktop 排队成功（`in-session`），Codex 立即开始处理（读交接计划、核对两个目录和 git 状态）。
+**遗留**：死信不会通知发信方。这次 Claude 白等了 29 分钟，值得补上「投递失败回执」。

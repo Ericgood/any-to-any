@@ -4,6 +4,15 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Fix: delivery to a session whose project folder was moved failed as "spawn codex ENOENT" (ADR-031)
+
+A Codex thread was created in `~/增长研究/clonecut`, and the project later moved to `~/clonecut`. Delivering to that thread spawned `codex` inside the deleted folder. Node reports a missing working directory as `spawn codex ENOENT`, so it looked as if Codex wasn't installed. After three retries the message dead-lettered, and the sending Claude session waited 29 minutes for a reply that could never come.
+
+- `realExec` now checks the working directory first and says plainly that the folder was moved or deleted.
+- Codex, Kimi and ZCode resume by session id and don't need the folder: a stale one is simply dropped, and delivery goes ahead.
+- Claude's `--resume` *does* need the project folder, so that case fails immediately, without retries, and explains what to do.
+- The dead-lettered message was retried and is now running in the Codex thread.
+
 ### Fix: an agent pulling its own mail could take a peer's mail in the same folder (ADR-030)
 
 A Codex thread handed an iPad issue to the Claude session in the same project folder, then ran `anyd pull --quiet` as the skill suggests. Without `--session`, `pull` treated **every session in this folder** as "me", so it took the Claude session's brand-new mail within 0.4s, marked it delivered, and printed it into Codex's own output. Codex saw "delivered"; Claude saw nothing until the user typed again. The logs show three messages lost this way.

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 
 const TITLE_MAX = 80;
@@ -10,6 +10,8 @@ const TITLE_MAX = 80;
 const HOME_BIN = join(homedir(), '.kimi-code', 'bin', 'kimi');
 
 interface KimiAdapterOptions {
+  /** Does a directory exist? Injectable for tests (default: the real filesystem). */
+  dirExists?: (dir: string) => boolean;
   indexFile?: string;
   kimiBin?: string;
   exec?: ExecFn;
@@ -62,6 +64,9 @@ function assistantText(stdout: string): string {
 export function createKimiAdapter(options: KimiAdapterOptions = {}): DeliveryAdapter {
   const indexFile = options.indexFile ?? defaultIndexFile();
   const exec = options.exec ?? realExec;
+  const dirExists = options.dirExists ?? ((d: string) => existingDir(d) !== undefined);
+  /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+  const liveCwd = (d: string | undefined): string | undefined => (d && dirExists(d) ? d : undefined);
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
 
   return {
@@ -80,7 +85,7 @@ export function createKimiAdapter(options: KimiAdapterOptions = {}): DeliveryAda
       const { stdout, stderr, code } = await exec(
         bin,
         args,
-        session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
+        liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs } : { timeoutMs },
       );
       if (code !== 0) {
         return { ok: false, error: `kimi resume exited ${code}: …${stderr.slice(-500)}` };

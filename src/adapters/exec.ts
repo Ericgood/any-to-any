@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync, statSync } from 'node:fs';
 import type { ExecFn } from './types.js';
 
 const MAX_OUTPUT = 10 * 1024 * 1024;
@@ -8,8 +9,29 @@ const MAX_OUTPUT = 10 * 1024 * 1024;
  * interpreted by a shell), stdin closed (agent CLIs must not wait for piped
  * input), resolving with exit code instead of rejecting.
  */
+/**
+ * The session's folder, if it still exists. A thread outlives its project folder
+ * being moved or deleted, and spawning into a missing cwd fails with a misleading
+ * "spawn <cmd> ENOENT" — it reads as "CLI not installed" (2026-10-25 incident).
+ */
+export function existingDir(dir: string | undefined): string | undefined {
+  try {
+    return dir && existsSync(dir) && statSync(dir).isDirectory() ? dir : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const realExec: ExecFn = (cmd, args, opts) =>
   new Promise((resolve) => {
+    if (opts.cwd && !existingDir(opts.cwd)) {
+      resolve({
+        stdout: '',
+        stderr: `working directory does not exist: ${opts.cwd} (the session's project folder was moved or deleted)`,
+        code: 127,
+      });
+      return;
+    }
     const child = spawn(cmd, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       ...(opts.cwd ? { cwd: opts.cwd } : {}),

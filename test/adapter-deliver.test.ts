@@ -49,7 +49,7 @@ describe('codex deliver contract', () => {
 describe('claude deliver contract', () => {
   it('runs claude -p --resume from the session cwd', async () => {
     const { exec, calls } = mockExec({ stdout: 'ok' });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(
       session({ agent: 'claude', sessionId: 'aaaa1111-0000-4000-8000-000000000001', cwd: '/w/backend' }),
       'ENV',
@@ -62,7 +62,7 @@ describe('claude deliver contract', () => {
 
   it('fails fast when session cwd is unknown', async () => {
     const { exec, calls } = mockExec({});
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude', cwd: '' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/cwd/);
@@ -71,7 +71,7 @@ describe('claude deliver contract', () => {
 
   it('maps "Not logged in" stdout to a login-hint failure', async () => {
     const { exec } = mockExec({ stdout: '{"result":"Not logged in · Please run /login"}' });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/not logged in/i);
@@ -86,7 +86,7 @@ describe('claude deliver contract', () => {
       stdout: '{"result":"OAuth session expired and could not be refreshed"}',
       stderr: '',
     });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.retry).toBe(false);
@@ -104,7 +104,7 @@ describe('claude deliver contract', () => {
       stdout: 'Understood — pausing shared-file edits and reading the collab doc.',
       stderr: 'SessionEnd hook [node ~/.claude/scripts/hooks/session-end.js] failed: Hook cancelled',
     });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(true);
     expect(r.output).toContain('pausing shared-file edits');
@@ -116,14 +116,14 @@ describe('claude deliver contract', () => {
       stdout: 'done',
       stderr: 'Stop hook [node ~/.claude/scripts/hooks/stop.js] failed: exited 2',
     });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(true);
   });
 
   it('still fails on a real non-zero exit with no post-turn hook (e.g. resume error)', async () => {
     const { exec } = mockExec({ code: 1, stderr: 'Error: could not resume session — not found', stdout: '' });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/exited 1/);
@@ -135,7 +135,7 @@ describe('claude deliver contract', () => {
       stdout: '',
       stderr: 'SessionEnd hook [node ~/.claude/scripts/hooks/session-end.js] failed: Hook cancelled',
     });
-    const adapter = createClaudeAdapter({ exec });
+    const adapter = createClaudeAdapter({ dirExists: () => true, exec });
     const r = await adapter.deliver(session({ agent: 'claude' }), 'ENV');
     expect(r.ok).toBe(false);
   });

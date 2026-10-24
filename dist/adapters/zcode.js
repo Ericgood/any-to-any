@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 import { isSessionBusy, mailboxEnabledFor, mailboxRoot, postToMailbox, reclaimMail } from './zcode-mailbox.js';
 const TITLE_MAX = 80;
 /** The desktop app bundles the full CLI engine — no separate install needed. */
@@ -50,6 +50,9 @@ function resolveEngine() {
 export function createZcodeAdapter(options = {}) {
     const dbFile = options.dbFile ?? defaultDbFile();
     const exec = options.exec ?? realExec;
+    const dirExists = options.dirExists ?? ((d) => existingDir(d) !== undefined);
+    /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+    const liveCwd = (d) => (d && dirExists(d) ? d : undefined);
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     const configFile = options.configFile ?? defaultConfigFile();
     const root = options.mailboxRoot ?? mailboxRoot();
@@ -116,7 +119,7 @@ export function createZcodeAdapter(options = {}) {
                 };
             }
             const args = [
-                ...(session.cwd ? ['--cwd', session.cwd] : []),
+                ...(liveCwd(session.cwd) ? ['--cwd', session.cwd] : []),
                 '--resume',
                 session.sessionId,
                 // Never inherit zcode's headless default (yolo) implicitly — the mode
@@ -129,7 +132,7 @@ export function createZcodeAdapter(options = {}) {
                 envelope,
             ];
             const viaNode = engine.endsWith('.cjs') || engine.endsWith('.js');
-            const { stdout, stderr, code } = await exec(viaNode ? 'node' : engine, viaNode ? [engine, ...args] : args, session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs });
+            const { stdout, stderr, code } = await exec(viaNode ? 'node' : engine, viaNode ? [engine, ...args] : args, liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs });
             if (code !== 0) {
                 return { ok: false, error: `zcode resume exited ${code}: …${stderr.slice(-500)}` };
             }

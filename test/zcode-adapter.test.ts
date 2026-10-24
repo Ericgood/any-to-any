@@ -38,7 +38,7 @@ function makeDb(name: string): string {
 
 describe('zcode session discovery', () => {
   it('lists interactive sessions, filters all three subagent shapes, maps fields', async () => {
-    const a = createZcodeAdapter({ dbFile: makeDb('db.sqlite'), engineBin: '/x/zcode.cjs' });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: makeDb('db.sqlite'), engineBin: '/x/zcode.cjs' });
     const sessions = await a.listSessions();
     expect(sessions.map((s) => s.sessionId).sort()).toEqual(
       ['sess_aaaa0000-0000-4000-8000-000000000002', SESS.sessionId].sort(),
@@ -53,7 +53,7 @@ describe('zcode session discovery', () => {
   });
 
   it('returns [] when the db does not exist (machine without ZCode)', async () => {
-    const a = createZcodeAdapter({ dbFile: join(dir, 'nope', 'db.sqlite'), engineBin: '/x/zcode.cjs' });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'nope', 'db.sqlite'), engineBin: '/x/zcode.cjs' });
     expect(await a.listSessions()).toEqual([]);
   });
 });
@@ -63,7 +63,7 @@ describe('zcode delivery', () => {
 
   it('resumes via node with explicit non-yolo mode and the exact session id', async () => {
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
     const r = await a.deliver(SESS, 'ENVELOPE TEXT');
     expect(r).toEqual({ ok: true, output: 'reply text' });
     expect(exec).toHaveBeenCalledWith(
@@ -77,7 +77,7 @@ describe('zcode delivery', () => {
 
   it('runs a native binary directly and omits --cwd when unknown', async () => {
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/usr/local/bin/zcode', exec, configFile: join(dir, 'no-config.json') });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/usr/local/bin/zcode', exec, configFile: join(dir, 'no-config.json') });
     await a.deliver({ ...SESS, cwd: '' }, 'E');
     expect(exec).toHaveBeenCalledWith(
       '/usr/local/bin/zcode',
@@ -88,7 +88,7 @@ describe('zcode delivery', () => {
 
   it('surfaces the tail of stderr on failure', async () => {
     const exec: ExecFn = async () => ({ stdout: '', stderr: `${'x'.repeat(600)}REAL ERROR AT END`, code: 1 });
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/apps/zcode.cjs', exec, configFile: join(dir, 'no-config.json') });
     const r = await a.deliver(SESS, 'E');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('REAL ERROR AT END');
@@ -108,7 +108,7 @@ describe('per-machine delivery mode escalation', () => {
     const { writeFileSync } = await import('node:fs');
     writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'yolo' } }));
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
     await a.deliver(SESS, 'E');
     expect(modeOf(exec.mock.calls as never)).toBe('yolo');
   });
@@ -118,14 +118,14 @@ describe('per-machine delivery mode escalation', () => {
     const { writeFileSync } = await import('node:fs');
     writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'root-me-please' } }));
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
     await a.deliver(SESS, 'E');
     expect(modeOf(exec.mock.calls as never)).toBe('build');
   });
 
   it('defaults to build when no config exists', async () => {
     const exec = vi.fn(okExec);
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: join(dir, 'nope.json') });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: join(dir, 'nope.json') });
     await a.deliver(SESS, 'E');
     expect(modeOf(exec.mock.calls as never)).toBe('build');
   });
@@ -140,7 +140,7 @@ describe('per-machine turn timeout', () => {
       seen.push(opts.timeoutMs);
       return { stdout: 'ok', stderr: '', code: 0 };
     };
-    const a = createZcodeAdapter({ dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
+    const a = createZcodeAdapter({ dirExists: () => true, dbFile: join(dir, 'unused.sqlite'), engineBin: '/x/zcode.cjs', exec, configFile: cfg });
 
     writeFileSync(cfg, JSON.stringify({ zcode: { deliverMode: 'build', deliverTimeoutSec: 900 } }));
     await a.deliver(SESS, 'E');

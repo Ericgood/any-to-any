@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 import { defaultConfigFile, readMachineConfig } from '../machine-config.js';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 import type { DeliveryAdapter, DeliveryResult, ExecFn, SessionInfo } from './types.js';
 import { isSessionBusy, mailboxEnabledFor, mailboxRoot, postToMailbox, reclaimMail } from './zcode-mailbox.js';
 
@@ -13,6 +13,8 @@ const TITLE_MAX = 80;
 const APP_ENGINE = '/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs';
 
 interface ZcodeAdapterOptions {
+  /** Does a directory exist? Injectable for tests (default: the real filesystem). */
+  dirExists?: (dir: string) => boolean;
   dbFile?: string;
   engineBin?: string;
   exec?: ExecFn;
@@ -82,6 +84,9 @@ function resolveEngine(): string | null {
 export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryAdapter {
   const dbFile = options.dbFile ?? defaultDbFile();
   const exec = options.exec ?? realExec;
+  const dirExists = options.dirExists ?? ((d: string) => existingDir(d) !== undefined);
+  /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+  const liveCwd = (d: string | undefined): string | undefined => (d && dirExists(d) ? d : undefined);
   const timeoutMs = options.deliverTimeoutMs ?? 300_000;
   const configFile = options.configFile ?? defaultConfigFile();
   const root = options.mailboxRoot ?? mailboxRoot();
@@ -148,7 +153,7 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
         };
       }
       const args = [
-        ...(session.cwd ? ['--cwd', session.cwd] : []),
+        ...(liveCwd(session.cwd) ? ['--cwd', session.cwd] : []),
         '--resume',
         session.sessionId,
         // Never inherit zcode's headless default (yolo) implicitly — the mode
@@ -164,7 +169,7 @@ export function createZcodeAdapter(options: ZcodeAdapterOptions = {}): DeliveryA
       const { stdout, stderr, code } = await exec(
         viaNode ? 'node' : engine,
         viaNode ? [engine, ...args] : args,
-        session.cwd ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
+        liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs: turnTimeoutMs } : { timeoutMs: turnTimeoutMs },
       );
       if (code !== 0) {
         return { ok: false, error: `zcode resume exited ${code}: …${stderr.slice(-500)}` };

@@ -1,5 +1,7 @@
 import type { DeliveryAdapter, ExecFn } from './types.js';
 interface ZcodeAdapterOptions {
+    /** Does a directory exist? Injectable for tests (default: the real filesystem). */
+    dirExists?: (dir: string) => boolean;
     dbFile?: string;
     engineBin?: string;
     exec?: ExecFn;

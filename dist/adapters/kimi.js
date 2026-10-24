@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
-import { realExec } from './exec.js';
+import { existingDir, realExec } from './exec.js';
 const TITLE_MAX = 80;
 /** Kimi Code ships a single self-contained binary here after install. */
 const HOME_BIN = join(homedir(), '.kimi-code', 'bin', 'kimi');
@@ -48,6 +48,9 @@ function assistantText(stdout) {
 export function createKimiAdapter(options = {}) {
     const indexFile = options.indexFile ?? defaultIndexFile();
     const exec = options.exec ?? realExec;
+    const dirExists = options.dirExists ?? ((d) => existingDir(d) !== undefined);
+    /** the session's folder if it still exists — moved/deleted folders are dropped (2026-10-25) */
+    const liveCwd = (d) => (d && dirExists(d) ? d : undefined);
     const timeoutMs = options.deliverTimeoutMs ?? 300_000;
     return {
         agent: 'kimi',
@@ -61,7 +64,7 @@ export function createKimiAdapter(options = {}) {
                 return { ok: false, error: 'kimi not found — install Kimi Code or set ANYTOANY_KIMI_BIN' };
             }
             const args = ['-S', session.sessionId, '-p', envelope, '--output-format', 'stream-json'];
-            const { stdout, stderr, code } = await exec(bin, args, session.cwd ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
+            const { stdout, stderr, code } = await exec(bin, args, liveCwd(session.cwd) ? { cwd: session.cwd, timeoutMs } : { timeoutMs });
             if (code !== 0) {
                 return { ok: false, error: `kimi resume exited ${code}: …${stderr.slice(-500)}` };
             }
