@@ -7,7 +7,7 @@
 - 新增 `site/`：纯 HTML + CSS，零 JavaScript，Cloudflare Workers 静态资源部署。首页 `/`（标题对准用户搜法「Let Claude Code and Codex talk to each other」）和对比页 `/claude-code-cross-session-messaging`（官方跨会话消息、Codex 插件、anytoany 各管哪一层，引用官方原文）；robots / sitemap / llms.txt / 404 / 结构化数据。
 - 文案事实按 ADR-027、ADR-028 写：没打开的会话自动执行；打开的 Codex Desktop 走 `codex queue`；打开的 Claude Code 走收件箱门铃（Bypass 需 accept）；`/reload` 只是让已打开的窗口**显示**后台已执行的回合；安全模型写每台设备独立密钥 + 双向 TLS + 可吊销。两页都先交未登录 ChatGPT 评审，按它指出的歧义和对官方的不准确说法改过。
 - CI 的 paths-ignore 加 `site/**`，改官网不消耗 Actions 分钟。规格：[docs/specs/website.md](docs/specs/website.md)。
-- 视觉：Owner 嫌第一版「太上古」，改成深色为主的开发者工具风，浅色版跟随系统；渐变强调色、首屏网格光晕、演示图窗口框、功能 / 安全卡片、终端样式的安装命令、步骤时间线、圆角表格并高亮 anytoany 列。可见文字和结构化数据不变，仍然零 JavaScript、不加载外部字体。
+- 视觉：Owner 先嫌第一版「太上古」，又嫌第二版（深色 + 紫青渐变 + 光晕）「AI 味重」。现行「航空信」风格：从产品本身取材（每个会话一个地址和信箱），信封灰蓝底、墨水深蓝字、航空信红是唯一强调色，字体 Overpass，只有演示图外圈一道航空信封条纹；用细线分隔，不用卡片，没有渐变和光晕。可见文字和结构化数据不变，仍然零 JavaScript。
 
 ## 2026-10-25 — 修复：会话的项目文件夹挪走后，投递误报「找不到 codex」（ADR-031）
 

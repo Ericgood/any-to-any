@@ -12,7 +12,7 @@ anytoany.dev had no DNS records, so every homepage link pointed nowhere. `site/`
 - `/claude-code-cross-session-messaging`: what the two official features cover and where anytoany fits, with links to their docs.
 - `robots.txt`, `sitemap.xml`, `llms.txt`, `404.html`, SoftwareApplication / FAQPage structured data. CI ignores `site/**`.
 - Spec: [docs/specs/website.md](docs/specs/website.md). Deploy: `cd site && npx wrangler deploy`.
-- Design (2026-10-27): dark-first developer-tool look with a light variant that follows the system theme: gradient accent, grid-and-glow hero, the demo in a window frame, feature and security cards, terminal-style install blocks, a step timeline, rounded tables with the anytoany column highlighted. Visible text and structured data are unchanged; still no JavaScript and no web fonts.
+- Design (2026-10-27): an "air-mail" look taken from what the product does (every session gets an address and a mailbox): envelope blue-grey paper, ink-blue text, air-mail red as the only accent, Overpass / Overpass Mono, and one striped air-mail edge around the demo. Plain rules instead of cards, no gradients or glow. Visible text and structured data are unchanged; still no JavaScript.
 
 ### Fix: delivery to a session whose project folder was moved failed as "spawn codex ENOENT" (ADR-031)
 

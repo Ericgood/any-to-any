@@ -14,6 +14,9 @@
 <meta property="og:image" content="https://anytoany.dev/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Overpass+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/style.css">
 <script type="application/ld+json">
 {
@@ -63,7 +66,7 @@
 <body>
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><path d="M16 24h24l-7-7M48 40H24l7 7" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
+    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="10" fill="#15233b"/><path d="M14 24h26l-7-7" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M50 40H24l7 7" fill="none" stroke="#e0263f" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
     <nav>
       <a href="#install">Install</a>
       <a class="opt" href="#compare">Compare</a>
@@ -78,7 +81,7 @@
 
 <div class="hero">
   <p class="eyebrow">Session-to-session messaging for AI coding agents · open source · MIT</p>
-  <h1>Let Claude Code and Codex <span class="grad">talk to each other</span>, even across two Macs</h1>
+  <h1>Let Claude Code and Codex talk to each other, even across two Macs</h1>
   <p class="lede">Stop copy-pasting between coding agents. <strong>anytoany</strong> lets a Claude Code session send a task to an existing Codex session, or the other way round, even when they run on different Macs on the same local network. The receiving session does the work in its own app, and the result comes back to the session that asked. Kimi Code and ZCode work too. <strong>No cloud relay, no account.</strong></p>
   <p class="muted small">Sessions that are not open run the task automatically. Open sessions follow each app's own delivery rules; see <a href="#agents">what works with each agent</a>.</p>
   <div class="cta">
@@ -86,7 +89,7 @@
     <a class="btn" href="https://github.com/Ericgood/any-to-any">View on GitHub</a>
   </div>
   <figure class="demo">
-    <div class="window"><div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="airmail">
     <img src="/demo.gif" width="960" height="600" alt="anytoany web console: a Claude Code session on a MacBook asks a Codex session on a Mac mini to rerun the route tests, and the reply comes back to Claude"></div>
     <figcaption>You ask your Claude Code session in plain language. It relays the task to a Codex session on a Mac mini over the LAN, and the answer lands back in Claude.</figcaption>
   </figure>
@@ -97,10 +100,10 @@
   <p>Many developers run several AI coding agents on the same project: Claude Code on the backend, Codex on the frontend, maybe Kimi Code on another machine. Each agent has its own session history and tools, and those sessions do not share context with each other. You end up as the messenger, pasting findings, errors and decisions from one window to the next.</p>
   <p>anytoany gives every agent session an address and a mailbox:</p>
   <ul class="features">
-    <li><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="m4 4 5 5"/></svg></span><strong>Across vendors.</strong> Claude Code, Codex, Kimi Code and ZCode sessions can message each other in any direction.</li>
-    <li><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="14" height="10" rx="2"/><path d="M6 18h6"/><rect x="18" y="8" width="4" height="12" rx="1.5"/></svg></span><strong>Across machines.</strong> Pair your Macs once; a session on your MacBook can reach a session on your Mac mini directly over the local network.</li>
-    <li><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg></span><strong>Existing sessions, not new ones.</strong> Messages go to a session that already has the context, for example the Codex thread that has been working on your API all day.</li>
-    <li><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span><strong>Replies come back.</strong> The receiving session handles the task in its own app, and anytoany routes its result back into the conversation that asked.</li>
+    <li><strong>Across vendors.</strong> Claude Code, Codex, Kimi Code and ZCode sessions can message each other in any direction.</li>
+    <li><strong>Across machines.</strong> Pair your Macs once; a session on your MacBook can reach a session on your Mac mini directly over the local network.</li>
+    <li><strong>Existing sessions, not new ones.</strong> Messages go to a session that already has the context, for example the Codex thread that has been working on your API all day.</li>
+    <li><strong>Replies come back.</strong> The receiving session handles the task in its own app, and anytoany routes its result back into the conversation that asked.</li>
   </ul>
 </section>
 
