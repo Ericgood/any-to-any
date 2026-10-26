@@ -1,6 +1,13 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-27 — 官网 anytoany.dev 静态站（`site/`）
+
+- 起因：anytoany.dev 没有任何 DNS 记录，仓库主页、README 徽章、package.json 全是死链；未登录 ChatGPT 测「有没有工具让 Claude Code 和 Codex 互相对话」8 题 0 次提到我们，被推荐的多是有独立官网和一句话品类标语的项目；给出仓库后它把我们排第一。
+- 新增 `site/`：纯 HTML + CSS，零 JavaScript，Cloudflare Workers 静态资源部署。首页 `/`（标题对准用户搜法「Let Claude Code and Codex talk to each other」）和对比页 `/claude-code-cross-session-messaging`（官方跨会话消息、Codex 插件、anytoany 各管哪一层，引用官方原文）；robots / sitemap / llms.txt / 404 / 结构化数据。
+- 文案事实按 ADR-027、ADR-028 写：没打开的会话自动执行；打开的 Codex Desktop 走 `codex queue`；打开的 Claude Code 走收件箱门铃（Bypass 需 accept）；`/reload` 只是让已打开的窗口**显示**后台已执行的回合；安全模型写每台设备独立密钥 + 双向 TLS + 可吊销。两页都先交未登录 ChatGPT 评审，按它指出的歧义和对官方的不准确说法改过。
+- CI 的 paths-ignore 加 `site/**`，改官网不消耗 Actions 分钟。规格：[docs/specs/website.md](docs/specs/website.md)。
+
 ## 2026-10-25 — 修复：会话的项目文件夹挪走后，投递误报「找不到 codex」（ADR-031）
 
 - 现象：Claude 说给 Codex 发了消息，Codex 一直没收到；Claude 在后台白等了 29 分钟。

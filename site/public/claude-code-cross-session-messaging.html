@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code Cross-Session Messaging with Codex and Other Machines | anytoany</title>
+<meta name="description" content="Claude Code's cross-session messaging connects Claude sessions; the Codex plugin runs Codex from Claude Code on one machine. Here is what each covers, where it stops, and how to connect Codex, Kimi Code and ZCode sessions directly between your Macs.">
+<link rel="canonical" href="https://anytoany.dev/claude-code-cross-session-messaging">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="anytoany">
+<meta property="og:title" content="Claude Code cross-session messaging, extended to Codex, Kimi Code and ZCode">
+<meta property="og:description" content="Built-in cross-session messaging vs. the Codex plugin for Claude Code vs. anytoany: which agents, which direction, which machines.">
+<meta property="og:url" content="https://anytoany.dev/claude-code-cross-session-messaging">
+<meta property="og:image" content="https://anytoany.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Claude Code cross-session messaging, extended to Codex, Kimi Code and ZCode",
+  "description": "What Claude Code's built-in cross-session messaging and the Codex plugin for Claude Code each cover, where they stop, and how anytoany connects sessions across vendors and machines.",
+  "datePublished": "2026-10-27",
+  "dateModified": "2026-10-27",
+  "author": {"@type": "Organization", "name": "anytoany contributors", "url": "https://github.com/Ericgood/any-to-any"},
+  "publisher": {"@type": "Organization", "name": "anytoany", "url": "https://anytoany.dev/"},
+  "mainEntityOfPage": "https://anytoany.dev/claude-code-cross-session-messaging",
+  "about": [
+    {"@type": "SoftwareApplication", "name": "Claude Code"},
+    {"@type": "SoftwareApplication", "name": "Codex"},
+    {"@type": "SoftwareApplication", "name": "anytoany", "url": "https://anytoany.dev/"}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Can Claude Code's cross-session messaging send a message to Codex?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No. Claude Code's built-in cross-session messaging delivers messages between Claude Code sessions. To message a Codex, Kimi Code or ZCode session, use a cross-vendor tool such as anytoany."}},
+    {"@type": "Question", "name": "Can I use cross-session messaging with a session on another machine?",
+     "acceptedAnswer": {"@type": "Answer", "text": "With the built-in feature, yes, between Claude Code sessions: both sessions need Remote Control (with a claude.ai sign-in), and messages are relayed through Anthropic's servers. anytoany instead links your Macs directly over the local network with mutual TLS, and also reaches Codex, Kimi Code and ZCode sessions."}},
+    {"@type": "Question", "name": "Can I use anytoany and the built-in feature together?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. anytoany uses Claude Code's built-in inbox to wake open Claude Code sessions, so the two work side by side. Keep the built-in feature for Claude-to-Claude messages and use anytoany when the other side is Codex, Kimi Code, ZCode or another Mac."}}
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">anytoany <span>for AI coding agents</span></a>
+    <nav>
+      <a href="/#install">Install</a>
+      <a href="/#faq">FAQ</a>
+      <a href="https://github.com/Ericgood/any-to-any">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+<div class="hero">
+  <p class="eyebrow">Comparison · updated 2026-10-27</p>
+  <h1>Claude Code cross-session messaging, extended to Codex, Kimi Code and ZCode</h1>
+  <p class="lede"><strong>Short answer:</strong> Claude Code's built-in cross-session messaging connects <strong>Claude Code sessions</strong>, including sessions on another machine through Remote Control, relayed by Anthropic. It does not reach Codex. OpenAI's Codex plugin lets Claude Code <strong>delegate work to Codex on the same machine</strong>. If you want Claude Code, Codex, Kimi Code and ZCode sessions to message each other in either direction, directly between your Macs on the local network, that is what <a href="/">anytoany</a> does.</p>
+  <p class="muted small">This compares documented capabilities as of 2026-10-27. Sources are linked in each section; check them for changes.</p>
+</div>
+
+<section>
+  <h2>What Claude Code's built-in messaging does</h2>
+  <p>From Claude Code v2.1.224 on macOS and Linux (including WSL 2), and v2.1.234 on native Windows, a Claude Code session can list your other sessions and send them a message with its <code>ListAgents</code> and <code>SendMessage</code> tools. Claude can do this on its own, for example to warn another session about a breaking change, or when you ask it to. Anthropic's documentation describes a message as</p>
+  <blockquote>"a piece of text one Claude writes to another"</blockquote>
+  <p>On supported versions it is on by default and needs no separate setup for sessions on the same machine; those messages are delivered through a per-session socket and never through Anthropic's servers. Delivery still depends on the receiving session being available and on its inbound-message settings. Source: <a href="https://code.claude.com/docs/en/cross-session-messaging">Message your other Claude Code sessions</a> (Claude Code Docs).</p>
+  <h3>Where it stops</h3>
+  <ul>
+    <li><strong>Claude Code sessions only.</strong> It can reach subagents, agent-team teammates, your other local Claude Code sessions, cloud sessions and Remote Control sessions on other machines. A Codex, Kimi Code or ZCode session is not on the list.</li>
+    <li><strong>Other machines go through Anthropic.</strong> Messaging a session on another computer works when the sending session is connected to Remote Control (which needs a claude.ai sign-in) and the target session is running with Remote Control too; the message is relayed through Anthropic's servers. Sessions that authenticate with an API key or through providers such as Amazon Bedrock can still message sessions on the same machine, but cannot discover sessions beyond it.</li>
+    <li><strong>Text only.</strong> A message carries what Claude writes, not the sender's history or files. The receiving Claude works with its own files and permissions.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What the Codex plugin for Claude Code does</h2>
+  <p>OpenAI's <a href="https://github.com/openai/codex-plugin-cc">Codex plugin for Claude Code</a> adds <code>/codex:review</code>, <code>/codex:adversarial-review</code>, <code>/codex:rescue</code>, <code>/codex:transfer</code> and job-management commands, so a Claude Code session can ask Codex for a review, delegate implementation work, run it in the background and collect the result. <code>/codex:transfer</code> creates a persistent Codex thread by importing the current Claude Code transcript, which you can then continue in the Codex app or terminal. It needs Node.js 18.18+ and a ChatGPT plan (including Free) or an OpenAI API key. Its FAQ says it</p>
+  <blockquote>"delegates through your local Codex CLI and Codex app server on the same machine"</blockquote>
+  <h3>Where it stops</h3>
+  <ul>
+    <li><strong>Delegation starts in Claude Code.</strong> The documented flow is Claude Code handing work to Codex; the plugin does not provide general two-way messaging between live sessions, and a transferred thread is a copy, not a synchronized session.</li>
+    <li><strong>One machine.</strong> It uses the local Codex install and checkout.</li>
+    <li><strong>Two vendors.</strong> Kimi Code, ZCode and others are out of scope.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Side by side</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th></th><th>Built-in cross-session messaging</th><th>Codex plugin for Claude Code</th><th>anytoany</th></tr></thead>
+    <tbody>
+      <tr><td>Agents</td><td>Claude Code only</td><td>Claude Code → Codex</td><td>Claude Code, Codex, Kimi Code, ZCode</td></tr>
+      <tr><td>Direction</td><td>Both ways between Claude Code sessions</td><td>Claude Code delegates to Codex</td><td>Either direction between supported sessions; the receiver's reply is routed back to the sending session</td></tr>
+      <tr><td>Reaches a session that already exists</td><td class="yes">Yes</td><td>Starts or resumes Codex tasks it manages</td><td class="yes">Yes, by name, ID prefix or project folder</td></tr>
+      <tr><td>Other machines</td><td class="yes">Yes, via Remote Control, relayed through Anthropic's servers</td><td class="no">No (same machine)</td><td class="yes">Yes, Macs on the same LAN, direct mutual TLS, no relay</td></tr>
+      <tr><td>Account needed</td><td>claude.ai sign-in for other machines</td><td>Codex sign-in (ChatGPT account or API key)</td><td>None for anytoany itself</td></tr>
+      <tr><td>Setup</td><td>Built in (v2.1.224+ macOS/Linux, v2.1.234+ Windows)</td><td>Install the plugin (Node.js 18.18+)</td><td>One install script (Node.js 20+), macOS</td></tr>
+      <tr><td>Cost</td><td>Messages count toward Claude usage</td><td>Uses your Codex limits</td><td>Free, MIT; each agent uses your own subscription</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Which one should you use?</h2>
+  <ul>
+    <li><strong>All your sessions are Claude Code:</strong> use the built-in messaging. It is already there.</li>
+    <li><strong>You want Codex to review or rescue work from inside Claude Code, on one machine:</strong> the Codex plugin is the simplest path.</li>
+    <li><strong>You run several vendors and want them to hand work to each other, or your sessions live on different Macs:</strong> use anytoany. It works alongside both. For open Claude Code sessions, anytoany wakes them through the same built-in inbox the official feature uses.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Set up anytoany</h2>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
+anyd start
+anyd list        # every addressable Claude Code / Codex / Kimi / ZCode session</code></pre>
+  <p>Then, in Claude Code, say something like: <em>"Ask the Codex session working on the API to rerun the route tests."</em> To reach another Mac, run <code>anyd pair --invite</code> once. If your Claude Code sessions default to Bypass permissions, add <code>"crossSessionInbound": "accept"</code> to <code>~/.claude/settings.json</code> so open sessions wake up as soon as a message arrives. Full details on the <a href="/">anytoany home page</a>, in the <a href="https://github.com/Ericgood/any-to-any">GitHub README</a> (supported agents and delivery paths) and in <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a> (pairing, mutual TLS, trust boundary).</p>
+</section>
+
+<section>
+  <h2>FAQ</h2>
+  <details open><summary>Can Claude Code's cross-session messaging send a message to Codex?</summary><div><p>No. Claude Code's built-in cross-session messaging delivers messages between Claude Code sessions. To message a Codex, Kimi Code or ZCode session, use a cross-vendor tool such as anytoany.</p></div></details>
+  <details><summary>Can I use cross-session messaging with a session on another machine?</summary><div><p>With the built-in feature, yes, between Claude Code sessions: both sessions need Remote Control (with a claude.ai sign-in), and messages are relayed through Anthropic's servers. anytoany instead links your Macs directly over the local network with mutual TLS, and also reaches Codex, Kimi Code and ZCode sessions.</p></div></details>
+  <details><summary>Can I use anytoany and the built-in feature together?</summary><div><p>Yes. anytoany uses Claude Code's built-in inbox to wake open Claude Code sessions, so the two work side by side. Keep the built-in feature for Claude-to-Claude messages and use anytoany when the other side is Codex, Kimi Code, ZCode or another Mac.</p></div></details>
+</section>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><a href="/">anytoany</a> · session-to-session messaging for AI coding agents · <a href="https://github.com/Ericgood/any-to-any">GitHub</a> · MIT License</p>
+    <p>Facts about Claude Code and the Codex plugin are taken from their official documentation as of 2026-10-27; check the linked sources for changes. Claude, Codex, Kimi and ZCode are trademarks of their respective owners; anytoany is an independent open-source project and is not affiliated with them.</p>
+  </div>
+</footer>
+</body>
+</html>
