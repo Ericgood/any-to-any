@@ -51,11 +51,11 @@
 <body>
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="/">anytoany <span>for AI coding agents</span></a>
+    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><path d="M16 24h24l-7-7M48 40H24l7 7" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
     <nav>
       <a href="/#install">Install</a>
       <a href="/#faq">FAQ</a>
-      <a href="https://github.com/Ericgood/any-to-any">GitHub</a>
+      <a class="gh" href="https://github.com/Ericgood/any-to-any">GitHub</a>
     </nav>
   </div>
 </header>
@@ -63,7 +63,7 @@
 <main>
 <div class="wrap">
 
-<div class="hero">
+<div class="hero page">
   <p class="eyebrow">Comparison · updated 2026-10-27</p>
   <h1>Claude Code cross-session messaging, extended to Codex, Kimi Code and ZCode</h1>
   <p class="lede"><strong>Short answer:</strong> Claude Code's built-in cross-session messaging connects <strong>Claude Code sessions</strong>, including sessions on another machine through Remote Control, relayed by Anthropic. It does not reach Codex. OpenAI's Codex plugin lets Claude Code <strong>delegate work to Codex on the same machine</strong>. If you want Claude Code, Codex, Kimi Code and ZCode sessions to message each other in either direction, directly between your Macs on the local network, that is what <a href="/">anytoany</a> does.</p>
@@ -98,7 +98,7 @@
 <section>
   <h2>Side by side</h2>
   <div class="table-scroll">
-  <table>
+  <table class="hl">
     <thead><tr><th></th><th>Built-in cross-session messaging</th><th>Codex plugin for Claude Code</th><th>anytoany</th></tr></thead>
     <tbody>
       <tr><td>Agents</td><td>Claude Code only</td><td>Claude Code → Codex</td><td>Claude Code, Codex, Kimi Code, ZCode</td></tr>
@@ -126,7 +126,7 @@
   <h2>Set up anytoany</h2>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
 anyd start
-anyd list        # every addressable Claude Code / Codex / Kimi / ZCode session</code></pre>
+anyd list        <span class="c"># every addressable Claude Code / Codex / Kimi / ZCode session</span></code></pre>
   <p>Then, in Claude Code, say something like: <em>"Ask the Codex session working on the API to rerun the route tests."</em> To reach another Mac, run <code>anyd pair --invite</code> once. If your Claude Code sessions default to Bypass permissions, add <code>"crossSessionInbound": "accept"</code> to <code>~/.claude/settings.json</code> so open sessions wake up as soon as a message arrives. Full details on the <a href="/">anytoany home page</a>, in the <a href="https://github.com/Ericgood/any-to-any">GitHub README</a> (supported agents and delivery paths) and in <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a> (pairing, mutual TLS, trust boundary).</p>
 </section>
 
