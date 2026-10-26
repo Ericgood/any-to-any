@@ -13,11 +13,13 @@ on:
       - '**/*.md'
       - 'docs/**'
       - 'tasks/**'
+      - 'site/**'
   pull_request:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
       - 'tasks/**'
+      - 'site/**'
 
 # A newer push to the same ref cancels the older in-flight run — during rapid
 # iteration this alone saved a large share of the wasted minutes.

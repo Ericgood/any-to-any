@@ -1,0 +1,14 @@
+// anytoany.dev — static site served by Cloudflare Workers static assets.
+// Deploy from this folder: npx wrangler deploy
+{
+  "name": "anytoany-site",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "anytoany.dev", "custom_domain": true }
+  ]
+}

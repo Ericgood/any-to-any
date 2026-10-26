@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Let Claude Code and Codex Talk to Each Other | anytoany</title>
+<meta name="description" content="anytoany is a free, open-source (MIT) CLI that lets Claude Code and Codex hand off tasks between existing sessions, even across two Macs on the same local network, and returns replies to the sender. Also works with Kimi Code and ZCode. No cloud relay, no account.">
+<link rel="canonical" href="https://anytoany.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="anytoany">
+<meta property="og:title" content="Let Claude Code and Codex talk to each other | anytoany">
+<meta property="og:description" content="Session-to-session messaging for AI coding agents. Hand a task from Claude Code to Codex, Kimi Code or ZCode, on this Mac or another one, and the reply comes back. No cloud, MIT.">
+<meta property="og:url" content="https://anytoany.dev/">
+<meta property="og:image" content="https://anytoany.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "anytoany",
+  "alternateName": ["any-to-any", "anyd"],
+  "description": "Session-to-session messaging for AI coding agents. Lets Claude Code, Codex, Kimi Code and ZCode sessions hand off tasks to each other and get replies back, on one machine or across Macs on the same local network, without a cloud service.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS",
+  "softwareVersion": "0.0.1",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "url": "https://anytoany.dev/",
+  "downloadUrl": "https://github.com/Ericgood/any-to-any",
+  "codeRepository": "https://github.com/Ericgood/any-to-any",
+  "sameAs": ["https://github.com/Ericgood/any-to-any"],
+  "dateModified": "2026-10-27"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Can Claude Code and Codex talk to each other?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. With anytoany, a Claude Code session can send a task to a Codex session (or the other way round). The Codex session does the work in its own harness, and its reply is delivered back into the Claude Code session that asked."}},
+    {"@type": "Question", "name": "Does someone have to nudge the receiving session?",
+     "acceptedAnswer": {"@type": "Answer", "text": "In most setups, no. A session that is not open is resumed headlessly and runs the task. An open Codex Desktop thread gets it through Codex's own queue and runs it. An open Claude Code session is woken through its built-in inbox; if your sessions default to Bypass permissions, set \"crossSessionInbound\": \"accept\", otherwise the message waits for your next prompt. A ZCode session that is mid-turn picks it up at its next tool call. Separately, some app windows only display a turn that already ran in the background after /reload; the work itself does not wait for that."}},
+    {"@type": "Question", "name": "Does it work across two computers?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes, between two or more Macs on the same local network. Pair them once with anyd pair --invite; after that you address a session on the other Mac as @mini/codex:api, or just describe it in plain language."}},
+    {"@type": "Question", "name": "Does anything go through a cloud service?",
+     "acceptedAnswer": {"@type": "Answer", "text": "anytoany itself does not. The daemons find each other with mDNS/Bonjour and talk directly over mutual TLS 1.3 on your local network; each device has its own key, and there is no account and no relay server. Your agents still reach their own providers (Anthropic, OpenAI and so on) as usual."}},
+    {"@type": "Question", "name": "Do I need to set up an MCP server?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No. Agents use plain anyd shell commands through an Agent Skills SKILL.md that the installer adds for Claude Code, Codex, Kimi Code and ZCode."}},
+    {"@type": "Question", "name": "How is this different from Claude Code's built-in cross-session messaging?",
+     "acceptedAnswer": {"@type": "Answer", "text": "The built-in feature sends messages between Claude Code sessions, and reaches other machines through Remote Control via Anthropic's servers. anytoany also connects Codex, Kimi Code and ZCode sessions, and links your Macs directly on the local network."}},
+    {"@type": "Question", "name": "Is anytoany related to Google's A2A protocol?",
+     "acceptedAnswer": {"@type": "Answer", "text": "It works at a different layer. A2A connects agent services over HTTP, typically across organizations. anytoany connects the coding-agent sessions running on your own machines. Its message fields follow A2A naming, and an A2A bridge is on the roadmap."}},
+    {"@type": "Question", "name": "Is it free?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. anytoany is open source under the MIT license and needs no account. Each agent keeps using your existing Claude, ChatGPT, Kimi or Z.ai plan or API key; anytoany adds no charge."}}
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="10" fill="#15233b"/><path d="M14 24h26l-7-7" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M50 40H24l7 7" fill="none" stroke="#e0263f" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
+    <nav>
+      <a href="#install">Install</a>
+      <a class="opt" href="#compare">Compare</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/Ericgood/any-to-any">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+<div class="hero">
+  <p class="eyebrow">Session-to-session messaging for AI coding agents · open source · MIT</p>
+  <h1>Let Claude Code and Codex talk to each other, even across two Macs</h1>
+  <p class="lede">Stop copy-pasting between coding agents. <strong>anytoany</strong> lets a Claude Code session send a task to an existing Codex session, or the other way round, even when they run on different Macs on the same local network. The receiving session does the work in its own app, and the result comes back to the session that asked. Kimi Code and ZCode work too. <strong>No cloud relay, no account.</strong></p>
+  <p class="muted small">Sessions that are not open run the task automatically. Open sessions follow each app's own delivery rules; see <a href="#agents">what works with each agent</a>.</p>
+  <div class="cta">
+    <a class="btn primary" href="#install">Install anytoany</a>
+    <a class="btn" href="https://github.com/Ericgood/any-to-any">View on GitHub</a>
+  </div>
+  <figure class="demo">
+    <div class="airmail">
+    <img src="/demo.gif" width="960" height="600" alt="anytoany web console: a Claude Code session on a MacBook asks a Codex session on a Mac mini to rerun the route tests, and the reply comes back to Claude"></div>
+    <figcaption>You ask your Claude Code session in plain language. It relays the task to a Codex session on a Mac mini over the LAN, and the answer lands back in Claude.</figcaption>
+  </figure>
+</div>
+
+<section id="what">
+  <h2>What it does</h2>
+  <p>Many developers run several AI coding agents on the same project: Claude Code on the backend, Codex on the frontend, maybe Kimi Code on another machine. Each agent has its own session history and tools, and those sessions do not share context with each other. You end up as the messenger, pasting findings, errors and decisions from one window to the next.</p>
+  <p>anytoany gives every agent session an address and a mailbox:</p>
+  <ul class="features">
+    <li><strong>Across vendors.</strong> Claude Code, Codex, Kimi Code and ZCode sessions can message each other in any direction.</li>
+    <li><strong>Across machines.</strong> Pair your Macs once; a session on your MacBook can reach a session on your Mac mini directly over the local network.</li>
+    <li><strong>Existing sessions, not new ones.</strong> Messages go to a session that already has the context, for example the Codex thread that has been working on your API all day.</li>
+    <li><strong>Replies come back.</strong> The receiving session handles the task in its own app, and anytoany routes its result back into the conversation that asked.</li>
+  </ul>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <p>One command installs the <code>anyd</code> CLI and configures the supported agents it detects on the machine (an Agent Skills <code>SKILL.md</code> plus an inbox hook). Requires Node.js 20 or later. The agents themselves (Claude Code, Codex, Kimi Code, ZCode) must already be installed and signed in.</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
+anyd start      <span class="c"># delivery daemon + web console at http://127.0.0.1:7433</span></code></pre>
+  <p class="muted small">Prefer to read it first? The script is <a href="https://github.com/Ericgood/any-to-any/blob/main/install.sh">install.sh</a> (under 100 lines). You can also clone the repo and run <code>npm install &amp;&amp; npm run build &amp;&amp; npm link &amp;&amp; anyd setup</code>.</p>
+  <h3>Link a second Mac</h3>
+<pre><code>anyd pair --invite          <span class="c"># on the first Mac: prints one command to paste on the other</span>
+anyd pair add &lt;device-id&gt;   <span class="c"># back on the first Mac: trust the ID the other one printed</span></code></pre>
+  <p>Pairing exchanges <strong>public</strong> device IDs, never private keys. Only trust devices you own. Both Macs must be on the same local network and able to reach each other (Bonjour discovery and the device-to-device port 7434). See the <a href="#security">security model</a>.</p>
+</section>
+
+<section id="how">
+  <h2>How a hand-off works</h2>
+  <ol class="steps">
+    <li>In your Claude Code session you say: <em>"Ask the Codex session working on the API to rerun the route tests, I just changed the redirects."</em> The installed skill finds the target with <code>anyd list</code> and sends it.</li>
+    <li>The <code>anyd</code> daemon stores the message in a local SQLite mailbox (acknowledgements, retries, dead-letter) and, if the target is on another Mac, relays it over the LAN.</li>
+    <li>The target Codex session receives it through Codex's own channel: a session that is not open is resumed headlessly and runs it; an open Codex Desktop thread gets it through Codex's queue. It does the work and ends its turn with a result such as <code>DONE …</code> or <code>BLOCKED …</code>.</li>
+    <li>The reply is delivered back into your Claude Code session. You can also watch the whole exchange in the local web console.</li>
+  </ol>
+  <p>You can also send from the command line: <code>anyd send "@mini/codex:api" "rerun the route tests?" --from "@claude:web-app"</code>. Targets match a session ID prefix, part of its title, or its project folder; if a name is ambiguous, the sending agent is shown the candidates and asks you which one you meant.</p>
+</section>
+
+<section id="agents">
+  <h2>What works with each agent today</h2>
+  <p>anytoany delivers through each vendor's own channels: headless resume (<code>claude -p --resume</code>, <code>codex exec resume</code>, <code>kimi -S … -p</code>, ZCode's bundled engine) for sessions that are not open, and each app's own inbox or queue for sessions that are open. It never types into a terminal and never uses <code>--dangerously-*</code> flags.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Agent</th><th>Send &amp; receive</th><th>Session not open</th><th>Session open in its app</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Code</td><td class="yes">Yes</td><td>Resumed headlessly; runs the task and replies</td><td>Woken through Claude Code's built-in inbox (v2.1.224+). If your sessions default to Bypass permissions, add <code>"crossSessionInbound": "accept"</code> to <code>~/.claude/settings.json</code>, otherwise the message waits for your next prompt.</td></tr>
+      <tr><td>Codex</td><td class="yes">Yes</td><td>Resumed headlessly; runs the task and replies</td><td>Codex Desktop: delivered through Codex's own queue (<code>codex queue</code>, CLI 0.149+) and run in the open thread (4 to 14 seconds in our tests). Threads in a read-only or workspace-write sandbox cannot send the reply, so give collaborating threads full access.</td></tr>
+      <tr><td>Kimi Code</td><td class="yes">Yes</td><td>Resumed headlessly; runs the task and replies</td><td>The work runs in the background; an already-open Kimi window shows the new turn after <code>/reload</code>.</td></tr>
+      <tr><td>ZCode</td><td class="yes">Yes</td><td>Runs a headless turn and replies</td><td>If the session is mid-turn, the message goes into ZCode's own session mailbox and is picked up at the next tool call (needs <code>ZCODE_MESSAGE_ENABLED=1</code>).</td></tr>
+      <tr><td>Gemini CLI</td><td class="no">Not yet</td><td colspan="2">Planned next.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Delivery is turn-based: each message gives the receiver one turn to act and report, then it stops. Before a headless delivery, anytoany checks that the CLI it will use is not older than the app that last wrote the session; if it is, the send is refused and an upgrade command is printed. Last verified October 2026 with Claude Code 2.1.296, Codex CLI 0.157 and Codex Desktop 0.162 on macOS. Details per agent: <a href="https://github.com/Ericgood/any-to-any#messages-to-sessions-you-have-open">README</a> and <a href="https://github.com/Ericgood/any-to-any/blob/main/docs/decisions.md">design records</a>.</p>
+</section>
+
+<section id="compare">
+  <h2>How is this different from the official options?</h2>
+  <p>Claude Code and the Codex plugin for Claude Code now offer official ways to coordinate some sessions, and they are simpler for what they support. anytoany focuses on messaging across vendors and direct LAN delivery between your own Macs. Official behavior as documented on 2026-10-27: <a href="https://code.claude.com/docs/en/cross-session-messaging">Claude Code cross-session messaging</a>, <a href="https://github.com/openai/codex-plugin-cc">Codex plugin for Claude Code</a>.</p>
+  <div class="table-scroll">
+  <table class="hl">
+    <thead><tr><th></th><th>Claude Code cross-session messaging</th><th>Codex plugin for Claude Code</th><th>anytoany</th></tr></thead>
+    <tbody>
+      <tr><td>Which agents</td><td>Claude Code ↔ Claude Code</td><td>Claude Code → Codex</td><td>Claude Code, Codex, Kimi Code, ZCode, any direction</td></tr>
+      <tr><td>Who starts it</td><td>Either Claude session</td><td>Claude Code drives Codex with <code>/codex:*</code> commands</td><td>Any session; replies return to the sender</td></tr>
+      <tr><td>Other machines</td><td>Through Remote Control, via Anthropic's servers (claude.ai sign-in)</td><td>Same machine</td><td>Directly over your LAN, mutual TLS, no cloud</td></tr>
+      <tr><td>Setup</td><td>Built in (v2.1.224+)</td><td>Claude Code plugin + Codex sign-in</td><td>One install script, Node.js 20+</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><strong>When the official option is enough:</strong> if every session you run is Claude Code, the built-in messaging is simpler. If you only want Codex to review or rescue work from inside Claude Code on one machine, the Codex plugin is simpler. anytoany is for mixing vendors, talking to sessions that already exist, and working across your Macs. More detail: <a href="/claude-code-cross-session-messaging">Claude Code cross-session messaging vs. Codex plugin vs. anytoany</a>.</p>
+  <p class="muted small">Other open-source tools also connect coding agents, for example <a href="https://github.com/fujibee/agmsg">agmsg</a> (Bash + SQLite on one machine, no daemon). anytoany's focus is existing sessions across your own machines, with LAN discovery and mutual TLS.</p>
+</section>
+
+<section id="security">
+  <h2>Security model</h2>
+  <ul class="cards">
+    <li><strong>Per-device keys.</strong> Every device has its own Ed25519 key; its device ID is the certificate fingerprint. Pairing exchanges public IDs only, the way Syncthing does.</li>
+    <li><strong>Mutual TLS 1.3 between devices.</strong> Each side checks the other's fingerprint. Unpaired devices are refused and show up as pairing requests, never as messages.</li>
+    <li><strong>Revocable.</strong> <code>anyd pair remove &lt;device&gt;</code> revokes one device without touching the others.</li>
+    <li><strong>No cloud relay.</strong> anytoany's own device-to-device traffic stays on your local network, with no account. Your agents still talk to their providers (Anthropic, OpenAI, Moonshot, Z.ai) through their normal connections, as they always do. The web console binds to 127.0.0.1 only.</li>
+    <li><strong>The receiver decides permissions.</strong> What a delivered task may do is set on the receiving machine, by that agent's own settings and <code>~/.anytoany/config.json</code>. Full-permission execution is off by default and a sender cannot request it. Message text is passed as an argument, never through a shell.</li>
+    <li><strong>Loop caps.</strong> Per-thread depth and per-minute rate limits stop two agents from burning tokens in a loop.</li>
+  </ul>
+  <p class="muted small">Trust boundary, stated plainly: all paired devices are yours and your agents treat each other as teammates. Any process running as you on 127.0.0.1 can queue a message, the same boundary as your shell history or SSH keys. Details in <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+</section>
+
+<section id="limits">
+  <h2>Current limits</h2>
+  <ul>
+    <li>Pre-1.0 (version 0.0.1). Built and used every day on a MacBook and a Mac mini; the test suite also runs on Linux in CI. Windows is not tested.</li>
+    <li>Local network only: there is no relay for machines on different networks.</li>
+    <li>Turn-based, not live streaming: the receiver acts in one turn and reports.</li>
+    <li>A message carries text, not the sender's conversation history or files. Each agent works with its own session context and its own checkout.</li>
+    <li>Gemini CLI support is not available yet.</li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <details open><summary>Can Claude Code and Codex talk to each other?</summary><div><p>Yes. With anytoany, a Claude Code session can send a task to a Codex session (or the other way round). The Codex session does the work in its own harness, and its reply is delivered back into the Claude Code session that asked.</p></div></details>
+  <details><summary>Does someone have to nudge the receiving session?</summary><div><p>In most setups, no. A session that is not open is resumed headlessly and runs the task. An open Codex Desktop thread gets it through Codex's own queue and runs it. An open Claude Code session is woken through its built-in inbox; if your sessions default to Bypass permissions, set <code>"crossSessionInbound": "accept"</code>, otherwise the message waits for your next prompt. A ZCode session that is mid-turn picks it up at its next tool call. Separately, some app windows only display a turn that already ran in the background after <code>/reload</code>; the work itself does not wait for that.</p></div></details>
+  <details><summary>Does it work across two computers?</summary><div><p>Yes, between two or more Macs on the same local network. Pair them once with <code>anyd pair --invite</code>; after that you address a session on the other Mac as <code>@mini/codex:api</code>, or just describe it in plain language.</p></div></details>
+  <details><summary>Does anything go through a cloud service?</summary><div><p>anytoany itself does not. The daemons find each other with mDNS/Bonjour and talk directly over mutual TLS 1.3 on your local network; each device has its own key, and there is no account and no relay server. Your agents still reach their own providers (Anthropic, OpenAI and so on) as usual.</p></div></details>
+  <details><summary>Do I need to set up an MCP server?</summary><div><p>No. Agents use plain <code>anyd</code> shell commands through an Agent Skills <code>SKILL.md</code> that the installer adds for Claude Code, Codex, Kimi Code and ZCode.</p></div></details>
+  <details><summary>Do I have to type @ addresses?</summary><div><p>No. Tell your agent what you want in plain language, for example "ask the Codex session on the Mac mini to check the build". Addresses like <code>@mini/codex:api</code> are there for scripts and for when you want to be exact.</p></div></details>
+  <details><summary>How is this different from Claude Code's built-in cross-session messaging?</summary><div><p>The built-in feature sends messages between Claude Code sessions, and reaches other machines through Remote Control via Anthropic's servers. anytoany also connects Codex, Kimi Code and ZCode sessions, and links your Macs directly on the local network. For open Claude Code sessions it uses the same built-in inbox to wake them. <a href="/claude-code-cross-session-messaging">Full comparison</a>.</p></div></details>
+  <details><summary>Is anytoany related to Google's A2A protocol?</summary><div><p>It works at a different layer. A2A connects agent services over HTTP, typically across organizations. anytoany connects the coding-agent sessions running on your own machines. Its message fields follow A2A naming, and an A2A bridge is on the roadmap.</p></div></details>
+  <details><summary>Can I drive my agents from a desktop assistant app?</summary><div><p>Yes, if the app can make local HTTP calls. A GUI assistant registers itself with <code>anyd register</code> and pulls its own mail from the daemon. The first app wired up this way is 闪电说 (Shandianshuo): <code>anyd connect sds</code>.</p></div></details>
+  <details><summary>Is it free?</summary><div><p>Yes. anytoany is open source under the MIT license and needs no account. Each agent keeps using your existing Claude, ChatGPT, Kimi or Z.ai plan or API key; anytoany adds no charge.</p></div></details>
+</section>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>anytoany (also written any-to-any) · session-to-session messaging for AI coding agents · <a href="https://github.com/Ericgood/any-to-any">GitHub</a> · <a href="https://github.com/Ericgood/any-to-any/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/Ericgood/any-to-any/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/Ericgood/any-to-any/issues">Issues</a> · MIT License</p>
+    <p>Page updated 2026-10-27. Claude, Codex, Kimi and ZCode are trademarks of their respective owners; anytoany is an independent open-source project and is not affiliated with them.</p>
+  </div>
+</footer>
+</body>
+</html>

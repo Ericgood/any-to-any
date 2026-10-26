@@ -4,6 +4,16 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Website: anytoany.dev static site (`site/`)
+
+anytoany.dev had no DNS records, so every homepage link pointed nowhere. `site/` now holds a plain HTML site (no JavaScript, no build step) served by Cloudflare Workers static assets.
+
+- `/`: what it does, install, how a hand-off works, what works with each agent today (including which open sessions run a task automatically and which only need `/reload` to *display* it), comparison with Claude Code's cross-session messaging and the Codex plugin for Claude Code, security model, limits, FAQ.
+- `/claude-code-cross-session-messaging`: what the two official features cover and where anytoany fits, with links to their docs.
+- `robots.txt`, `sitemap.xml`, `llms.txt`, `404.html`, SoftwareApplication / FAQPage structured data. CI ignores `site/**`.
+- Spec: [docs/specs/website.md](docs/specs/website.md). Deploy: `cd site && npx wrangler deploy`.
+- Design (2026-10-27): an "air-mail" look taken from what the product does (every session gets an address and a mailbox): envelope blue-grey paper, ink-blue text, air-mail red as the only accent, Overpass / Overpass Mono, and one striped air-mail edge around the demo. Plain rules instead of cards, no gradients or glow. Visible text and structured data are unchanged; still no JavaScript.
+
 ### Fix: delivery to a session whose project folder was moved failed as "spawn codex ENOENT" (ADR-031)
 
 A Codex thread was created in `~/增长研究/clonecut`, and the project later moved to `~/clonecut`. Delivering to that thread spawned `codex` inside the deleted folder. Node reports a missing working directory as `spawn codex ENOENT`, so it looked as if Codex wasn't installed. After three retries the message dead-lettered, and the sending Claude session waited 29 minutes for a reply that could never come.

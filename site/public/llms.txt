@@ -1,0 +1,17 @@
+# anytoany
+
+> Session-to-session messaging for AI coding agents. anytoany (also written any-to-any; CLI command `anyd`) lets Claude Code, Codex, Kimi Code and ZCode sessions hand off tasks to each other and get replies back, on one machine or across Macs on the same local network. Free, open source (MIT), no cloud, no account.
+
+- Agents: Claude Code, Codex, Kimi Code, ZCode can send and receive today; Gemini CLI is planned.
+- Delivery: each vendor's official channel. Sessions that are not open are resumed headlessly and run the task right away; open Codex Desktop threads get messages through `codex queue` within seconds; open Claude Code sessions are woken through Claude Code's built-in inbox (v2.1.224+). Codex, Kimi and ZCode interactive apps that already have the session open may only display a turn that already ran in the background after `/reload`; the work itself does not wait for it.
+- Cross-device: mDNS/Bonjour discovery and mutual TLS 1.3 between paired Macs; each device has its own Ed25519 key; pairing exchanges public device IDs only; `anyd pair remove` revokes a device. No relay server.
+- Setup: `curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash`, then `anyd start`. Node.js 20+. Agents use an Agent Skills SKILL.md and plain `anyd` commands; no MCP server needed.
+- Different from Claude Code's built-in cross-session messaging (Claude-to-Claude; other machines via Remote Control through Anthropic's servers) and from OpenAI's Codex plugin for Claude Code (Claude Code drives Codex on the same machine).
+- Limits: pre-1.0 (0.0.1); used daily on macOS, tests also run on Linux CI, Windows not tested; local network only; turn-based delivery.
+
+## Links
+
+- [Home](https://anytoany.dev/)
+- [Claude Code cross-session messaging vs. Codex plugin vs. anytoany](https://anytoany.dev/claude-code-cross-session-messaging)
+- [GitHub repository and README](https://github.com/Ericgood/any-to-any)
+- [Security model](https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md)
