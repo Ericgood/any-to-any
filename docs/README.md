@@ -6,6 +6,7 @@
 
 | File | What it covers |
 |---|---|
+| [launch/hn-launch-prep.md](launch/hn-launch-prep.md) | Show HN launch prep (Chinese notes, English post draft): title, post text, prepared answers, timing. Cross-device wording updated to ADR-028 on 2026-10-28. |
 | [HANDOFF_new-mac.md](HANDOFF_new-mac.md) | Moving development to a new MacBook (2026-10-28): current state, open decisions, restore steps, what to copy from `~/.anytoany/` and what not to, verification checklist, known pitfalls. |
 
 ## Architecture & decisions

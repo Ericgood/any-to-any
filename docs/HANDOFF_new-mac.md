@@ -26,9 +26,10 @@
 |---|---|---|
 | `CHANGELOG.md` 顶部还叫 `## Unreleased` | 和已发的 v0.0.1 对不上 | SEO 子会话已记入项目卡，等 Owner 决定怎么切版本号 |
 | 发 npm | 未发 | Owner 说先不发 |
-| `docs/launch/hn-launch-prep.md` | **从没入库**（只在旧电脑上） | Show HN 发帖稿，2026-08-17 定稿后没动过。里面还写着「共享配对 token」，已被 ADR-028 取代；发帖前要改。是否入公开仓库等 Owner 定 |
+| [`docs/launch/hn-launch-prep.md`](launch/hn-launch-prep.md) | 2026-10-28 已入库 | Show HN 发帖稿。跨设备与信任模型的说法已按 ADR-028 改写；其他数字（如「266 tests」「Five agents」）还是 08-17 的，发帖前要再核 |
 | 远端分支 `origin/website` | 已过时 | 内容早已 squash 合进 main（PR #3），比 main 少后来的两张页。可以删，等 Owner 点头 |
 | Show HN 发帖 | 未发 | 发帖稿就是上面那份 launch 文档 |
+| 旧电脑上的 `anyd` | 继续跑 | 新电脑和 mini 配好对之前别停，否则跨机消息会断 |
 
 ## 3. 还没做的功能（来自 tasks/todo.md 与 ADR）
 
