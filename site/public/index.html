@@ -116,7 +116,7 @@ anyd start      <span class="c"># delivery daemon + web console at http://127.0.
   <h3>Link a second Mac</h3>
 <pre><code>anyd pair --invite          <span class="c"># on the first Mac: prints one command to paste on the other</span>
 anyd pair add &lt;device-id&gt;   <span class="c"># back on the first Mac: trust the ID the other one printed</span></code></pre>
-  <p>Pairing exchanges <strong>public</strong> device IDs, never private keys. Only trust devices you own. Both Macs must be on the same local network and able to reach each other (Bonjour discovery and the device-to-device port 7434). See the <a href="#security">security model</a>.</p>
+  <p>Pairing exchanges <strong>public</strong> device IDs, never private keys. Only trust devices you own. Both Macs must be on the same local network and able to reach each other (Bonjour discovery and the device-to-device port 7434). See the <a href="#security">security model</a>, or follow the step-by-step guide: <a href="/claude-code-codex-two-macs">Claude Code and Codex on two Macs</a>.</p>
 </section>
 
 <section id="how">
@@ -176,7 +176,7 @@ anyd pair add &lt;device-id&gt;   <span class="c"># back on the first Mac: trust
     <li><strong>The receiver decides permissions.</strong> What a delivered task may do is set on the receiving machine, by that agent's own settings and <code>~/.anytoany/config.json</code>. Full-permission execution is off by default and a sender cannot request it. Message text is passed as an argument, never through a shell.</li>
     <li><strong>Loop caps.</strong> Per-thread depth and per-minute rate limits stop two agents from burning tokens in a loop.</li>
   </ul>
-  <p class="muted small">Trust boundary, stated plainly: all paired devices are yours and your agents treat each other as teammates. Any process running as you on 127.0.0.1 can queue a message, the same boundary as your shell history or SSH keys. Details in <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+  <p class="muted small">Trust boundary, stated plainly: all paired devices are yours and your agents treat each other as teammates. Any process running as you on 127.0.0.1 can queue a message, the same boundary as your shell history or SSH keys. The full model, including what anytoany does not protect against: <a href="/security">Is it safe to let Claude Code and Codex message each other?</a> Vulnerability reports: <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a>.</p>
 </section>
 
 <section id="limits">

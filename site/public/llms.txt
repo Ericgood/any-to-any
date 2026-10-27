@@ -13,5 +13,7 @@
 
 - [Home](https://anytoany.dev/)
 - [Claude Code cross-session messaging vs. Codex plugin vs. anytoany](https://anytoany.dev/claude-code-cross-session-messaging)
+- [Tutorial: make Claude Code and Codex work together across two Macs](https://anytoany.dev/claude-code-codex-two-macs)
+- [Is it safe to let Claude Code and Codex message each other? (security model and what it does not protect against)](https://anytoany.dev/security)
 - [GitHub repository and README](https://github.com/Ericgood/any-to-any)
 - [Security model](https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md)

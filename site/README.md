@@ -8,6 +8,8 @@ site/
 └── public/               # everything that gets served
     ├── index.html        # home
     ├── claude-code-cross-session-messaging.html
+    ├── claude-code-codex-two-macs.html   # tutorial
+    ├── security.html
     ├── 404.html, robots.txt, sitemap.xml, llms.txt, _headers
     └── style.css, favicon.svg, demo.gif, og.png
 ```

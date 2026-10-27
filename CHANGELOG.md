@@ -4,6 +4,13 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Website: two-Mac tutorial and security page
+
+- `/claude-code-codex-two-macs`: step-by-step guide to having Claude Code on one Mac hand tasks to Codex on another (install, pair, `anyd doctor`, send, what happens when the Codex session is open or not, how the reply comes back, troubleshooting, limits). HowTo + FAQPage structured data.
+- `/security`: how messages travel, who can send them in, pairing and revocation, what a delivered message may do, loop limits, and what anytoany does **not** protect against (stolen key, plain-text mailbox on disk, any process running as you on 127.0.0.1, devices visible on Bonjour, no `guest` tier yet). Comparison with cloud relays, Claude Code Remote Control and shared-token LAN pairing. TechArticle + FAQPage.
+- Linked from the home page and the comparison page; added to `sitemap.xml` and `llms.txt`.
+- `SECURITY.md` no longer describes the old shared-token pairing; it now matches ADR-028 (per-device keys, mutual TLS, `anyd pair remove`).
+
 ### README: open-session wording, security facts first, comparison table, FAQ
 
 - "Seeing incoming messages" and the status table now say the same thing as anytoany.dev and `llms.txt`: the task runs in the background either way; a Codex / Kimi / ZCode window that already had the session open may only *display* that turn after `/reload`. The old wording ("can sit on disk unseen", "`/reload` to see messages live") read as if delivery itself waited for you.
