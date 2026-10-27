@@ -53,10 +53,14 @@
      "acceptedAnswer": {"@type": "Answer", "text": "anytoany itself does not. The daemons find each other with mDNS/Bonjour and talk directly over mutual TLS 1.3 on your local network; each device has its own key, and there is no account and no relay server. Your agents still reach their own providers (Anthropic, OpenAI and so on) as usual."}},
     {"@type": "Question", "name": "Do I need to set up an MCP server?",
      "acceptedAnswer": {"@type": "Answer", "text": "No. Agents use plain anyd shell commands through an Agent Skills SKILL.md that the installer adds for Claude Code, Codex, Kimi Code and ZCode."}},
+    {"@type": "Question", "name": "Do I have to type @ addresses?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No. Tell your agent what you want in plain language, for example \"ask the Codex session on the Mac mini to check the build\". Addresses like @mini/codex:api are there for scripts and for when you want to be exact."}},
     {"@type": "Question", "name": "How is this different from Claude Code's built-in cross-session messaging?",
-     "acceptedAnswer": {"@type": "Answer", "text": "The built-in feature sends messages between Claude Code sessions, and reaches other machines through Remote Control via Anthropic's servers. anytoany also connects Codex, Kimi Code and ZCode sessions, and links your Macs directly on the local network."}},
+     "acceptedAnswer": {"@type": "Answer", "text": "The built-in feature sends messages between Claude Code sessions, and reaches other machines through Remote Control via Anthropic's servers. anytoany also connects Codex, Kimi Code and ZCode sessions, and links your Macs directly on the local network. For open Claude Code sessions it uses the same built-in inbox to wake them."}},
     {"@type": "Question", "name": "Is anytoany related to Google's A2A protocol?",
      "acceptedAnswer": {"@type": "Answer", "text": "It works at a different layer. A2A connects agent services over HTTP, typically across organizations. anytoany connects the coding-agent sessions running on your own machines. Its message fields follow A2A naming, and an A2A bridge is on the roadmap."}},
+    {"@type": "Question", "name": "Can I drive my agents from a desktop assistant app?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes, if the app can make local HTTP calls. A GUI assistant registers itself with anyd register and pulls its own mail from the daemon. The first app wired up this way is 闪电说 (Shandianshuo): anyd connect sds."}},
     {"@type": "Question", "name": "Is it free?",
      "acceptedAnswer": {"@type": "Answer", "text": "Yes. anytoany is open source under the MIT license and needs no account. Each agent keeps using your existing Claude, ChatGPT, Kimi or Z.ai plan or API key; anytoany adds no charge."}}
   ]
