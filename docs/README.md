@@ -2,6 +2,12 @@
 
 > These design records are written **in Chinese** — this project was built in the open by several AI coding agents (Claude, Codex, Kimi, ZCode) coordinating through the very tool they were building. The Chinese docs are the honest, first-hand record of that process. This page is an English map of what's where; the [README](../README.md), [CHANGELOG](../CHANGELOG.md), code, and commit history are all in English.
 
+## Handoff
+
+| File | What it covers |
+|---|---|
+| [HANDOFF_new-mac.md](HANDOFF_new-mac.md) | Moving development to a new MacBook (2026-10-28): current state, open decisions, restore steps, what to copy from `~/.anytoany/` and what not to, verification checklist, known pitfalls. |
+
 ## Architecture & decisions
 
 | File | What it covers |
