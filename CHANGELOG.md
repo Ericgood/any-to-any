@@ -4,6 +4,12 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### README: open-session wording, security facts first, comparison table, FAQ
+
+- "Seeing incoming messages" and the status table now say the same thing as anytoany.dev and `llms.txt`: the task runs in the background either way; a Codex / Kimi / ZCode window that already had the session open may only *display* that turn after `/reload`. The old wording ("can sit on disk unseen", "`/reload` to see messages live") read as if delivery itself waited for you.
+- Security model leads with the facts: one Ed25519 key per device, device ID = certificate fingerprint, mutual TLS 1.3, `anyd pair remove` revokes one device. The trust explanation is unchanged, just moved after it.
+- New "How is this different from…" table (built-in Claude Code cross-session messaging, the Codex plugin for Claude Code) and an FAQ, both taken from the live website. Same changes in `README.zh-CN.md`.
+
 ### Website: anytoany.dev static site (`site/`)
 
 anytoany.dev had no DNS records, so every homepage link pointed nowhere. `site/` now holds a plain HTML site (no JavaScript, no build step) served by Cloudflare Workers static assets.
