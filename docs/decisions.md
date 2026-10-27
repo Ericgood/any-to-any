@@ -506,3 +506,12 @@ Codex 侧不分层（exec resume 已全验证）。
 - 目录检查可注入（`dirExists`），测试不依赖真实文件系统。
 **验证**：新增 3 个回归测试，全量 453 绿；把死信 3734f860 重新投递后，走 Desktop 排队成功（`in-session`），Codex 立即开始处理（读交接计划、核对两个目录和 git 状态）。
 **遗留**：死信不会通知发信方。这次 Claude 白等了 29 分钟，值得补上「投递失败回执」。
+
+## ADR-032 「没话说」(NOOP) 的回信在所有通道一律不投：`anyd reply` 也要拦（2026-10-28，真实事故）
+
+**事故**：换电脑那天，十几个 Codex 会话轮流和 Claude 会话「迁移项目到新 MacBook」核对清单。用户发现 Codex 一直给它发「空消息」。查信箱：92 封 Codex→Claude 的信全部送达，没有丢；其中 26 封正文只有 `NOOP`，成对出现。原因是 Claude 回的确认被投进 Codex Desktop 的队列（ADR-027 `codex queue`），Codex 按信封指示执行 `anyd reply <id> "NOOP"`；而 NOOP 和 BLOCKED 对 BLOCKED 的拦截**只写在 dispatcher 读 stdout 标记那条路上**，`anyd reply` 命令直接入库。于是每个 NOOP 都成了一封真信，带着完整信封叫醒 Claude 一个回合，白白耗掉上下文，看上去像「空消息」。
+**决策**：
+- 把「这条回信该不该投」做成一个纯函数 `classifyReply(incoming, reply)` → `file` / `noop` / `blocked-pingpong`，放在 `src/envelope.ts`，与产生 NOOP 指示的信封同处。
+- dispatcher（标记通道）和 `anyd reply`（命令通道）共用它。命令通道遇到 NOOP 或 BLOCKED 对 BLOCKED：不入库，打印一行说明，退出码 0（对 agent 来说「已正确回复」，不是错误）。
+- 判定规则不变：开头一个词是 `NOOP`（后面跟空白或结束），或者来信和回信都以 `BLOCKED` 开头。
+**验证**：见 CHANGELOG 同日条目。

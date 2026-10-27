@@ -1,6 +1,13 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-28 — 修复：Codex 用 `anyd reply` 回的 NOOP 被当成真信投给 Claude（ADR-032）
+
+- 起因：换电脑这天，十几个 Codex 会话和 Claude 会话「迁移项目到新 MacBook」来回核对，用户看到 Codex 一直发「空消息」。查信箱：92 封 Codex→Claude 的信全部送达，没有丢；其中 26 封正文只有 `NOOP`（「没有新话要说」）。全库今天一共 28 封，全是 Codex→Claude。
+- 根因：Claude 的回信经 `codex queue` 进 Codex Desktop（ADR-027），Codex 按信封要求执行 `anyd reply <id> "NOOP"`。NOOP 和「BLOCKED 回 BLOCKED」的拦截只写在 dispatcher 读 stdout 标记那条路上，`anyd reply` 直接入库，所以每个 NOOP 都带着完整信封叫醒 Claude 一个回合。
+- 修复：拦截规则抽成纯函数 `classifyReply`（`src/envelope.ts`），dispatcher 和 `anyd reply` 共用。命令通道遇到 NOOP / BLOCKED 回 BLOCKED 时不入库，打印一行说明，退出码 0。
+- 验证：新增 8 个测试，其中 2 个真跑 CLI；全量 461 绿。在临时信箱里对比：旧版 `anyd reply <id> NOOP` 会生成一封新信，新版不生成。
+
 ## 2026-10-27 — 官网新增两页：两台 Mac 教程、安全说明
 
 - 起因：ChatGPT 10-27 实测，问「两台机器上的 Claude Code 和 Codex 怎么互派任务」，它只教用户自己搭 SSH，没推荐任何工具；问到选型时它要「透明的安全模型」。

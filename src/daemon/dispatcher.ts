@@ -1,6 +1,6 @@
 import type { DeliveryAdapter, SessionInfo } from '../adapters/types.js';
 import { routeForMessage } from '../cluster/routing.js';
-import { renderEnvelope, extractReply } from '../envelope.js';
+import { renderEnvelope, extractReply, classifyReply } from '../envelope.js';
 import type { Mailbox, Message } from '../mailbox/mailbox.js';
 
 export interface DispatchEvent {
@@ -192,18 +192,15 @@ export async function dispatchOnce(opts: DispatcherOptions): Promise<boolean> {
     // Anti-pingpong: a BLOCKED status answered with another BLOCKED status is
     // two waiting agents confirming each other — zero information, endless
     // round-trips (each too slow to trip the rate guard). Same for explicit
-    // NOOP replies (envelope's "nothing new to add" escape hatch).
-    const incoming = claimed.parts.map((p) => p.text).join('\n').trimStart();
-    const reply = replyText.trimStart();
-    // NOOP as the leading token — followed by whitespace/newline or end — even
-    // when the agent over-explains after it ("NOOP\n---\n standing by…").
-    const isNoop = /^NOOP(\s|$)/.test(reply);
-    const blockedPingpong = incoming.startsWith('BLOCKED') && reply.startsWith('BLOCKED');
-    if (isNoop || blockedPingpong) {
+    // NOOP replies (envelope's "nothing new to add" escape hatch). Same rule as
+    // `anyd reply` (ADR-032).
+    const incoming = claimed.parts.map((p) => p.text).join('\n');
+    const verdict = classifyReply(incoming, replyText);
+    if (verdict !== 'file') {
       emit({
         kind: 'reply-rejected',
         message: delivered,
-        detail: isNoop ? 'noop reply — not filed' : 'blocked-pingpong suppressed',
+        detail: verdict === 'noop' ? 'noop reply — not filed' : 'blocked-pingpong suppressed',
       });
       return true;
     }

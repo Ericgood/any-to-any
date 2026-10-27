@@ -15,6 +15,7 @@ import { createCollabStore } from './collab/store.js';
 import { resolveTarget } from './directory/resolve.js';
 import { listAllSessions } from './directory/scanner.js';
 import { formatRelativeTime, shortenHome } from './format.js';
+import { classifyReply } from './envelope.js';
 import { createDb } from './mailbox/db.js';
 import { createMailbox, type Message, type SessionRef } from './mailbox/mailbox.js';
 
@@ -864,6 +865,20 @@ program
     const all = mailbox.inbox({ all: true });
     const hits = all.filter((m) => m.id.startsWith(messageId));
     const target = hits.length === 1 && hits[0] ? hits[0].id : messageId;
+    // NOOP / BLOCKED-answering-BLOCKED is a correct answer, not a message to send
+    // (ADR-032) — filing it would wake the other side with an empty-looking letter.
+    const original = all.find((m) => m.id === target);
+    if (original) {
+      const verdict = classifyReply(original.parts.map((p) => p.text).join('\n'), message);
+      if (verdict !== 'file') {
+        console.log(
+          verdict === 'noop'
+            ? 'noted: NOOP means nothing to add — no reply sent, the other side is not woken'
+            : 'noted: BLOCKED answering BLOCKED — no reply sent (both sides are waiting)',
+        );
+        return;
+      }
+    }
     try {
       const r = mailbox.reply(target, message);
       console.log(`queued reply ${r.id} → @${r.to.agent}:${r.to.sessionId.slice(0, 8)}`);

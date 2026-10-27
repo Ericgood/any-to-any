@@ -98,6 +98,22 @@ export function renderEnvelope(input: EnvelopeInput): string {
   ].join('\n');
 }
 
+export type ReplyVerdict = 'file' | 'noop' | 'blocked-pingpong';
+
+/**
+ * Should a reply be filed as a new message? (ADR-032) Shared by every reply path —
+ * the stdout marker (dispatcher) and `anyd reply` (Codex Desktop's queue) — so a
+ * NOOP never wakes the other side with an empty-looking message.
+ * - NOOP as the leading token (then whitespace or end), even with prose after it.
+ * - BLOCKED answered with BLOCKED: two waiting agents confirming each other forever.
+ */
+export function classifyReply(incoming: string, reply: string): ReplyVerdict {
+  const r = reply.trimStart();
+  if (/^NOOP(\s|$)/.test(r)) return 'noop';
+  if (incoming.trimStart().startsWith('BLOCKED') && r.startsWith('BLOCKED')) return 'blocked-pingpong';
+  return 'file';
+}
+
 /** Extract the reply after the LAST marker occurrence; null when absent or empty. */
 export function extractReply(stdout: string, marker: string = REPLY_MARKER): string | null {
   const at = stdout.lastIndexOf(marker);

@@ -4,6 +4,14 @@ Notable changes, newest first. This project is pre-release (`0.0.x`) and built i
 
 ## Unreleased
 
+### Fix: a NOOP sent with `anyd reply` reached the other agent as a real message (ADR-032)
+
+On migration day a dozen Codex sessions checked lists with one Claude session, and the user saw Codex "sending empty messages". All 92 Codex→Claude messages had been delivered; 26 of them were just `NOOP` ("nothing new to add"). Claude's replies reach Codex Desktop through `codex queue` (ADR-027), and Codex answers by running `anyd reply <id> "NOOP"`, as the envelope tells it to. The NOOP and BLOCKED-answering-BLOCKED filters only ran on the stdout-marker path in the dispatcher, so `anyd reply` filed every NOOP as a new message and woke Claude for a full turn.
+
+- The rule is now one pure function, `classifyReply` (`src/envelope.ts`), used by both the dispatcher and `anyd reply`.
+- `anyd reply` with a NOOP, or a BLOCKED answer to a BLOCKED message, files nothing, prints one line saying so, and exits 0.
+- 8 new tests (2 run the real CLI); 461 pass.
+
 ### Website: two-Mac tutorial and security page
 
 - `/claude-code-codex-two-macs`: step-by-step guide to having Claude Code on one Mac hand tasks to Codex on another (install, pair, `anyd doctor`, send, what happens when the Codex session is open or not, how the reply comes back, troubleshooting, limits). HowTo + FAQPage structured data.

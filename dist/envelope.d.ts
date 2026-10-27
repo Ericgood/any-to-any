@@ -26,5 +26,14 @@ export interface EnvelopeInput {
  * from another agent or the authorization was relayed.
  */
 export declare function renderEnvelope(input: EnvelopeInput): string;
+export type ReplyVerdict = 'file' | 'noop' | 'blocked-pingpong';
+/**
+ * Should a reply be filed as a new message? (ADR-032) Shared by every reply path —
+ * the stdout marker (dispatcher) and `anyd reply` (Codex Desktop's queue) — so a
+ * NOOP never wakes the other side with an empty-looking message.
+ * - NOOP as the leading token (then whitespace or end), even with prose after it.
+ * - BLOCKED answered with BLOCKED: two waiting agents confirming each other forever.
+ */
+export declare function classifyReply(incoming: string, reply: string): ReplyVerdict;
 /** Extract the reply after the LAST marker occurrence; null when absent or empty. */
 export declare function extractReply(stdout: string, marker?: string): string | null;
