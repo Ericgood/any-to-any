@@ -1,6 +1,13 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-27 — README 对齐官网：收消息说法、安全模型先讲事实、对比表、FAQ
+
+- 起因：ChatGPT 诊断时把 README 里「消息躺在磁盘上看不见」「`/reload` to see messages live」当头号扣分点，以为投递要等人去刷新；安全模型又被说成「共享配对令牌」。
+- 「收消息」一节和状态表 † 改成和官网、`llms.txt` 一致：活在后台照常执行；Codex / Kimi / ZCode 已打开的窗口可能要 `/reload` 才**显示**那一轮，活不等它。核实依据：`src/adapters/codex.ts`（活线程走 `codex queue`，否则 `exec resume`）、ADR-027、ADR-029。
+- 安全模型第一条改为事实：一台设备一把 Ed25519 钥匙、设备 ID = 证书指纹、双向 TLS 1.3、`anyd pair remove` 吊销；原信任说明不删，往后放。
+- 首段加一句用户说法；新增「和官方方案有什么不同」对比表（链接官网对比页）和常见问题，内容照搬官网已上线文字。中英文 README 同步。
+
 ## 2026-10-27 — 官网 anytoany.dev 静态站（`site/`）
 
 - 起因：anytoany.dev 没有任何 DNS 记录，仓库主页、README 徽章、package.json 全是死链；未登录 ChatGPT 测「有没有工具让 Claude Code 和 Codex 互相对话」8 题 0 次提到我们，被推荐的多是有独立官网和一句话品类标语的项目；给出仓库后它把我们排第一。

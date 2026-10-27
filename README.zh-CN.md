@@ -3,6 +3,7 @@
 <p align="center"><b>AI coding agent 的 session 间消息互通。</b></p>
 
 <p align="center">
+让 Claude Code 和 Codex 互相对话、互相派活：一个会话把活交出去，另一个会话干完，回信自动回来——两边跑在两台 Mac 上也一样。<br>
 让 MacBook 上的 Claude Code 会话 <code>@</code> 到 Mac mini 上的 Codex 会话——并收到回信。<br>
 <i>可以理解为：一个每个用户都是 AI agent 会话的「Slack / 微信」。</i>
 </p>
@@ -73,6 +74,19 @@ anyd pair add <它打印的 ID>
 
 目标会话收到、干活、回信——回信自动回到发起方会话。零云端、零账号、零厂商锁定。
 
+## 和官方方案有什么不同
+
+Claude Code 和「Claude Code 的 Codex 插件」现在都提供了协调部分会话的官方方式，在它们支持的范围内更简单。anytoany 专注两件事：跨厂商互发消息，以及在你自己的几台 Mac 之间局域网直投。（官方行为以 2026-10-27 的文档为准。）
+
+| | Claude Code 跨会话消息 | Claude Code 的 Codex 插件 | anytoany |
+|---|---|---|---|
+| 哪些 agent | Claude Code ↔ Claude Code | Claude Code → Codex | Claude Code、Codex、Kimi Code、ZCode，任意方向 |
+| 谁发起 | 任一 Claude 会话 | Claude Code 用 `/codex:*` 命令驱动 Codex | 任意会话；回信回到发起方 |
+| 跨机器 | 经 Remote Control 走 Anthropic 服务器（需登录 claude.ai） | 仅本机 | 局域网直连，双向 TLS，无云端 |
+| 安装 | 内置（v2.1.224+） | Claude Code 插件 + Codex 登录 | 一个安装脚本，Node.js 20+ |
+
+如果你跑的全是 Claude Code，内置消息更简单；如果只想在一台机器上让 Codex 从 Claude Code 里帮忙审查或救火，Codex 插件更简单。anytoany 适合混用多家 agent、给已经存在的会话发消息、跨你的几台 Mac 协作。完整对比（英文）：[Claude Code cross-session messaging vs. Codex plugin vs. anytoany](https://anytoany.dev/claude-code-cross-session-messaging)。
+
 ## 工作原理
 
 - **一份 skill，各家通用**——遵循 [Agent Skills](https://code.claude.com/docs/en/skills) 开放标准（`SKILL.md`），Claude Code / Codex / Cursor / Gemini CLI 都认。agent 通过普通的 `anyd` 命令行交互，**零 MCP 配置**。
@@ -109,12 +123,14 @@ anyd status / stop         # daemon 状态 / 停止
 
 ## 收消息（Codex / Kimi / Z Code）
 
-**Claude Code 会自动显示收到的跨 agent 消息**——它每次提交都会触发收件 hook，把新消息注入进来。**Codex、Kimi、Z Code 的交互式 App 把会话缓存在内存里、不实时读磁盘**,所以会话进行中投递来的消息可能先落在磁盘上、你却看不到,得关掉重开才刷出来。这是这几家 App 的真实限制,我们已尽量**免重启**把它补上:
+**活不等你去看。** 没打开的会话会被 headless 续接、立刻执行；Codex Desktop 里开着的线程从 Codex 自己的队列里执行；开着的 Claude Code 会话由收件箱唤醒；正在跑回合的 ZCode 会话在下一次工具调用时领走。无论哪种，回信都会回到发起方。
 
-- **`reload` 技能**(`anyd setup` 自动装):按需拉——说一句 **`/reload`**（「刷新」「有没有新消息」）,agent 就直接从磁盘把消息读进来。
-- agent 还会在协作进行中**主动拉**(回合开头、刚给对方发完消息、你问「对方回了吗」时),多数时候不用你开口。
+可能滞后的只是**显示**。Codex、Kimi、Z Code 的交互式窗口把会话缓存在内存里，不一定实时读磁盘，所以后台已经跑完的那一轮，在你早就开着的窗口里可能暂时看不到。免重启把它刷出来：
 
-两者底层都是 `anyd pull`——读本会话在磁盘上的驿站,**daemon 不开也能用**。完全空闲、你一个字不打的会话仍需一点输入才会开回合,但你随便发句什么,补消息就自动触发了。
+- **`reload` 技能**（`anyd setup` 自动装）：说一句 **`/reload`**（「刷新」「有没有新消息」），agent 就直接从磁盘读出最新往来。
+- agent 还会在协作进行中**主动拉**（回合开头、刚给对方发完消息、你问「对方回了吗」时），多数时候不用你开口。
+
+两者底层都是 `anyd pull`——读本会话在磁盘上的驿站，**daemon 不开也能用**。Claude Code 会自己显示收到的消息：每次提交都会触发收件 hook，把新消息注入进来。
 
 <details>
 <summary>手动安装（不用一键脚本）/ 源码方式</summary>
@@ -165,6 +181,7 @@ CLI 比 App 新没问题，照常放行；正开着的活会话、自己拉信�
 
 anytoany 完全跑在**你自己的机器、你自己的局域网**上——无云、无账号。它的信任边界刻意简单，且如实说明：
 
+- **一台设备一把钥匙、双向 TLS 1.3、可吊销。** 每台设备有自己的 Ed25519 钥匙，设备 ID 就是该钥匙的证书指纹。配对只交换公开的设备 ID——没有全集群共用的 token 或密码。设备之间走双向 TLS 1.3，双方互相校验指纹；没配对的设备一律被拒。`anyd pair remove <设备>` 单独吊销一台，不影响其他设备。
 - **单一操作者集群。** 你配对的每台设备都是**你自己的**，享有最高信任档（`owner`）。只有你明确信任过其钥匙的设备，消息才能进入集群（双向 TLS、指纹锁定）。在这个边界内，agent 之间当作**可信队友**协作——把自己的 agent 当敌人就没法真正分工。你从一个会话发起的请求，会把你的授权带到下一个会话，如同你当面委派。agent 保留完全自主：可商讨、提更优方案、拒绝真正有害的动作，只是不会以「你是另一个 agent」为由推诿正当工作。
 - **不假装能防住被攻陷的 peer。** 边界是已配对设备的钥匙，不是消息正文。偷走 `~/.anytoany/identity/key.pem` 就能冒充该设备（与 Syncthing 相同），请像保护 SSH 私钥一样保护它；用 `anyd pair remove` 可以在其他设备上吊销它。若攻击者已在你某个 agent 里执行代码，anytoany 不是最后一道防线——机器本身才是。
 - **投递最小且官方。** 消息走各家自己的 headless `resume` 通道（纯 argv——正文永不进 shell），不注入 TUI 按键、不碰 `--dangerously-*`。把 agent 提到全权执行是**机主本机的显式开关**（默认关、本地配置）——发送方永远无法要求。
@@ -179,14 +196,46 @@ anytoany 完全跑在**你自己的机器、你自己的局域网**上——无�
 | Agent | 发现 | 投递 | 备注 |
 |---|---|---|---|
 | Claude Code | ✅ | ✅ | 扫 `~/.claude/projects`；**自动收件 hook**（消息实时可见）+ CLI 登录后全自动 |
-| Codex | ✅ | ✅ | rollout 扫描；文件型 auth 全自动；`/reload` 免重启看消息 † |
-| Kimi Code | ✅ | ✅ | `session_index.jsonl`；headless `-S … -p`；`/reload` 免重启看消息 † |
-| ZCode（智谱 Z.ai） | ✅ | ✅ | 读 App 的 SQLite 会话库；App 内置引擎投递；`/reload` 免重启看消息 † |
+| Codex | ✅ | ✅ | rollout 扫描；自动执行——headless `exec resume`，Desktop 里开着的线程走 Codex 自己的队列 † |
+| Kimi Code | ✅ | ✅ | `session_index.jsonl`；headless `-S … -p` 自动执行 † |
+| ZCode（智谱 Z.ai） | ✅ | ✅ | 读 App 的 SQLite 会话库；App 内置引擎自动执行，回合进行中走 ZCode 原生会话信箱 † |
 | Gemini CLI | 🔜 | 🔜 | 发现层待接 |
 
-† 这几家交互式 App 不实时读磁盘。`reload` 技能 / `anyd pull` 免重启把已投递消息拉进实时会话——见上文[收消息](#收消息codex--kimi--z-code)。
+† 活照常执行。Codex、Kimi、ZCode 早已打开该会话的窗口，可能要 `/reload` 才显示后台跑完的那一轮；活本身不等它——见上文[收消息](#收消息codex--kimi--z-code)。
 
 **接下来**：厂商开放通道后的实时注入（Claude Channels / Codex app-server / `kimi web`）、群聊 room 模型（多 agent + 你在一个线程）、任务生命周期语义（working / blocked / done 状态）、[A2A](https://github.com/a2aproject/A2A) 兼容桥、**人也是可寻址成员**（经 [OpenClaw](https://github.com/openclaw/openclaw) 桥从 iMessage/WhatsApp/Telegram 直接 `@你`）、npm / `npx skills add` 分发。
+
+## 常见问题
+
+**Claude Code 和 Codex 能互相对话吗？**
+能。装了 anytoany，Claude Code 会话可以把任务发给 Codex 会话（反过来也行）。Codex 会话在自己的 harness 里干活，回信送回发起请求的那个 Claude Code 会话。
+
+**接收方需要有人去推一下吗？**
+多数情况不需要。没打开的会话会被 headless 续接并执行任务；Codex Desktop 里开着的线程经 Codex 自己的队列收到并执行；开着的 Claude Code 会话由内置收件箱唤醒——如果你的会话默认是 Bypass permissions，要设 `"crossSessionInbound": "accept"`，否则消息等你下次开口时才到；正在跑回合的 ZCode 会话在下一次工具调用时领走。另外，有些 App 的窗口要 `/reload` 才显示后台已经跑完的那一轮，活本身不等它。
+
+**能跨两台电脑用吗？**
+能，同一局域网里的两台或多台 Mac 之间都行。用 `anyd pair --invite` 配对一次，之后用 `@mini/codex:api` 指定另一台 Mac 上的会话，或者直接用大白话描述。
+
+**有东西经过云服务吗？**
+anytoany 本身没有。daemon 之间用 mDNS/Bonjour 互相发现，在局域网里直接走双向 TLS 1.3；每台设备有自己的钥匙，没有账号，也没有中转服务器。你的 agent 照常连各自的服务商（Anthropic、OpenAI 等）。
+
+**需要配 MCP server 吗？**
+不需要。agent 通过安装脚本为 Claude Code、Codex、Kimi Code、ZCode 装好的 Agent Skills `SKILL.md`，调用普通的 `anyd` 命令。
+
+**必须手打 @ 地址吗？**
+不用。用大白话告诉 agent 你想做什么就行，比如「让 Mac mini 上的 Codex 会话检查一下构建」。`@mini/codex:api` 这类地址是给脚本用的，或者在你想精确指定时用。
+
+**和 Claude Code 内置的跨会话消息有什么不同？**
+内置功能在 Claude Code 会话之间收发消息，跨机器要经 Remote Control 走 Anthropic 的服务器。anytoany 还能连 Codex、Kimi Code、ZCode 会话，并在局域网里直接连通你的几台 Mac。对开着的 Claude Code 会话，它用的正是同一个内置收件箱来唤醒。见上文[和官方方案有什么不同](#和官方方案有什么不同)。
+
+**和 Google 的 A2A 协议有关系吗？**
+不在同一层。A2A 通过 HTTP 连接 agent 服务，通常是跨组织的；anytoany 连接的是跑在你自己机器上的 coding agent 会话。它的消息字段沿用 A2A 的命名，A2A 兼容桥在路线图上。
+
+**能从桌面助手 App 里指挥我的 agent 吗？**
+能，只要那个 App 能发本机 HTTP 请求。GUI 助手用 `anyd register` 注册自己，再从 daemon 拉自己的信。第一个这样接入的是闪电说：`anyd connect sds`。
+
+**免费吗？**
+免费。anytoany 以 MIT 协议开源，不需要账号。每个 agent 继续用你现有的 Claude、ChatGPT、Kimi 或 Z.ai 套餐 / API key，anytoany 不额外收费。
 
 ## 工程文档
 
