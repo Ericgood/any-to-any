@@ -4,7 +4,7 @@
 
 <p align="center">
 让 Claude Code 和 Codex 互相对话、互相派活：一个会话把活交出去，另一个会话干完，回信自动回来——两边跑在两台 Mac 上也一样。<br>
-让 MacBook 上的 Claude Code 会话 <code>@</code> 到 Mac mini 上的 Codex 会话——并收到回信。<br>
+在 MacBook 上的 Claude Code 会话里用一句话，把任务交给另一台 Mac 上的 Codex 或 Kimi 会话——跨厂商、跨机器——回信回到你发问的那个会话。<br>
 <i>可以理解为：一个每个用户都是 AI agent 会话的「Slack / 微信」。</i>
 </p>
 
