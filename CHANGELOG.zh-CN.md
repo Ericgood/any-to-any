@@ -1,6 +1,14 @@
 # Changelog
 
 所有重大变更记录于此，新条目在上。格式：`## YYYY-MM-DD — 标题` + 要点。
+## 2026-10-27 — 官网新增两页：两台 Mac 教程、安全说明
+
+- 起因：ChatGPT 10-27 实测，问「两台机器上的 Claude Code 和 Codex 怎么互派任务」，它只教用户自己搭 SSH，没推荐任何工具；问到选型时它要「透明的安全模型」。
+- `/claude-code-codex-two-macs`：教程。首段直接回答上面那道题；正文按真实步骤：需要什么 → 两台都安装启动 → 配对（交换公开 ID，各 `anyd pair add` 一次）→ `anyd doctor` / `anyd peers` / `anyd list` 自检 → 一句话派活 → Codex 会话开着 / 没开分别怎样 → 回信怎么回来 → 排查 → 限制。HowTo + FAQPage。只写 Desktop 和没打开两种情况：终端窗口里开着的 Codex 会走 `codex queue`，但终端是否领队列没实测过，所以不写。
+- `/security`：安全说明。消息怎么走、谁能发进来、配对与吊销、送达后能做什么（含 ADR-016 信任队友模型）、防死循环、**不防什么**（偷 key.pem、本机 mailbox 明文、本机任何以你身份运行的进程、mDNS 暴露设备名和 ID、guest 档未实现、已被攻陷的 agent）。对比表：经云中转（泛指）/ Claude Code Remote Control（引官方文档原文：流量经 Anthropic API、连接期间会话记录存在 Anthropic 服务器；Trusted Devices 是可选测试功能）/ 共享 token 局域网（anytoany 自己 ADR-028 之前）/ anytoany 现在。不写「端到端加密」。TechArticle + FAQPage。
+- 首页「Link a second Mac」和安全一节、对比页的安装一节各加一个站内链接；sitemap、llms.txt 同步。
+- 顺手：`SECURITY.md` 还写着「共享 token 配对」，改成 ADR-028 的说法；ADR-016 加注「共享密钥」已被 ADR-028 取代。
+
 ## 2026-10-27 — README 对齐官网：收消息说法、安全模型先讲事实、对比表、FAQ
 
 - 起因：ChatGPT 诊断时把 README 里「消息躺在磁盘上看不见」「`/reload` to see messages live」当头号扣分点，以为投递要等人去刷新；安全模型又被说成「共享配对令牌」。

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Is It Safe to Let Claude Code and Codex Message Each Other? | anytoany</title>
+<meta name="description" content="How anytoany moves messages between Claude Code, Codex, Kimi Code and ZCode sessions: only between devices you paired, no relay server or account, one key per device, mutual TLS 1.3, per-device revocation. Plus what it does not protect against.">
+<link rel="canonical" href="https://anytoany.dev/security">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="anytoany">
+<meta property="og:title" content="Is it safe to let Claude Code and Codex message each other?">
+<meta property="og:description" content="No relay server, mutual TLS between your own devices, one key per device, revocable. And a plain list of what anytoany does not protect against.">
+<meta property="og:url" content="https://anytoany.dev/security">
+<meta property="og:image" content="https://anytoany.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Is it safe to let Claude Code and Codex message each other?",
+  "description": "The anytoany security model: how messages travel between paired devices, who can send them, pairing and revocation, what a delivered message may do, loop limits, and what anytoany does not protect against.",
+  "datePublished": "2026-10-27",
+  "dateModified": "2026-10-27",
+  "author": {"@type": "Organization", "name": "anytoany contributors", "url": "https://github.com/Ericgood/any-to-any"},
+  "publisher": {"@type": "Organization", "name": "anytoany", "url": "https://anytoany.dev/"},
+  "mainEntityOfPage": "https://anytoany.dev/security",
+  "about": [
+    {"@type": "SoftwareApplication", "name": "anytoany", "url": "https://anytoany.dev/"},
+    {"@type": "SoftwareApplication", "name": "Claude Code"},
+    {"@type": "SoftwareApplication", "name": "Codex"}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Is it safe to let Claude Code and Codex message each other with anytoany?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Within its stated boundary, yes. Messages only travel between devices you paired yourself, over mutual TLS 1.3, with no relay server and no account. Each device has its own key and can be revoked on its own. What a delivered task may do is decided on the receiving machine. It is built for one person's own devices, and it does not protect against a stolen device key or other software already running as you."}},
+    {"@type": "Question", "name": "Does anything leave my network?",
+     "acceptedAnswer": {"@type": "Answer", "text": "anytoany's own traffic does not: the daemons find each other with Bonjour and connect directly on the local network. Your agents still send their work to their own providers, such as Anthropic for Claude Code and OpenAI for Codex, exactly as they would without anytoany."}},
+    {"@type": "Question", "name": "What happens if a device is lost?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Run anyd pair remove with that device's name or ID on each of your other devices. They stop accepting it immediately, and nothing else needs to be rotated because no secret was shared between devices. Whoever has the lost device's key file can impersonate it until you do this, so protect ~/.anytoany/identity/key.pem like an SSH key."}},
+    {"@type": "Question", "name": "Can someone on my Wi-Fi send commands to my agents?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Not through anytoany. The device-to-device port only accepts devices whose certificate fingerprint is on your trust list; anyone else gets 403 and shows up as a pairing request, not as a message. The web console listens on 127.0.0.1 only. Someone on the network can see your devices' names and public IDs, which are broadcast for discovery."}}
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="10" fill="#15233b"/><path d="M14 24h26l-7-7" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M50 40H24l7 7" fill="none" stroke="#e0263f" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
+    <nav>
+      <a href="/#install">Install</a>
+      <a href="/#faq">FAQ</a>
+      <a class="gh" href="https://github.com/Ericgood/any-to-any">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+<div class="hero page">
+  <p class="eyebrow">Security model · updated 2026-10-27</p>
+  <h1>Is it safe to let Claude Code and Codex message each other?</h1>
+  <p class="lede"><strong>Short answer:</strong> with anytoany, messages travel only between devices you paired yourself. There is no relay server and no account. Each device has its own key, devices talk over mutual TLS 1.3, and you can revoke any one device without touching the others. What a delivered task is allowed to do is decided by the owner of the receiving machine, never by the sender.</p>
+  <p class="muted small">anytoany is built for one person's own Macs and agents. This page says what it protects, how, and what it does not. Everything here describes version 0.0.1; the design records are <a href="https://github.com/Ericgood/any-to-any/blob/main/docs/decisions.md">ADR-016 and ADR-028</a>.</p>
+</div>
+
+<section id="path">
+  <h2>How a message travels</h2>
+  <ul>
+    <li><strong>On one Mac.</strong> The daemon's web console and local API listen on <code>127.0.0.1:7433</code> only. Messages wait in a SQLite mailbox under <code>~/.anytoany/</code> until they are delivered.</li>
+    <li><strong>Between Macs.</strong> Daemons find each other with Bonjour (mDNS) and connect directly on port 7434 with <strong>mutual TLS 1.3</strong>: both sides present a certificate, and each checks the other's fingerprint against its trust list before sending any data. Key exchange is ephemeral, so a key leaked later cannot decrypt traffic recorded earlier.</li>
+    <li><strong>Nothing in between.</strong> There is no anytoany server, relay or account. Your agents still reach their own providers (Anthropic, OpenAI, Moonshot, Z.ai) for their normal work, as they always do.</li>
+  </ul>
+</section>
+
+<section id="who">
+  <h2>Who can send a message in</h2>
+  <ul>
+    <li><strong>Only devices on your trust list.</strong> A device that isn't on it gets HTTP 403 and appears in <code>anyd peers</code> as a pairing request. It never becomes a message.</li>
+    <li><strong>Impersonators are dropped before a byte is sent.</strong> Bonjour announcements can be forged, but a forger can't produce a certificate with your device's fingerprint without its private key, so the TLS check fails.</li>
+    <li><strong>The sender's device name can't be claimed.</strong> Each relayed message is labelled with the name your trust list gives the verified certificate, not with whatever name the other side reports.</li>
+  </ul>
+</section>
+
+<section id="pairing">
+  <h2>Pairing and revoking</h2>
+  <ul>
+    <li><strong>One key per device.</strong> On first start each device creates an Ed25519 key and a self-signed certificate in <code>~/.anytoany/identity/</code> (directory 0700, key 0600). The private key never leaves the device.</li>
+    <li><strong>The device ID is public.</strong> It is the SHA-256 fingerprint of the certificate. Pairing means each device adds the other's ID with <code>anyd pair add</code>. No password, token or private key is ever copied, so nothing secret ends up in shell history or a chat log.</li>
+    <li><strong>Revoke one device at a time.</strong> <code>anyd pair remove &lt;device&gt;</code> takes it off the trust list. Running daemons pick the change up without a restart, and the other devices are unaffected.</li>
+  </ul>
+  <p class="muted small">This is the model Syncthing uses for its devices. Before October 2026, anytoany paired devices with one shared token over plain HTTP; that design was replaced (ADR-028) because one sniffed token exposed the whole cluster and no single device could be revoked.</p>
+</section>
+
+<section id="delivery">
+  <h2>What a delivered message can do</h2>
+  <ul>
+    <li><strong>Official channels only.</strong> Messages reach an agent through its vendor's own interface: headless resume (<code>claude -p --resume</code>, <code>codex exec resume</code>, <code>kimi -S … -p</code>, ZCode's bundled engine), or the app's own inbox or queue for an open session. anytoany never types into a terminal and never passes <code>--dangerously-*</code> flags.</li>
+    <li><strong>No shell in the path.</strong> The message text is passed to the agent as a single argument, never interpreted by a shell.</li>
+    <li><strong>The receiving owner sets permissions.</strong> What a delivered task may do is governed by the receiving agent's own settings and the machine's <code>~/.anytoany/config.json</code>. Running an agent with full permissions is a local opt-in, off by default; a sender cannot ask for it.</li>
+    <li><strong>Your agents treat each other as teammates.</strong> Every paired device is in the top trust tier, <code>owner</code>: they are all yours. When you start a hand-off in one session, the request carries your authority to the next session, as if you had delegated it in person. The receiving agent keeps its judgment: it can push back, suggest a better approach, or ask before anything destructive or irreversible, but it won't refuse legitimate work just because the request came from another agent. (ADR-016)</li>
+  </ul>
+</section>
+
+<section id="loops">
+  <h2>Loop limits</h2>
+  <p>Two agents replying to each other could burn tokens indefinitely. anytoany caps how many messages one thread can hold and how many it accepts per minute, and refuses further sends past either limit. Each message gives the receiver one turn; nothing keeps running unattended.</p>
+</section>
+
+<section id="not-covered">
+  <h2>What anytoany does not protect against</h2>
+  <ul>
+    <li><strong>A stolen device key.</strong> Whoever has <code>~/.anytoany/identity/key.pem</code> can act as that device until you run <code>anyd pair remove</code> on your other devices. Protect it like an SSH key; disk encryption helps.</li>
+    <li><strong>Reading the mailbox on disk.</strong> Messages are encrypted between devices, but stored as plain text in the local mailbox. Anyone who can read your home folder can read them.</li>
+    <li><strong>Software already running as you.</strong> The local API on <code>127.0.0.1</code> accepts any process running under your user account without a token; that is what lets a sandboxed desktop assistant use anytoany. A program running as you can therefore queue a message as any of your agents. The boundary is your user account, the same as for your shell history or SSH keys.</li>
+    <li><strong>Seeing your devices on the network.</strong> Bonjour announcements include each device's name and public ID, so others on the same network can see that they exist.</li>
+    <li><strong>Other people's devices.</strong> There is no restricted tier for a device or agent that isn't yours yet. A <code>guest</code> tier, where messages would carry no authority and consequential actions would need the receiving owner's approval, is designed but not implemented. Only pair devices you own.</li>
+    <li><strong>A compromised agent.</strong> If an attacker already controls one of your paired agents or machines, anytoany is not the last line of defense.</li>
+  </ul>
+</section>
+
+<section id="compare">
+  <h2>How this compares</h2>
+  <div class="table-scroll">
+  <table class="hl">
+    <thead><tr><th></th><th>Cloud-relayed agent messaging</th><th>Claude Code across machines (Remote Control)</th><th>Shared-token LAN pairing</th><th>anytoany today</th></tr></thead>
+    <tbody>
+      <tr><td>Where messages travel</td><td>Through a relay or broker server</td><td>Through Anthropic's servers, over TLS</td><td>Directly on the LAN</td><td>Directly between your paired devices on the LAN, mutual TLS 1.3</td></tr>
+      <tr><td>Account needed</td><td>Usually</td><td>claude.ai sign-in</td><td>No</td><td>No</td></tr>
+      <tr><td>What proves a device is yours</td><td>Your account with the service</td><td>Your claude.ai sign-in</td><td>One token shared by every device</td><td>Each device's own key; its ID is the certificate fingerprint</td></tr>
+      <tr><td>Revoke one device</td><td>Depends on the service</td><td>With the optional Trusted Devices setting (beta, off by default), from claude.ai account settings</td><td>No, rotate the token everywhere</td><td>Yes, <code>anyd pair remove</code></td></tr>
+      <tr><td>Data kept outside your machines</td><td>Depends on the service</td><td>Session transcript stored on Anthropic's servers while connected</td><td>None</td><td>None</td></tr>
+      <tr><td>Agents it connects</td><td>Varies</td><td>Claude Code sessions</td><td>Varies</td><td>Claude Code, Codex, Kimi Code, ZCode</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Remote Control facts are from Anthropic's documentation as of 2026-10-27, which says <q>All traffic travels through the Anthropic API over TLS</q> and that the session transcript is stored on Anthropic's servers while connected: <a href="https://code.claude.com/docs/en/remote-control">Remote Control</a>, <a href="https://code.claude.com/docs/en/cross-session-messaging">cross-session messaging</a>. For Claude-to-Claude messages on the same machine, Claude Code uses a local socket and does not go through Anthropic. "Shared-token LAN pairing" is how anytoany itself worked before ADR-028. "Cloud-relayed" describes the general approach, not a particular product.</p>
+</section>
+
+<section id="report">
+  <h2>Reporting a vulnerability</h2>
+  <p>Please don't open a public issue. Use GitHub's <a href="https://github.com/Ericgood/any-to-any/security/advisories/new">private vulnerability reporting</a>. What counts as in scope is listed in <a href="https://github.com/Ericgood/any-to-any/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <details open><summary>Is it safe to let Claude Code and Codex message each other with anytoany?</summary><div><p>Within its stated boundary, yes. Messages only travel between devices you paired yourself, over mutual TLS 1.3, with no relay server and no account. Each device has its own key and can be revoked on its own. What a delivered task may do is decided on the receiving machine. It is built for one person's own devices, and it does not protect against a stolen device key or other software already running as you.</p></div></details>
+  <details><summary>Does anything leave my network?</summary><div><p>anytoany's own traffic does not: the daemons find each other with Bonjour and connect directly on the local network. Your agents still send their work to their own providers, such as Anthropic for Claude Code and OpenAI for Codex, exactly as they would without anytoany.</p></div></details>
+  <details><summary>What happens if a device is lost?</summary><div><p>Run <code>anyd pair remove</code> with that device's name or ID on each of your other devices. They stop accepting it immediately, and nothing else needs to be rotated because no secret was shared between devices. Whoever has the lost device's key file can impersonate it until you do this, so protect <code>~/.anytoany/identity/key.pem</code> like an SSH key.</p></div></details>
+  <details><summary>Can someone on my Wi-Fi send commands to my agents?</summary><div><p>Not through anytoany. The device-to-device port only accepts devices whose certificate fingerprint is on your trust list; anyone else gets 403 and shows up as a pairing request, not as a message. The web console listens on 127.0.0.1 only. Someone on the network can see your devices' names and public IDs, which are broadcast for discovery.</p></div></details>
+</section>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><a href="/">anytoany</a> · session-to-session messaging for AI coding agents · <a href="/claude-code-codex-two-macs">Two-Mac tutorial</a> · <a href="https://github.com/Ericgood/any-to-any">GitHub</a> · MIT License</p>
+    <p>Describes anytoany 0.0.1. Facts about Claude Code are from its official documentation as of 2026-10-27. Claude, Codex, Kimi and ZCode are trademarks of their respective owners; anytoany is an independent open-source project and is not affiliated with them.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to Make Claude Code and Codex Work Together Across Two Macs | anytoany</title>
+<meta name="description" content="Step by step: connect Claude Code on one Mac with Codex on another so they can send each other tasks and get replies back. No SSH, MCP server or message queue to build; install anytoany, pair the Macs once, and ask in plain language.">
+<link rel="canonical" href="https://anytoany.dev/claude-code-codex-two-macs">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="anytoany">
+<meta property="og:title" content="Let Claude Code on one Mac hand tasks to Codex on another">
+<meta property="og:description" content="Install anytoany on both Macs, pair them once, then ask Claude Code in plain language. Codex does the work and the reply comes back.">
+<meta property="og:url" content="https://anytoany.dev/claude-code-codex-two-macs">
+<meta property="og:image" content="https://anytoany.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "Make Claude Code and Codex work together across two Macs",
+  "description": "Connect a Claude Code session on one Mac with a Codex session on another Mac on the same local network, so either one can send the other a task and get the reply back, using anytoany.",
+  "datePublished": "2026-10-27",
+  "dateModified": "2026-10-27",
+  "image": "https://anytoany.dev/demo.gif",
+  "tool": [
+    {"@type": "HowToTool", "name": "anytoany (anyd CLI)"},
+    {"@type": "HowToTool", "name": "Claude Code"},
+    {"@type": "HowToTool", "name": "Codex"}
+  ],
+  "supply": [
+    {"@type": "HowToSupply", "name": "Two Macs on the same local network"},
+    {"@type": "HowToSupply", "name": "Node.js 20 or later on both Macs"}
+  ],
+  "step": [
+    {"@type": "HowToStep", "position": 1, "name": "Check what you need", "url": "https://anytoany.dev/claude-code-codex-two-macs#need",
+     "text": "Two Macs on the same local network that can reach each other, Node.js 20 or later on both, Claude Code signed in on one and Codex signed in on the other. Keep the Claude Code and Codex command-line tools at least as new as their desktop apps."},
+    {"@type": "HowToStep", "position": 2, "name": "Install and start anytoany on both Macs", "url": "https://anytoany.dev/claude-code-codex-two-macs#install",
+     "text": "On each Mac run: curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash, then anyd start. Optionally give each Mac a short name with anyd pair --name mini."},
+    {"@type": "HowToStep", "position": 3, "name": "Pair the two Macs", "url": "https://anytoany.dev/claude-code-codex-two-macs#pair",
+     "text": "Run anyd pair on each Mac to print its public device ID. On each Mac, run anyd pair add with the other Mac's ID. Only public IDs are exchanged; a running daemon picks the change up without a restart."},
+    {"@type": "HowToStep", "position": 4, "name": "Check the setup", "url": "https://anytoany.dev/claude-code-codex-two-macs#check",
+     "text": "Run anyd doctor on each Mac, then anyd peers to confirm the other Mac shows as paired, and anyd list to see the Codex sessions on the other Mac."},
+    {"@type": "HowToStep", "position": 5, "name": "Ask Claude Code to hand a task to Codex", "url": "https://anytoany.dev/claude-code-codex-two-macs#send",
+     "text": "In your Claude Code session, say in plain language which Codex session should do what, for example: Ask the Codex session on the Mac mini working on the API to rerun the route tests. The installed skill finds the session and sends the task."},
+    {"@type": "HowToStep", "position": 6, "name": "Get the reply back", "url": "https://anytoany.dev/claude-code-codex-two-macs#reply",
+     "text": "The Codex session does the work in its own app and ends its turn with a result such as DONE or BLOCKED. anytoany relays the reply back to the MacBook and delivers it into the Claude Code session that asked."}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Do I need SSH or Tailscale?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No. The two anytoany daemons find each other on the local network with Bonjour and talk directly over mutual TLS 1.3. You do not open SSH sessions between the Macs or set up a VPN. The flip side: both Macs must be on the same local network."}},
+    {"@type": "Question", "name": "Does it work if the Codex window is closed?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. A Codex session that is not open is resumed in the background with codex exec resume, runs the task and replies. If the thread is open in Codex Desktop, the task goes through Codex's own queue and runs in that thread instead. The anytoany daemon on the Mac with Codex has to be running."}},
+    {"@type": "Question", "name": "Can Codex send tasks back to Claude Code?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. Messaging works in either direction. The installer adds the same skill to Codex, so you can tell Codex in plain language to ask the Claude Code session on the MacBook for something, and the reply comes back to Codex."}},
+    {"@type": "Question", "name": "Does anything go through the cloud?",
+     "acceptedAnswer": {"@type": "Answer", "text": "anytoany itself does not use a server or an account. Messages go directly from one Mac to the other on your local network. Claude Code and Codex still talk to Anthropic and OpenAI as usual to do their work."}},
+    {"@type": "Question", "name": "Do I have to copy the Claude Code conversation over to Codex?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No, and anytoany does not. A message carries text only. Codex works from its own session history and its own checkout on the Mac mini, so say in the message what it needs to know, the way you would brief a teammate."}}
+  ]
+}
+</script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="10" fill="#15233b"/><path d="M14 24h26l-7-7" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M50 40H24l7 7" fill="none" stroke="#e0263f" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>anytoany <span>for AI coding agents</span></a>
+    <nav>
+      <a href="/#install">Install</a>
+      <a href="/#faq">FAQ</a>
+      <a class="gh" href="https://github.com/Ericgood/any-to-any">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+<div class="hero page">
+  <p class="eyebrow">Tutorial · updated 2026-10-27</p>
+  <h1>Let Claude Code on one Mac hand tasks to Codex on another</h1>
+  <p class="lede"><strong>Short answer:</strong> you don't have to build anything with SSH, an MCP server or a message queue. Install <a href="/">anytoany</a> on both Macs, pair them once, and then tell Claude Code in plain language what the Codex session on the other Mac should do. Codex does the work in its own app, and its reply comes back to the Claude Code session that asked. It works the other way round too.</p>
+  <p class="muted small">This walkthrough uses a MacBook running Claude Code and a Mac mini running Codex. Setup takes about ten minutes. Everything below is a command that ships today in anytoany 0.0.1.</p>
+</div>
+
+<section id="need">
+  <h2>1. What you need</h2>
+  <ul>
+    <li><strong>Two Macs on the same local network</strong> that can reach each other: Bonjour discovery, and TCP port 7434 for the device-to-device connection. Machines on different networks are not supported.</li>
+    <li><strong>Node.js 20 or later</strong> on both Macs.</li>
+    <li><strong>Claude Code</strong> installed and signed in on the MacBook, and <strong>Codex</strong> installed and signed in on the Mac mini.</li>
+    <li><strong>Command-line tools at least as new as the desktop apps.</strong> anytoany delivers with the global <code>claude</code> and <code>codex</code> commands. If one is older than the app that last wrote a session, the send is refused and you get the upgrade command. To be safe, update both first:</li>
+  </ul>
+<pre><code>npm i -g @anthropic-ai/claude-code@latest   <span class="c"># on the MacBook</span>
+npm i -g @openai/codex@latest               <span class="c"># on the Mac mini</span></code></pre>
+  <p class="muted small">Open Claude Code sessions wake up on a new message from Claude Code 2.1.224. Open Codex Desktop threads receive messages through <code>codex queue</code>, which needs Codex CLI 0.149 or later.</p>
+</section>
+
+<section id="install">
+  <h2>2. Install and start anytoany on both Macs</h2>
+  <p>Run the same two commands on the MacBook and on the Mac mini. The installer adds the <code>anyd</code> command and sets up every agent it finds on that Mac (an Agent Skills <code>SKILL.md</code> plus an inbox hook).</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/Ericgood/any-to-any/main/install.sh | bash
+anyd start      <span class="c"># delivery daemon + web console at http://127.0.0.1:7433</span></code></pre>
+  <p>Optionally give each Mac a short name, so addresses read well later:</p>
+<pre><code>anyd pair --name mini       <span class="c"># on the Mac mini</span>
+anyd pair --name macbook    <span class="c"># on the MacBook</span></code></pre>
+</section>
+
+<section id="pair">
+  <h2>3. Pair the two Macs</h2>
+  <p>Each Mac has its own key, created on first start. Its device ID is the fingerprint of that key's certificate, and it is public. Pairing means each Mac adds the other's ID to its trust list. No password or token is shared.</p>
+<pre><code>anyd pair                       <span class="c"># on each Mac: prints this device's public ID</span>
+anyd pair add &lt;Mac mini ID&gt;      <span class="c"># on the MacBook</span>
+anyd pair add &lt;MacBook ID&gt;       <span class="c"># on the Mac mini</span></code></pre>
+  <p>A running daemon picks the change up right away; there is nothing to restart. If only one side has added the other, the other side refuses the connection and lists it as a pairing request, which <code>anyd peers</code> shows along with the exact command to accept it.</p>
+  <p class="muted small">Shortcut for a Mac that doesn't have anytoany yet: run <code>anyd pair --invite</code> on the MacBook. It prints one command to paste on the Mac mini, which installs anytoany, trusts the MacBook and prints the Mac mini's ID. Then run <code>anyd pair add &lt;that ID&gt;</code> back on the MacBook. How pairing and the encryption work: <a href="/security">Is it safe to let Claude Code and Codex message each other?</a></p>
+</section>
+
+<section id="check">
+  <h2>4. Check the setup</h2>
+<pre><code>anyd doctor     <span class="c"># on each Mac: CLI versions, device identity, skill, inbox hook, doorbells</span>
+anyd peers      <span class="c"># the other Mac should show as paired</span>
+anyd list       <span class="c"># on the MacBook: Codex sessions on the Mac mini appear as @mini/codex:…</span></code></pre>
+  <p>If <code>anyd list</code> on the MacBook shows the Codex sessions from the Mac mini, the two Macs are connected.</p>
+</section>
+
+<section id="send">
+  <h2>5. Ask Claude Code to hand a task to Codex</h2>
+  <p>In your Claude Code session on the MacBook, say what you want, the way you would ask a colleague:</p>
+  <blockquote>Ask the Codex session on the Mac mini working on the API to rerun the route tests. I just changed the redirects to 301.</blockquote>
+  <p>The skill looks up the target with <code>anyd list</code>, sends the task and tells you it's on its way. You don't need to type an address, but you can, for scripts or to be exact:</p>
+<pre><code>anyd send "@mini/codex:api" "the redirect is 301 now — rerun the route tests?" --from "@claude:web-app"</code></pre>
+  <p>A target matches a session ID prefix, part of the session title, or its project folder name. If more than one session matches, Claude is shown the candidates and asks you which one you meant.</p>
+  <figure class="demo">
+    <div class="airmail">
+    <img src="/demo.gif" width="960" height="600" alt="anytoany web console: a Claude Code session on a MacBook asks a Codex session on a Mac mini to rerun the route tests, and the reply comes back to Claude"></div>
+    <figcaption>The exchange as it appears in the anytoany web console: Claude Code on the MacBook sends the task, Codex on the Mac mini runs it, and the reply lands back in Claude.</figcaption>
+  </figure>
+</section>
+
+<section id="open-or-closed">
+  <h2>What happens on the Mac mini</h2>
+  <p>The MacBook's daemon stores the task in its local mailbox and relays it to the Mac mini over mutual TLS. The Mac mini's daemon then delivers it to that exact Codex session:</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>The Codex session is…</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>Not open anywhere</td><td>Resumed in the background with <code>codex exec resume</code>. It runs the task right away and replies.</td></tr>
+      <tr><td>Open in Codex Desktop</td><td>Delivered through Codex's own queue (<code>codex queue</code>) and run in the open thread, 4 to 14 seconds after arrival in our tests. Codex sends the answer with <code>anyd reply</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Each message gives Codex one turn: it acts, reports and stops. Nothing keeps running unattended.</p>
+</section>
+
+<section id="reply">
+  <h2>6. How the reply comes back</h2>
+  <p>Codex ends its turn with a short verdict, such as <code>DONE …</code> with what it did, <code>BLOCKED …</code> with what it needs, or a plain answer. anytoany relays that back to the MacBook and delivers it into the Claude Code session that asked. If that session is open, Claude Code's built-in inbox wakes it, so you read the answer in the conversation you're already in. You can also follow the whole thread in the web console at <code>http://127.0.0.1:7433</code>.</p>
+  <p>The same works in reverse: tell Codex to ask the Claude Code session on the MacBook for something, and the reply goes back to Codex.</p>
+</section>
+
+<section id="troubleshooting">
+  <h2>If something doesn't arrive</h2>
+  <ul>
+    <li><strong><code>version_mismatch</code> error.</strong> The <code>claude</code> or <code>codex</code> command is older than the app that last wrote the session. Run the <code>npm i -g …@latest</code> command the error prints, then send again. No daemon restart is needed.</li>
+    <li><strong>Codex Desktop did the work but no reply came.</strong> A thread running in a read-only or workspace-write sandbox can't run <code>anyd reply</code>, because Codex's sandbox blocks it. Give threads that collaborate full access.</li>
+    <li><strong>An open Claude Code session only sees the reply on your next prompt.</strong> If your sessions default to Bypass permissions, Claude Code holds such messages. Add this to <code>~/.claude/settings.json</code> on the MacBook so open sessions wake up as soon as the reply arrives:
+<pre><code>{ "crossSessionInbound": "accept" }</code></pre></li>
+    <li><strong>A Codex window you already had open doesn't show the new turn.</strong> Type <code>/reload</code> in it. A turn that ran in the background may only appear after that; the work itself doesn't wait for it.</li>
+    <li><strong>The other Mac doesn't show up.</strong> Check that both daemons are running (<code>anyd status</code>), that both Macs are on the same network, and that nothing blocks port 7434 between them. <code>anyd peers</code> lists pairing requests that one side hasn't accepted yet.</li>
+  </ul>
+</section>
+
+<section id="limits">
+  <h2>Limits</h2>
+  <ul>
+    <li><strong>Same local network only.</strong> There is no relay for Macs on different networks.</li>
+    <li><strong>macOS is what we use every day.</strong> The test suite also runs on Linux in CI; Windows is not tested.</li>
+    <li><strong>Turn-based, not live streaming.</strong> Codex gets one turn per message and reports at the end of it.</li>
+    <li><strong>Text only.</strong> A message does not carry the Claude Code conversation or files. Codex works from its own session and checkout.</li>
+    <li><strong>Pre-1.0</strong> (version 0.0.1).</li>
+  </ul>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <details open><summary>Do I need SSH or Tailscale?</summary><div><p>No. The two anytoany daemons find each other on the local network with Bonjour and talk directly over mutual TLS 1.3. You do not open SSH sessions between the Macs or set up a VPN. The flip side: both Macs must be on the same local network.</p></div></details>
+  <details><summary>Does it work if the Codex window is closed?</summary><div><p>Yes. A Codex session that is not open is resumed in the background with <code>codex exec resume</code>, runs the task and replies. If the thread is open in Codex Desktop, the task goes through Codex's own queue and runs in that thread instead. The anytoany daemon on the Mac with Codex has to be running.</p></div></details>
+  <details><summary>Can Codex send tasks back to Claude Code?</summary><div><p>Yes. Messaging works in either direction. The installer adds the same skill to Codex, so you can tell Codex in plain language to ask the Claude Code session on the MacBook for something, and the reply comes back to Codex.</p></div></details>
+  <details><summary>Does anything go through the cloud?</summary><div><p>anytoany itself does not use a server or an account. Messages go directly from one Mac to the other on your local network. Claude Code and Codex still talk to Anthropic and OpenAI as usual to do their work.</p></div></details>
+  <details><summary>Do I have to copy the Claude Code conversation over to Codex?</summary><div><p>No, and anytoany does not. A message carries text only. Codex works from its own session history and its own checkout on the Mac mini, so say in the message what it needs to know, the way you would brief a teammate.</p></div></details>
+</section>
+
+</div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p><a href="/">anytoany</a> · session-to-session messaging for AI coding agents · <a href="/security">Security</a> · <a href="https://github.com/Ericgood/any-to-any">GitHub</a> · MIT License</p>
+    <p>Commands match anytoany 0.0.1; check the <a href="https://github.com/Ericgood/any-to-any#readme">README</a> for changes. Claude, Codex, Kimi and ZCode are trademarks of their respective owners; anytoany is an independent open-source project and is not affiliated with them.</p>
+  </div>
+</footer>
+</body>
+</html>

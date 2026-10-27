@@ -17,6 +17,8 @@
 |---|---|---|
 | `/` | 首页：一句话说清能做什么、安装、怎么工作、每个 agent 现在能做到什么、和官方功能的区别、安全、限制、FAQ | let Claude Code and Codex talk to each other |
 | `/claude-code-cross-session-messaging` | 对比页：Claude Code 官方跨会话消息、OpenAI Codex plugin for Claude Code、anytoany 各管哪一层，边界用官方原文 | claude code cross session messaging（KD 39，时效强） |
+| `/claude-code-codex-two-macs` | 教程：两台 Mac 上让 Claude Code 和 Codex 互派任务。首段直接回答「两台机器上的 Claude Code 和 Codex 怎么互发任务」（ChatGPT 10-27 实测这题只教用户自己搭 SSH）；正文按真实步骤：安装 → 配对 → `anyd doctor` → 一句话派活 → 对方开着 / 没开 → 回信 → 排查 → 限制。HowTo + FAQPage | connect Claude Code and Codex on two machines |
+| `/security` | 安全说明：消息怎么走、谁能发进来、配对与吊销、送达后能做什么、防死循环、**不防什么**、怎么报告漏洞；对比表只写核实过的（经云中转 / Claude Code Remote Control / 共享 token 的局域网方案 / anytoany）。不写「端到端加密」（本机 mailbox 是明文）。TechArticle + FAQPage | is it safe to let Claude Code and Codex message each other；claude code remote control security；secure agent to agent communication |
 | `robots.txt` / `sitemap.xml` / `llms.txt` / `404.html` | 爬虫、站点地图、AI 可读摘要、404 | — |
 
 ## 写法规则
@@ -42,5 +44,5 @@
 ## 后续
 
 - `/a2a-vs-mcp`：A2A、MCP、会话级消息三方对比（借 a2a vs mcp，美国 590/月）。
-- 教程：两台 Mac 上让 Claude Code 和 Codex 协作；subagents / agent teams 管不到的另一个厂商。
+- 教程：subagents / agent teams 管不到的另一个厂商。（「两台 Mac 上让 Claude Code 和 Codex 协作」已做，2026-10-27）
 - 1~2 周后用同一套问题在未登录 ChatGPT 复测。
