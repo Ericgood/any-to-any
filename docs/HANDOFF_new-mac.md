@@ -9,7 +9,8 @@
 
 ## 1. 现在到哪了（2026-10-28）
 
-- 仓库：https://github.com/Ericgood/any-to-any（public，MIT）。`main` = `28c8dfa`，**旧电脑上没有未推送的提交、没有 stash、没有打开的 PR**。
+- 仓库：https://github.com/Ericgood/any-to-any（public，MIT）。**旧电脑上没有未推送的提交、没有 stash、没有打开的 PR**；main 的最新提交以 `git log origin/main -1` 为准。
+- 换机当天（10-28）修了一个 bug：Codex 用 `anyd reply` 回的 NOOP 被当成真信投给 Claude，看上去像「空消息」（ADR-032，提交 `ae723a3`）。新电脑装好后，如果 Claude 会话又收到只写 `NOOP` 的信，说明装的是旧代码。
 - 已发 release：`v0.0.1`（2026-10-27，指向 `c98f9c9`）。npm 包 `anytoany` **还没发**（名字已验证可用）。
 - 官网 anytoany.dev 已上线：Cloudflare Worker `anytoany-site`（纯静态资源），最新版本 `a6861ed6-117a-4d6a-bc04-5eaac8d39245`。一共 4 页：首页、`/claude-code-cross-session-messaging`、`/claude-code-codex-two-macs`、`/security`。
 - 功能面：Claude Code / Codex / Kimi / ZCode 四家投递；外部 App（闪电说 `sds`）注册 + 拉取；跨设备走 Syncthing 式设备身份 + 双向 TLS（ADR-028）；门铃唤醒活会话（ADR-027 / ADR-029）。最新的两条事故修复是 ADR-030、ADR-031。
