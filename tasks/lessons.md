@@ -68,3 +68,8 @@ daemon + 端到端跑一遍，并且**给关键路径加日志**——②就是�
 ## 2026-10-25 —— 「spawn xxx ENOENT」不一定是命令不存在
 **弯路**：死信报错 `spawn codex ENOENT`，第一反应是 PATH 或安装问题；查了 PATH、版本、安装时间都正常，才想起 Node 对**工作目录不存在**也报同样的错。真因：会话的项目文件夹被挪走了。
 **正确做法**：凡是把「会话记录里的目录」当 cwd 去 spawn 的地方，先检查目录是否存在，并给出明确报错；目录无关的 CLI（按 id 续接）就不要依赖它。排查 ENOENT 时，命令和 cwd 两头都要查。
+
+## 2026-10-30 —— 把同事的分叉项目 Morse 当成了 anytoany 本身
+**错误**：用户问「anytoany 技能装了没有」，我看到本机 `anyd` 命令、`anytoany` 包名、仓库地址都指向 Ericgood/any-to-any，帮助里还写着 "Built on anytoany"，就断定「已经装了，只是改名叫 Morse 的新版」。实际上 Morse（morse.im）是同事从 anytoany 分叉出去的独立项目：它沿用了包名 `anytoany` 和命令 `anyd`，数据在 `~/.morse`，技能叫 `morse`；anytoany 本身（技能 `any-to-any`、数据 `~/.anytoany`）根本没装。
+**正确做法**：判断「某项目装没装」要用这个项目**自己独有**的标识去核对（技能名、数据目录、后台服务的 label），不能只看包名、命令名、repository 字段这类会被分叉原样继承的东西。安装包 README 开头写着 "Morse fork"，先读一眼就不会认错。
+**附带发现**：两者在本机抢同一批资源：端口 7433/7434、`anyd` 命令、`anyd hook …` 收件钩子、`~/.claude/agents/any-*`。同时装两个必须先隔离，不能直接跑 install.sh。
